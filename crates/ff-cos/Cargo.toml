@@ -1,0 +1,9 @@
+[package]
+name = "ff-cos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FoFreeXit COS layer: low-level PDF object model (dict/array/stream/xref)"
+
+[dependencies]
+thiserror.workspace = true

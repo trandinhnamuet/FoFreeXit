@@ -1,0 +1,21 @@
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# PDFium prebuilt binary (tải bằng scripts/fetch-pdfium.ps1)
+/pdfium/
+/pdfium.dll
+/pdfium.dll.lib
+
+# Tauri / node
+/app/node_modules
+/app/dist
+/app/src-tauri/target
+
+# Ảnh tạm khi test render
+/tmp-out/
+*.tmp.png
+
+# File PDF thật của user (hồ sơ/kinh doanh cá nhân) — chỉ dùng test local,
+# không đẩy lên repo công khai.
+/pdf-file-to-test/

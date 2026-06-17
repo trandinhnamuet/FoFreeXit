@@ -1,0 +1,16 @@
+[package]
+name = "ff-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FoFreeXit engine: render/edit/io over PDFium + QPDF"
+
+[dependencies]
+ff-cos = { path = "../ff-cos" }
+ff-pdmodel = { path = "../ff-pdmodel" }
+anyhow.workspace = true
+thiserror.workspace = true
+pdfium-render = "0.8"
+image = "0.25"
+lopdf = "0.36"
+ttf-parser = "0.25"

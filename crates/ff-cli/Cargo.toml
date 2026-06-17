@@ -1,0 +1,15 @@
+[package]
+name = "ff-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FoFreeXit command-line interface (runs engine features headless, for testing)"
+
+[[bin]]
+name = "ff"
+path = "src/main.rs"
+
+[dependencies]
+ff-engine = { path = "../ff-engine" }
+anyhow.workspace = true
+clap = { version = "4", features = ["derive"] }

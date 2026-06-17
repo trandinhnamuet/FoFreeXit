@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ff-cos",
+    "crates/ff-pdmodel",
+    "crates/ff-engine",
+    "crates/ff-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = ""
+description = "FoFreeXit - open source PDF editor (Foxit alternative)"
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"

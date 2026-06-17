@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FoFreeXit</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <strong class="brand">FoFreeXit</strong>
+      <span class="phase">Phase 1 · Viewer</span>
+      <button id="openBtn" title="Mở file PDF">📂 Mở</button>
+      <span class="sep"></span>
+      <button id="pagePrev" title="Trang trước (Page Up)">▲</button>
+      <input id="pageInput" class="pagenum" type="text" inputmode="numeric" title="Đến trang…" />
+      <span class="pageof">/ <span id="pageTotal">—</span></span>
+      <button id="pageNext" title="Trang sau (Page Down)">▼</button>
+      <span class="sep"></span>
+      <button id="zoomOut" title="Thu nhỏ (Ctrl+-)">−</button>
+      <select id="zoomSelect" class="zoom" title="Mức zoom"></select>
+      <button id="zoomIn" title="Phóng to (Ctrl++)">+</button>
+      <button id="zoomFit" title="Vừa bề rộng">Vừa rộng</button>
+      <button id="zoomFitPage" title="Vừa trang">Vừa trang</button>
+      <span class="sep"></span>
+      <input id="searchBox" type="search" placeholder="Tìm trong tài liệu… (Ctrl+F)" autofocus />
+      <label class="searchopt" title="Phân biệt hoa/thường"><input id="searchCase" type="checkbox" />Aa</label>
+      <button id="searchPrev" title="Kết quả trước (Shift+Enter)">◀</button>
+      <span id="searchCount" class="searchcount">—</span>
+      <button id="searchNext" title="Kết quả sau (Enter)">▶</button>
+      <span class="sep"></span>
+      <button id="copyPage" title="Copy text trang hiện tại">⧉ Copy</button>
+      <div class="spacer"></div>
+      <span id="status" class="status"></span>
+    </header>
+
+    <div class="annobar">
+      <span class="annolabel">Chú thích:</span>
+      <button class="atool" data-tool="highlight" title="Tô sáng (kéo vùng)">🖍️ Tô sáng</button>
+      <button class="atool" data-tool="underline" title="Gạch chân">U̲ Gạch chân</button>
+      <button class="atool" data-tool="strikeout" title="Gạch ngang">S̶ Gạch ngang</button>
+      <button class="atool" data-tool="square" title="Khung chữ nhật">▭ Khung</button>
+      <button class="atool" data-tool="freetext" title="Hộp văn bản">🅣 Text box</button>
+      <button class="atool" data-tool="note" title="Ghi chú dán">📌 Ghi chú</button>
+      <span class="sep"></span>
+      <button id="annotColorBtn" class="atool" title="Màu chú thích"><span class="sw" id="annotSw"></span> Màu</button>
+      <span class="sep"></span>
+      <button id="undoBtn" title="Hoàn tác (Ctrl+Z)" disabled>↶ Hoàn tác</button>
+      <button id="redoBtn" title="Làm lại (Ctrl+Y)" disabled>↷ Làm lại</button>
+      <span class="spacer"></span>
+      <span id="annotHint" class="status"></span>
+      <button id="saveAnnots" disabled>💾 Lưu chú thích (<span id="annotCount">0</span>)</button>
+    </div>
+
+    <div class="body">
+      <aside class="sidebar">
+        <div class="tabs">
+          <button id="tabThumbs" class="tab active">Thumbnails</button>
+          <button id="tabOutline" class="tab">Outline</button>
+          <button id="tabComments" class="tab">Chú thích</button>
+        </div>
+        <div id="thumbs" class="panel thumbs"></div>
+        <div id="outline" class="panel outline hidden"></div>
+        <div id="comments" class="panel comments hidden"></div>
+      </aside>
+
+      <main id="viewport" class="viewport">
+        <div id="pages" class="pages"></div>
+      </main>
+    </div>
+
+    <script src="main.js"></script>
+  </body>
+</html>

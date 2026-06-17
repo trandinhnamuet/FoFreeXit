@@ -1,0 +1,10 @@
+[package]
+name = "ff-pdmodel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "FoFreeXit PD layer: high-level document model (page/text/image/annotation)"
+
+[dependencies]
+ff-cos = { path = "../ff-cos" }
+thiserror.workspace = true

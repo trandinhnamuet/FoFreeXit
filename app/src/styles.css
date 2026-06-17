@@ -1,0 +1,268 @@
+:root { color-scheme: dark; --accent: #4d8bff; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #525659;
+  color: #eee;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #323639;
+  border-bottom: 1px solid #1c1f21;
+  flex: 0 0 auto;
+}
+.brand { color: var(--accent); font-size: 16px; }
+.phase { color: #9aa0a6; font-size: 12px; }
+.sep { width: 1px; height: 22px; background: #4a4f52; margin: 0 4px; }
+.spacer { flex: 1; }
+.status, .pageind, .searchcount, .zoom { color: #9aa0a6; font-size: 12px; }
+.zoom { min-width: 44px; text-align: center; }
+.searchcount { min-width: 60px; text-align: center; }
+.pageof { color: #9aa0a6; font-size: 12px; }
+.pagenum {
+  width: 42px; text-align: center; background: #1f2224; color: #eee;
+  border: 1px solid #4a4f52; border-radius: 6px; padding: 4px 4px; font-size: 13px;
+}
+.searchopt {
+  display: flex; align-items: center; gap: 3px; color: #9aa0a6; font-size: 12px;
+  cursor: pointer; user-select: none;
+}
+button {
+  background: #4a4f52;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+  font-size: 13px;
+}
+button:hover { background: #595f63; }
+button:disabled { opacity: .4; cursor: default; }
+#copyPage { background: var(--accent); }
+select.zoom {
+  background: #1f2224; color: #eee; border: 1px solid #4a4f52;
+  border-radius: 6px; padding: 4px 4px; font-size: 13px; min-width: 64px;
+}
+input[type="search"] {
+  background: #1f2224;
+  color: #eee;
+  border: 1px solid #4a4f52;
+  border-radius: 6px;
+  padding: 4px 8px;
+  width: 220px;
+}
+
+/* Annotation toolbar */
+.annobar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: #2b2f31;
+  border-bottom: 1px solid #1c1f21;
+  flex: 0 0 auto;
+}
+.annolabel { color: #9aa0a6; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.atool { background: #3a3f42; }
+.atool.active { background: var(--accent); box-shadow: 0 0 0 2px rgba(77,139,255,.4); }
+#saveAnnots { background: #2e7d32; }
+#saveAnnots:disabled { background: #555; }
+#annotColor { width: 28px; height: 22px; padding: 0; border: none; background: none; cursor: pointer; }
+
+/* Body layout */
+.body { flex: 1; display: flex; min-height: 0; }
+
+/* Khi đang chọn công cụ chú thích: tắt chọn text, đổi con trỏ */
+body.tool-active .textlayer { pointer-events: none; }
+body.tool-active .page-slot { cursor: crosshair; }
+/* Highlight/Underline/Strikeout: NGƯỢC LẠI — bám theo text đã CHỌN (như Foxit),
+   nên phải giữ textlayer bắt được chuột để chọn text bình thường. */
+body.tool-mark .textlayer { pointer-events: auto; }
+body.tool-mark .page-slot { cursor: text; }
+
+/* Lớp annotation (preview trước khi lưu) */
+.annotlayer { position: absolute; inset: 0; pointer-events: none; }
+.annotlayer .a-hl { position: absolute; background: rgba(255,230,0,.4); }
+.annotlayer .a-box { position: absolute; border: 1.5px solid; }
+.annotlayer .a-line { position: absolute; height: 0; border-top: 2px solid; }
+.annotlayer .a-text {
+  position: absolute; border: 1px dashed; padding: 2px 4px;
+  font-size: 12px; color: #111; background: rgba(255,255,255,.6); overflow: hidden;
+}
+.annotlayer .a-note {
+  position: absolute; width: 18px; height: 18px; pointer-events: auto;
+  background: #ffd400; border: 1px solid #b59000; border-radius: 3px;
+  font-size: 12px; text-align: center; line-height: 18px; cursor: help;
+}
+
+/* Annotation: chọn & xoá */
+.a-sel { pointer-events: auto; cursor: pointer; }
+body.tool-active .annotlayer * { pointer-events: none; }
+.annotlayer .selected { outline: 2px solid #4d8bff; outline-offset: 1px; }
+.annotlayer .a-del {
+  position: absolute; right: -10px; top: -10px; width: 18px; height: 18px;
+  background: #e53935; color: #fff; border-radius: 50%; font-size: 11px;
+  line-height: 18px; text-align: center; cursor: pointer; pointer-events: auto;
+  box-shadow: 0 1px 4px rgba(0,0,0,.4);
+}
+.annotlayer .a-line { min-height: 4px; }
+
+/* Text box editor tại chỗ */
+.a-editor {
+  position: absolute; pointer-events: auto; background: rgba(255,255,255,.9);
+  border: 1px solid #4d8bff; outline: none; padding: 2px 4px; line-height: 1.25;
+  white-space: pre-wrap; word-break: break-word; box-shadow: 0 2px 10px rgba(0,0,0,.3);
+}
+
+/* Thanh định dạng nổi */
+.fmtbar {
+  position: fixed; z-index: 50; display: flex; gap: 3px; align-items: center;
+  background: #2b2f31; border: 1px solid #1c1f21; border-radius: 7px;
+  padding: 4px 6px; box-shadow: 0 4px 16px rgba(0,0,0,.5);
+}
+.fmtbar select { background: #1f2224; color: #eee; border: 1px solid #4a4f52; border-radius: 4px; padding: 2px; }
+.fmtbtn {
+  width: 26px; height: 24px; background: #3a3f42; color: #fff; border: none;
+  border-radius: 4px; cursor: pointer; font-weight: bold; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+}
+.fmtbtn.on { background: var(--accent); }
+.fmtbtn .sw, .citem .csw, #annotSw, .np-color .sw, .fmt-color .sw {
+  display: inline-block; width: 12px; height: 12px; border-radius: 2px;
+  border: 1px solid rgba(255,255,255,.5); vertical-align: middle;
+}
+#annotSw { width: 14px; height: 14px; }
+
+/* Note popup */
+.notepop {
+  position: fixed; z-index: 50; width: 230px; background: #fffbea; color: #222;
+  border: 1px solid #c9b400; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.4);
+}
+.np-head { display: flex; justify-content: space-between; align-items: center;
+  background: #ffe600; padding: 4px 8px; font-size: 12px; font-weight: bold; border-radius: 6px 6px 0 0; }
+.np-close { cursor: pointer; }
+.np-text { width: 100%; min-height: 90px; border: none; outline: none; resize: vertical;
+  padding: 8px; background: transparent; color: #222; font-family: inherit; font-size: 13px; box-sizing: border-box; }
+.np-foot { display: flex; justify-content: space-between; padding: 6px 8px; border-top: 1px solid #e0d480; }
+.np-foot button { background: #eee; color: #333; font-size: 12px; }
+.np-del { color: #c62828 !important; }
+
+/* Color popover */
+.colorpop {
+  position: fixed; z-index: 60; background: #2b2f31; border: 1px solid #1c1f21;
+  border-radius: 7px; padding: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.5);
+}
+.cgrid { display: grid; grid-template-columns: repeat(6, 20px); gap: 5px; }
+.cs { width: 20px; height: 20px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; }
+.cs:hover { border-color: #fff; }
+.cs.cur { border-color: #4d8bff; }
+.clbl { color: #9aa0a6; font-size: 11px; margin: 8px 0 4px; }
+.ccustom { display: block; margin-top: 8px; color: #ccc; font-size: 12px; cursor: pointer; }
+.ccustom input { vertical-align: middle; margin-left: 4px; }
+
+/* Comments panel */
+.comments .citem {
+  padding: 6px; border-radius: 5px; cursor: pointer; font-size: 12px;
+  border: 1px solid #3a3f42; margin-bottom: 6px;
+}
+.comments .citem:hover { background: #3a3f42; }
+.comments .citem .ckind { color: var(--accent); font-weight: bold; }
+.comments .citem .cdel { float: right; color: #e57373; cursor: pointer; }
+.comments .empty { color: #777; font-size: 12px; }
+
+/* Sidebar */
+.sidebar {
+  width: 220px;
+  flex: 0 0 220px;
+  background: #2b2f31;
+  border-right: 1px solid #1c1f21;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.tabs { display: flex; flex: 0 0 auto; }
+.tab {
+  flex: 1;
+  border-radius: 0;
+  background: #2b2f31;
+  color: #9aa0a6;
+  padding: 8px;
+}
+.tab.active { color: #fff; box-shadow: inset 0 -2px 0 var(--accent); }
+.panel { flex: 1; overflow: auto; padding: 8px; }
+.panel.hidden { display: none; }
+
+/* Thumbnails */
+.thumbs { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.thumb { cursor: pointer; text-align: center; width: 100%; }
+.thumb img {
+  width: 130px;
+  background: #fff;
+  border: 2px solid transparent;
+  box-shadow: 0 1px 6px rgba(0,0,0,.5);
+}
+.thumb.active img { border-color: var(--accent); }
+.thumb .n { font-size: 11px; color: #9aa0a6; margin-top: 2px; }
+
+/* Outline */
+.outline .oitem {
+  padding: 5px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #d6d9dc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.outline .oitem:hover { background: #3a3f42; }
+
+/* Viewer */
+.viewport { flex: 1; overflow: auto; min-height: 0; }
+.pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+}
+.page-slot {
+  position: relative;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(0,0,0,.5);
+  flex: 0 0 auto;
+}
+.page-slot img { display: block; width: 100%; height: 100%; }
+.page-slot .ph {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #888; font-size: 13px;
+}
+.overlay { position: absolute; inset: 0; pointer-events: none; }
+
+/* Text layer: span trong suốt phủ lên ảnh để chọn & copy text */
+.textlayer { position: absolute; inset: 0; overflow: hidden; }
+.textlayer span {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  overflow: hidden;
+  cursor: text;
+  transform-origin: 0 0;
+}
+.textlayer span::selection { background: rgba(77, 139, 255, .45); }
+.page-slot img { user-select: none; -webkit-user-drag: none; }
+.hl {
+  position: absolute;
+  background: rgba(255, 214, 0, .38);
+  outline: 1px solid rgba(255, 184, 0, .9);
+}
+.hl.current { background: rgba(255, 138, 0, .55); }
