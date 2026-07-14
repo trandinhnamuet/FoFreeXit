@@ -12,30 +12,30 @@ Một ứng dụng desktop có thể **xem, chú thích, tổ chức trang, và 
 
 ---
 
-## Phase 0 — Nghiên cứu & Kế hoạch ✅ (đang ở đây)
+## Phase 0 — Nghiên cứu & Kế hoạch ✅ HOÀN TẤT
 **DoD:** docs 01–03 hoàn tất; chốt ngôn ngữ/framework; dựng skeleton repo.
 
-## Phase 1 — Nền tảng & Viewer (MVP xem được)
+## Phase 1 — Nền tảng & Viewer (MVP xem được) ✅ HOÀN TẤT
 **Mục tiêu:** Mở và hiển thị PDF chính xác, mượt.
 - Tích hợp PDFium (prebuilt) qua FFI; dựng Core API tối thiểu (`open`, `pageCount`, `renderPage`).
 - Viewer: scroll liên tục, zoom/fit, thumbnails, outline/bookmarks, **tìm kiếm text**, chọn & copy text.
 - Mở file lớn (lazy render + cache tile).
 **DoD:** mở 20 file mẫu (gồm file 1000+ trang, CJK, Việt) không crash; render khớp mắt thường với Chrome; search & copy hoạt động; có test render-hash cho trang mẫu.
 
-## Phase 2 — Chú thích (Annotate)
+## Phase 2 — Chú thích (Annotate) ✅ HOÀN TẤT (lõi) — xem [docs/08-phase2-summary.md](08-phase2-summary.md)
 **Mục tiêu:** Bộ comment dùng hằng ngày.
 - Highlight/underline/strikethrough, sticky note, text box, free draw, shapes, stamp.
 - Lưu annotation vào PDF (annotation dict), import/export **XFDF**.
 - Hiển thị & sửa/xoá annotation; danh sách comment ở sidebar.
 **DoD:** tạo/sửa/xoá mọi loại trên; lưu & mở lại giữ nguyên; Acrobat/Foxit đọc được annotation ta ghi; export/import XFDF round-trip.
 
-## Phase 3 — Tổ chức trang (Organize) + Lưu file vững
+## Phase 3 — Tổ chức trang (Organize) + Lưu file vững ✅ HOÀN TẤT (lõi, 36/36 test) — xem [docs/10-phase3-summary.md](10-phase3-summary.md)
 **Mục tiêu:** Quản lý trang & ghi file an toàn.
 - Chèn/xoá/xoay/trích/thay/đảo trang; **merge & split**; crop; đánh số; header/footer; watermark/background.
 - Engine ghi file: incremental update **và** full rewrite (qua QPDF); giữ không hỏng file; **undo/redo** toàn cục.
 **DoD:** mọi thao tác trang round-trip đúng; merge 50 file OK; ghi không làm hỏng file mã hoá; undo/redo ổn định; test so khớp cấu trúc trang.
 
-## Phase 4 — ⭐ Chỉnh sửa nội dung (Edit) — TÍNH NĂNG LÕI
+## Phase 4 — ⭐ Chỉnh sửa nội dung (Edit) — TÍNH NĂNG LÕI ✅ Iteration 1 HOÀN TẤT (43/43 test) — xem [docs/12-phase4-summary.md](12-phase4-summary.md)
 **Mục tiêu:** Sửa text & object trực tiếp — moat chính.
 - **Page Object Model**: parse content stream → cây object (text/path/image/xobject).
 - Sửa **ảnh/object**: di chuyển, resize, xoá, thêm ảnh (dễ hơn → làm trước).
@@ -43,7 +43,7 @@ Một ứng dụng desktop có thể **xem, chú thích, tổ chức trang, và 
 - Thêm text box mới, đổi font/size/màu.
 **DoD:** sửa được text 1 dòng & 1 đoạn trên ≥80% file mẫu thường; thêm/xoá/di chuyển ảnh; lưu mở lại đúng; tiếng Việt hiển thị & sửa đúng dấu; có test corpus chuyên cho edit.
 
-## Phase 5 — Bảo mật & Chữ ký
+## Phase 5 — Bảo mật & Chữ ký ⏳ KẾ TIẾP (đang ở đây)
 **Mục tiêu:** Tính năng đáng tiền cho doanh nghiệp.
 - Mật khẩu mở/permission; mã hoá **AES-256**; xoá mật khẩu.
 - **Redaction thật** (xoá nội dung + ảnh + metadata, không chỉ vẽ đè) + kiểm chứng đã xoá.

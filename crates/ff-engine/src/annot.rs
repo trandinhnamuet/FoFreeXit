@@ -292,7 +292,7 @@ fn pdf_text_string(s: &str) -> LoObj {
 /// Tìm file TTF có Unicode trên hệ thống theo đậm/nghiêng (Windows/Linux/Mac).
 /// Thử đúng file biến thể (vd `arialbd.ttf`) trước, rồi mới hạ cấp dần về regular
 /// của family khác — để FreeText giữ đúng đậm/nghiêng như Foxit.
-fn find_font_bytes(bold: bool, italic: bool) -> Option<Vec<u8>> {
+pub(crate) fn find_font_bytes(bold: bool, italic: bool) -> Option<Vec<u8>> {
     #[cfg(windows)]
     {
         // [regular, bold, italic, bold-italic] cho từng family phổ biến trên Windows.

@@ -1,5 +1,6 @@
 :root { color-scheme: dark; --accent: #4d8bff; }
 * { box-sizing: border-box; }
+.hidden { display: none !important; }
 html, body { height: 100%; margin: 0; }
 body {
   font-family: "Segoe UI", system-ui, sans-serif;
@@ -12,6 +13,7 @@ body {
 /* Toolbar */
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
@@ -47,6 +49,7 @@ button {
 button:hover { background: #595f63; }
 button:disabled { opacity: .4; cursor: default; }
 #copyPage { background: var(--accent); }
+#organizeModeBtn.active { background: var(--accent); }
 select.zoom {
   background: #1f2224; color: #eee; border: 1px solid #4a4f52;
   border-radius: 6px; padding: 4px 4px; font-size: 13px; min-width: 64px;
@@ -63,6 +66,7 @@ input[type="search"] {
 /* Annotation toolbar */
 .annobar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 5px 12px;
@@ -266,3 +270,143 @@ body.tool-active .annotlayer * { pointer-events: none; }
   outline: 1px solid rgba(255, 184, 0, .9);
 }
 .hl.current { background: rgba(255, 138, 0, .55); }
+
+/* ===== Phase 3: Tổ chức trang ===== */
+.organizebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: #2b2f31;
+  border-bottom: 1px solid #1c1f21;
+  flex: 0 0 auto;
+}
+#orgSave { background: #2e7d32; }
+#orgSave:disabled { background: #555; }
+
+.organize-grid {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 18px;
+  padding: 24px;
+  background: #3a3e41;
+}
+.org-card {
+  width: 160px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  padding: 6px;
+  background: #2b2f31;
+}
+.org-card.selected { border-color: var(--accent); background: #2f3a4d; }
+.org-card.drag-over { outline: 3px dashed var(--accent); }
+.org-card .org-thumb-wrap {
+  position: relative;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 60px;
+}
+.org-card img { display: block; width: 100%; transition: transform .15s; }
+.org-card .org-n { font-size: 12px; color: #ccc; margin-top: 4px; }
+.org-card .org-crop-mark {
+  position: absolute; inset: 10%; border: 1.5px dashed #e53935; pointer-events: none;
+}
+
+/* Modal dialog dùng chung cho Insert/Extract/Replace/Crop/Merge/Split/Watermark/Header-Footer */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal-box {
+  background: #2b2f31; border-radius: 8px; padding: 16px 20px;
+  min-width: 340px; max-width: 560px; max-height: 84vh; overflow: auto;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6); color: #eee;
+}
+.modal-box h3 { margin: 0 0 12px; font-size: 15px; color: #fff; }
+.modal-box label { display: block; font-size: 12px; color: #9aa0a6; margin: 10px 0 3px; }
+.modal-box input[type="text"], .modal-box input[type="number"], .modal-box select, .modal-box textarea {
+  width: 100%; background: #1f2224; color: #eee; border: 1px solid #4a4f52;
+  border-radius: 6px; padding: 6px 8px; font-size: 13px; box-sizing: border-box;
+}
+.modal-box .row { display: flex; gap: 8px; }
+.modal-box .row > * { flex: 1; }
+.modal-box .radiorow { display: flex; gap: 14px; align-items: center; font-size: 13px; margin: 4px 0; }
+.modal-box .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.modal-box .foot button.primary { background: var(--accent); }
+.modal-box .anchor9 { display: grid; grid-template-columns: repeat(3, 32px); gap: 4px; }
+.modal-box .anchor9 button { width: 32px; height: 28px; padding: 0; background: #3a3f42; }
+.modal-box .anchor9 button.cur { background: var(--accent); }
+.modal-box .err { color: #ef5350; font-size: 12px; margin-top: 8px; }
+
+/* ===== Phase 4: Sửa nội dung (Edit) ===== */
+#editModeBtn.active { background: var(--accent); }
+.editbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: #2b2f31;
+  border-bottom: 1px solid #1c1f21;
+  flex: 0 0 auto;
+}
+.editbar .ed-prop { display: flex; align-items: center; gap: 4px; font-size: 13px; }
+.editbar .ed-prop input { width: 56px; }
+.editbar button.armed { background: var(--accent); }
+#edSave { background: #2e7d32; }
+#edSave:disabled { background: #555; }
+
+.edit-stage {
+  flex: 1;
+  overflow: auto;
+  background: #444;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px;
+  user-select: none;
+}
+.edit-inline { user-select: text; }
+.edit-page-wrap { position: relative; box-shadow: 0 2px 12px rgba(0,0,0,.5); background: #fff; }
+.edit-img { display: block; }
+.edit-overlay { position: absolute; inset: 0; }
+.edit-overlay.armed { cursor: crosshair; }
+
+.edit-box {
+  position: absolute;
+  border: 1px solid rgba(77,139,255,.5);
+  box-sizing: border-box;
+  cursor: move;
+}
+.edit-box:hover { border-color: var(--accent); background: rgba(77,139,255,.08); }
+.edit-box.kind-text { border-style: dashed; }
+.edit-box.selected { border: 2px solid var(--accent); background: rgba(77,139,255,.12); }
+.edit-box .ed-handle {
+  position: absolute;
+  width: 10px; height: 10px;
+  right: -6px; bottom: -6px;
+  background: var(--accent);
+  border: 1px solid #fff;
+  cursor: nwse-resize;
+}
+.edit-inline {
+  position: absolute;
+  z-index: 5;
+  border: 2px solid var(--accent);
+  background: #fff;
+  color: #000;
+  padding: 1px 2px;
+  outline: none;
+  font-family: inherit;
+  overflow: hidden;
+  white-space: pre;
+}

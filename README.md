@@ -28,7 +28,18 @@
   - [x] UI: thanh công cụ + vẽ bằng chuột + preview + chọn màu + tab Chú thích + lưu qua hộp thoại
   - [ ] Follow-up: Ink, sửa/di chuyển annotation đã lưu, XFDF — xem [docs/08-phase2-summary.md](docs/08-phase2-summary.md)
   - **Checklist test cho bạn**: [docs/09-phase2-user-tests.md](docs/09-phase2-user-tests.md)
-- [ ] **Phase 3 — Organize trang + lưu file vững** (kế tiếp) — xem [docs/03-roadmap.md](docs/03-roadmap.md)
+- [x] **Phase 3 — Organize trang + lưu file vững** ✅ lõi hoàn tất (36/36 test xanh)
+  - [x] Engine: chèn/xoá/xoay/trích/thay/đảo trang, merge/split, crop, watermark, header/footer + đánh số trang
+  - [x] Lưu file vững: QPDF repair file hỏng + mã hoá lại an toàn (`qpdf.rs`)
+  - [x] UI: chế độ "Tổ chức trang" (lưới + kéo-thả + multi-select), undo/redo toàn cục (chú thích + tổ chức trang chung 1 stack), dialog cho mọi thao tác (có xem trước thật cho Watermark/Header-Footer)
+  - [ ] Follow-up: preview thật cho Insert/Extract/Replace/Crop, tách theo outline, watermark ảnh — xem [docs/10-phase3-summary.md](docs/10-phase3-summary.md)
+  - **Checklist test cho bạn**: [docs/11-phase3-user-tests.md](docs/11-phase3-user-tests.md)
+- [x] **Phase 4 — Chỉnh sửa nội dung (Edit)** ⭐ tính năng lõi/moat ✅ Iteration 1 hoàn tất (43/43 test xanh)
+  - [x] Engine `edit.rs`: liệt kê object + sửa text run (tiếng Việt), xoá, di chuyển/resize, thêm chữ/ảnh, thay ảnh — round-trip test
+  - [x] UI chế độ "Sửa nội dung": overlay đối tượng, sửa text tại chỗ WYSIWYG, thêm chữ/ảnh, xoá, cỡ chữ/màu, undo/redo, lưu
+  - [ ] Follow-up: reflow đoạn nhiều dòng, xoay/lật/clip, tab Format nâng cao, convert text→path — xem [docs/12-phase4-summary.md](docs/12-phase4-summary.md)
+  - **Checklist test cho bạn**: [docs/13-phase4-user-tests.md](docs/13-phase4-user-tests.md)
+- [ ] **Phase 5 — Bảo mật & Chữ ký** (kế tiếp) — xem [docs/03-roadmap.md](docs/03-roadmap.md)
 
 Build & chạy: xem [docs/05-dev-setup.md](docs/05-dev-setup.md).
 

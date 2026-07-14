@@ -7,6 +7,9 @@ Cargo.lock.bak
 /pdfium.dll
 /pdfium.dll.lib
 
+# QPDF prebuilt binary (tải bằng scripts/fetch-qpdf.ps1)
+/qpdf/
+
 # Tauri / node
 /app/node_modules
 /app/dist

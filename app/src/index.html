@@ -30,11 +30,17 @@
       <button id="searchNext" title="Kết quả sau (Enter)">▶</button>
       <span class="sep"></span>
       <button id="copyPage" title="Copy text trang hiện tại">⧉ Copy</button>
+      <span class="sep"></span>
+      <button id="undoBtn" title="Hoàn tác (Ctrl+Z)" disabled>↶ Hoàn tác</button>
+      <button id="redoBtn" title="Làm lại (Ctrl+Y)" disabled>↷ Làm lại</button>
+      <span class="sep"></span>
+      <button id="organizeModeBtn" title="Tổ chức trang">🗂 Tổ chức trang</button>
+      <button id="editModeBtn" title="Sửa nội dung trang">✏️ Sửa nội dung</button>
       <div class="spacer"></div>
       <span id="status" class="status"></span>
     </header>
 
-    <div class="annobar">
+    <div id="annobar" class="annobar">
       <span class="annolabel">Chú thích:</span>
       <button class="atool" data-tool="highlight" title="Tô sáng (kéo vùng)">🖍️ Tô sáng</button>
       <button class="atool" data-tool="underline" title="Gạch chân">U̲ Gạch chân</button>
@@ -42,18 +48,48 @@
       <button class="atool" data-tool="square" title="Khung chữ nhật">▭ Khung</button>
       <button class="atool" data-tool="freetext" title="Hộp văn bản">🅣 Text box</button>
       <button class="atool" data-tool="note" title="Ghi chú dán">📌 Ghi chú</button>
+      <button class="atool" data-tool="crop" title="Crop trang">✂️ Crop</button>
       <span class="sep"></span>
       <button id="annotColorBtn" class="atool" title="Màu chú thích"><span class="sw" id="annotSw"></span> Màu</button>
-      <span class="sep"></span>
-      <button id="undoBtn" title="Hoàn tác (Ctrl+Z)" disabled>↶ Hoàn tác</button>
-      <button id="redoBtn" title="Làm lại (Ctrl+Y)" disabled>↷ Làm lại</button>
       <span class="spacer"></span>
       <span id="annotHint" class="status"></span>
       <button id="saveAnnots" disabled>💾 Lưu chú thích (<span id="annotCount">0</span>)</button>
     </div>
 
+    <div id="organizeBar" class="organizebar hidden">
+      <span class="annolabel">Tổ chức trang:</span>
+      <button id="orgInsert" title="Chèn trang">➕ Chèn</button>
+      <button id="orgDelete" title="Xoá trang đã chọn (Delete)">🗑 Xoá</button>
+      <button id="orgRotateL" title="Xoay trái">↺ Xoay trái</button>
+      <button id="orgRotateR" title="Xoay phải">↻ Xoay phải</button>
+      <button id="orgExtract" title="Trích trang đã chọn">📤 Trích</button>
+      <button id="orgReplace" title="Thay trang đã chọn">🔁 Thay</button>
+      <span class="sep"></span>
+      <button id="orgMerge" title="Trộn nhiều file PDF">🔀 Trộn file</button>
+      <button id="orgSplit" title="Tách thành nhiều file">✂ Tách file</button>
+      <button id="orgWatermark" title="Thêm watermark">💧 Watermark</button>
+      <button id="orgHeaderFooter" title="Thêm header/footer">📋 Header/Footer</button>
+      <span class="spacer"></span>
+      <span id="organizeHint" class="status"></span>
+      <button id="orgSave" disabled>💾 Lưu thay đổi tổ chức trang</button>
+    </div>
+
+    <div id="editBar" class="editbar hidden">
+      <span class="annolabel">Sửa nội dung:</span>
+      <button id="edAddText" title="Thêm chữ — bấm rồi click lên trang">🆎 Thêm chữ</button>
+      <button id="edAddImage" title="Thêm ảnh — chọn ảnh rồi click lên trang">🖼 Thêm ảnh</button>
+      <button id="edDelete" title="Xoá đối tượng đang chọn (Delete)" disabled>🗑 Xoá</button>
+      <button id="edReplaceImage" title="Thay ảnh đang chọn" disabled>🔁 Thay ảnh</button>
+      <span class="sep"></span>
+      <label class="ed-prop">Cỡ chữ <input id="edFontSize" type="number" min="1" max="400" disabled></label>
+      <button id="edColorBtn" class="atool" title="Màu chữ" disabled><span class="sw" id="edSw"></span> Màu</button>
+      <span class="spacer"></span>
+      <span id="editHint" class="status"></span>
+      <button id="edSave" disabled>💾 Lưu thay đổi nội dung</button>
+    </div>
+
     <div class="body">
-      <aside class="sidebar">
+      <aside id="sidebar" class="sidebar">
         <div class="tabs">
           <button id="tabThumbs" class="tab active">Thumbnails</button>
           <button id="tabOutline" class="tab">Outline</button>
@@ -67,6 +103,19 @@
       <main id="viewport" class="viewport">
         <div id="pages" class="pages"></div>
       </main>
+
+      <main id="organizeGrid" class="organize-grid hidden"></main>
+
+      <main id="editStage" class="edit-stage hidden">
+        <div id="editPageWrap" class="edit-page-wrap">
+          <img id="editImg" class="edit-img" alt="trang đang sửa"/>
+          <div id="editOverlay" class="edit-overlay"></div>
+        </div>
+      </main>
+    </div>
+
+    <div id="modalOverlay" class="modal-overlay hidden">
+      <div id="modalBox" class="modal-box"></div>
     </div>
 
     <script src="main.js"></script>
