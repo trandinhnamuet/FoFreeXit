@@ -81,7 +81,21 @@
       <button id="edDelete" title="Xoá đối tượng đang chọn (Delete)" disabled>🗑 Xoá</button>
       <button id="edReplaceImage" title="Thay ảnh đang chọn" disabled>🔁 Thay ảnh</button>
       <span class="sep"></span>
+      <label class="ed-prop">Font <select id="edFontFamily" disabled>
+        <option value="">(giữ nguyên)</option>
+        <option>Arial</option>
+        <option>Times New Roman</option>
+        <option>Calibri</option>
+        <option>Cambria</option>
+        <option>Georgia</option>
+        <option>Verdana</option>
+        <option>Tahoma</option>
+        <option>Segoe UI</option>
+        <option>Courier New</option>
+      </select></label>
       <label class="ed-prop">Cỡ chữ <input id="edFontSize" type="number" min="1" max="400" disabled></label>
+      <button id="edBold" class="ed-style" title="Đậm (giữ họ font, đổi biến thể)" disabled><b>B</b></button>
+      <button id="edItalic" class="ed-style" title="Nghiêng (giữ họ font, đổi biến thể)" disabled><i>I</i></button>
       <button id="edColorBtn" class="atool" title="Màu chữ" disabled><span class="sw" id="edSw"></span> Màu</button>
       <span class="spacer"></span>
       <span id="editHint" class="status"></span>

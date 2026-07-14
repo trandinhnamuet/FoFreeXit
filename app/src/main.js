@@ -38,6 +38,7 @@ const state = {
   editArm: null,          // 'text' | 'image' khi đang chờ click đặt; null = không
   editPendingImage: null, // đường dẫn ảnh chờ đặt (Thêm ảnh)
   editColor: [0, 0, 0],   // màu chữ áp khi sửa/thêm text
+  editTemps: [],          // mọi file tạm đã materialize trong phiên sửa (để dọn)
 };
 const UNDO_LIMIT = 50;
 let annotIdSeq = 1;
@@ -2001,6 +2002,7 @@ function enterEditMode() {
   state.editBase = state.path;
   state.editUndo = [];
   state.editRedo = [];
+  state.editTemps = [];
   state.editSel = null;
   state.editArm = null;
   state.editPendingImage = null;
@@ -2013,7 +2015,17 @@ function enterEditMode() {
   setTool(null);
   loadEditPage();
 }
+// Dọn mọi file làm việc tạm của phiên sửa (backend chỉ xoá đúng ff_edit_*.pdf
+// trong thư mục temp nên gọi thoải mái).
+function cleanupEditTemps() {
+  if (state.editTemps.length) {
+    invoke("edit_cleanup", { paths: state.editTemps.slice() }).catch(() => {});
+    state.editTemps = [];
+  }
+}
+
 function exitEditMode() {
+  cleanupEditTemps();
   state.editMode = false;
   $("annobar").classList.remove("hidden");
   $("editBar").classList.add("hidden");
@@ -2116,9 +2128,26 @@ function selectEditObject(index) {
   $("edReplaceImage").disabled = !isImage;
   $("edFontSize").disabled = !isText;
   $("edColorBtn").disabled = !isText;
+  $("edFontFamily").disabled = !isText;
+  $("edBold").disabled = !isText;
+  $("edItalic").disabled = !isText;
   if (isText) {
     $("edFontSize").value = Math.round(o.font_size || 12);
     if (o.color) { state.editColor = o.color.slice(0, 3); $("edSw").style.background = rgbCss(state.editColor); }
+    // Ô font: mặc định "(giữ nguyên: <family gốc>)" — chỉ đổi khi người dùng chọn khác.
+    $("edFontFamily").options[0].textContent = o.font_family
+      ? `(giữ nguyên: ${o.font_family})`
+      : "(giữ nguyên)";
+    $("edFontFamily").value = "";
+    $("edBold").classList.toggle("on", !!o.font_bold);
+    $("edItalic").classList.toggle("on", !!o.font_italic);
+    const emb = o.font_embedded == null ? "" : o.font_embedded ? " · font nhúng" : " · font hệ thống";
+    $("editHint").textContent =
+      `${o.font_family || o.font_name || "?"} · ${Math.round(o.font_size || 0)}pt${emb}`;
+  } else {
+    $("edFontFamily").options[0].textContent = "(giữ nguyên)";
+    $("edBold").classList.remove("on");
+    $("edItalic").classList.remove("on");
   }
   refreshEditSelection();
 }
@@ -2130,12 +2159,14 @@ function updateEditUndoButtons() {
   $("redoBtn").disabled = state.editRedo.length === 0;
 }
 
-// Áp 1 op: lưu editBase cũ vào stack undo, materialize ra file tạm mới.
-async function stageEditOp(op) {
+// Áp 1 nhóm op (1 thao tác người dùng): lưu editBase cũ vào stack undo,
+// materialize ra file tạm mới, ghi nhận file tạm để dọn khi thoát.
+async function stageEditOps(ops) {
   try {
     const out = await invoke("edit_apply_to_temp", {
-      input: state.editBase, page: state.editPage, ops: [op], password: null,
+      input: state.editBase, page: state.editPage, ops, password: null,
     });
+    state.editTemps.push(out);
     state.editUndo.push(state.editBase);
     state.editRedo = [];
     state.editBase = out;
@@ -2145,6 +2176,10 @@ async function stageEditOp(op) {
   } catch (e) {
     $("editHint").textContent = "Lỗi: " + e;
   }
+}
+
+function stageEditOp(op) {
+  return stageEditOps([op]);
 }
 
 function editUndo() {
@@ -2162,36 +2197,121 @@ function editRedo() {
   loadEditPage();
 }
 
-// Sửa text tại chỗ: ô input phủ lên box, gõ xong Enter/blur → SetText.
+// CSS font-family xấp xỉ cho family PDF (để ô sửa hiển thị đúng dáng chữ).
+function cssFontStack(family) {
+  if (!family) return "sans-serif";
+  const k = family.toLowerCase();
+  const generic = /times|georgia|garamond|palatino|cambria|book|serif/.test(k)
+    ? "serif"
+    : /courier|consolas|mono/.test(k)
+      ? "monospace"
+      : "sans-serif";
+  return `"${family}", ${generic}`;
+}
+
+// Gom các text run CÙNG DÒNG với `o` (baseline xấp xỉ, liền kề theo chiều
+// ngang) — PDF hay cắt 1 dòng nhìn thấy thành nhiều run; Foxit cho sửa cả
+// dòng nên ta cũng vậy. Trả về mảng run đã xếp trái→phải (luôn chứa `o`).
+function sameLineRuns(o) {
+  const fs = o.font_size || 12;
+  const tol = Math.max(1.5, fs * 0.25);
+  const cands = state.editObjects
+    .filter(
+      (x) =>
+        x.kind === "text" &&
+        Math.abs(x.rect.bottom - o.rect.bottom) <= tol &&
+        (x.font_size || 12) <= fs * 2.2 &&
+        (x.font_size || 12) >= fs / 2.2
+    )
+    .sort((a, b) => a.rect.left - b.rect.left);
+  const i0 = cands.findIndex((x) => x.index === o.index);
+  if (i0 < 0) return [o];
+  const gapMax = Math.max(fs * 1.2, 6); // hở quá 1.2em coi như cột khác
+  const runs = [cands[i0]];
+  for (let i = i0 - 1; i >= 0; i--) {
+    if (runs[0].rect.left - cands[i].rect.right <= gapMax) runs.unshift(cands[i]);
+    else break;
+  }
+  for (let i = i0 + 1; i < cands.length; i++) {
+    if (cands[i].rect.left - runs[runs.length - 1].rect.right <= gapMax) runs.push(cands[i]);
+    else break;
+  }
+  return runs;
+}
+
+// Ghép nội dung 1 dòng từ các run: chèn khoảng trắng khi 2 run hở nhau rõ.
+function composeLineText(runs) {
+  let s = "";
+  for (let i = 0; i < runs.length; i++) {
+    const t = runs[i].text || "";
+    if (i > 0) {
+      const gap = runs[i].rect.left - runs[i - 1].rect.right;
+      const em = (runs[i].font_size || 12) * 0.28;
+      if (gap > em && !s.endsWith(" ") && !t.startsWith(" ")) s += " ";
+    }
+    s += t;
+  }
+  return s;
+}
+
+// Sửa text tại chỗ kiểu Foxit: gộp cả dòng, ô sửa hiển thị đúng font/cỡ/màu,
+// Enter/blur commit — engine GIỮ FONT GỐC (chỉ thay khi thiếu glyph).
 function startInlineTextEdit(o) {
   const ov = $("editOverlay");
   const existing = ov.querySelector(".edit-inline");
   if (existing) existing.remove();
+
+  const runs = sameLineRuns(o);
+  const original = composeLineText(runs);
+  const union = {
+    left: Math.min(...runs.map((r) => r.rect.left)),
+    right: Math.max(...runs.map((r) => r.rect.right)),
+    bottom: Math.min(...runs.map((r) => r.rect.bottom)),
+    top: Math.max(...runs.map((r) => r.rect.top)),
+  };
+
   const inp = document.createElement("input");
   inp.className = "edit-inline";
-  inp.value = o.text || "";
-  const st = editBoxStyle(o.rect);
+  inp.value = original;
+  const st = editBoxStyle(union);
   Object.assign(inp.style, st);
+  // Chừa chỗ gõ thêm về bên phải (không tràn khung trang).
+  const p = state.pages[state.editPage];
+  const maxW = (p.widthPt - union.left) * state.editScale - 4;
+  inp.style.width = Math.min(maxW, parseFloat(st.width) + 220) + "px";
+  // WYSIWYG khi gõ: đúng font/cỡ/màu/kiểu của run đầu.
   inp.style.fontSize = Math.max(8, (o.font_size || 12) * state.editScale) + "px";
+  inp.style.fontFamily = cssFontStack(o.font_family);
+  inp.style.fontWeight = o.font_bold ? "bold" : "normal";
+  inp.style.fontStyle = o.font_italic ? "italic" : "normal";
+  if (o.color) inp.style.color = rgbCss(o.color);
   ov.appendChild(inp);
   inp.focus();
   inp.select();
+
   let done = false;
   const commit = (save) => {
     if (done) return;
     done = true;
     const text = inp.value;
     inp.remove();
-    if (save && text !== (o.text || "")) {
-      stageEditOp({
-        op: "setText",
-        index: o.index,
-        text,
-        fontSize: o.font_size || null,
-        color: o.color ? o.color : [0, 0, 0, 255],
-        bold: false,
-        italic: false,
-      });
+    if (save && text !== original) {
+      // Run đầu nhận toàn bộ text mới (giữ font/cỡ/màu gốc — mọi field null),
+      // các run còn lại của dòng bị xoá.
+      const ops = [
+        {
+          op: "setText",
+          index: runs[0].index,
+          text,
+          fontSize: null,
+          color: null,
+          fontFamily: null,
+          bold: null,
+          italic: null,
+        },
+        ...runs.slice(1).map((r) => ({ op: "delete", index: r.index })),
+      ];
+      stageEditOps(ops);
     }
   };
   inp.addEventListener("keydown", (e) => {
@@ -2202,19 +2322,21 @@ function startInlineTextEdit(o) {
   inp.addEventListener("blur", () => commit(true));
 }
 
-// Đổi cỡ chữ / màu cho text object đang chọn → SetText giữ nguyên nội dung.
-function applyTextPropToSelected() {
+// Đổi thuộc tính chữ cho run đang chọn. `part` chỉ chứa field muốn đổi —
+// mọi field khác gửi null = GIỮ NGUYÊN (engine không đụng font khi không cần).
+function applyTextPropToSelected(part) {
   const o = state.editObjects.find((x) => x.index === state.editSel);
   if (!o || o.kind !== "text") return;
-  const size = Number($("edFontSize").value) || o.font_size || 12;
   stageEditOp({
     op: "setText",
     index: o.index,
     text: o.text || "",
-    fontSize: size,
-    color: [state.editColor[0], state.editColor[1], state.editColor[2], 255],
-    bold: false,
-    italic: false,
+    fontSize: null,
+    color: null,
+    fontFamily: null,
+    bold: null,
+    italic: null,
+    ...part,
   });
 }
 
@@ -2257,10 +2379,14 @@ function promptAddText(pdfX, pdfY) {
   inp.placeholder = "Nhập chữ…";
   const s = state.editScale;
   const p = state.pages[state.editPage];
+  const family = $("edFontFamily").value || null; // null = font mặc định
+  const size = Number($("edFontSize").value) || 16;
   inp.style.left = pdfX * s + "px";
   inp.style.top = (p.heightPt - pdfY) * s + "px";
   inp.style.minWidth = "120px";
-  inp.style.fontSize = Math.max(10, 16 * s) + "px";
+  inp.style.fontSize = Math.max(10, size * s) + "px";
+  inp.style.fontFamily = cssFontStack(family);
+  inp.style.color = rgbCss(state.editColor);
   ov.appendChild(inp);
   inp.focus();
   let done = false;
@@ -2271,8 +2397,9 @@ function promptAddText(pdfX, pdfY) {
     if (save && text.trim()) {
       stageEditOp({
         op: "addText", x: pdfX, y: pdfY, text,
-        fontSize: 16, color: [state.editColor[0], state.editColor[1], state.editColor[2], 255],
-        bold: false, italic: false,
+        fontSize: size, color: [state.editColor[0], state.editColor[1], state.editColor[2], 255],
+        fontFamily: family,
+        bold: null, italic: null,
       });
     }
   };
@@ -2284,19 +2411,31 @@ function promptAddText(pdfX, pdfY) {
   inp.addEventListener("blur", () => commit(true));
 }
 
-// Kéo để di chuyển object đang chọn (chuột thật; WebView2 có thể lọc mousemove giả lập).
+// Kéo để di chuyển object đang chọn — box đi theo con trỏ NGAY (live feedback
+// như Foxit), thả chuột mới commit vào engine.
 function onEditBoxMouseDown(e, o) {
   if (state.editArm) return;
   if (e.target.classList.contains("ed-handle")) return;
   selectEditObject(o.index);
+  const box = e.currentTarget;
   const startX = e.clientX, startY = e.clientY;
+  const left0 = parseFloat(box.style.left), top0 = parseFloat(box.style.top);
   let moved = false;
   const onMove = (ev) => {
-    if (Math.abs(ev.clientX - startX) > 2 || Math.abs(ev.clientY - startY) > 2) moved = true;
+    const dx = ev.clientX - startX, dy = ev.clientY - startY;
+    if (!moved && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
+      moved = true;
+      box.classList.add("dragging");
+    }
+    if (moved) {
+      box.style.left = left0 + dx + "px";
+      box.style.top = top0 + dy + "px";
+    }
   };
   const onUp = (ev) => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
+    box.classList.remove("dragging");
     if (!moved) return;
     const dx = (ev.clientX - startX) / state.editScale;
     const dy = -(ev.clientY - startY) / state.editScale; // CSS y xuống = PDF y giảm
@@ -2307,22 +2446,33 @@ function onEditBoxMouseDown(e, o) {
   e.preventDefault();
 }
 
-// Kéo handle góc dưới-phải để resize.
+// Kéo handle góc dưới-phải để resize — khung đổi kích thước live, thả commit.
 function onEditResizeMouseDown(e, o) {
   e.stopPropagation();
   e.preventDefault();
+  const box = e.target.parentElement;
   const startX = e.clientX, startY = e.clientY;
   const w0 = (o.rect.right - o.rect.left), h0 = (o.rect.top - o.rect.bottom);
-  const onMove = () => {};
+  const cssW0 = parseFloat(box.style.width), cssH0 = parseFloat(box.style.height);
+  const onMove = (ev) => {
+    box.classList.add("dragging");
+    box.style.width = Math.max(4, cssW0 + (ev.clientX - startX)) + "px";
+    box.style.height = Math.max(4, cssH0 + (ev.clientY - startY)) + "px";
+  };
   const onUp = (ev) => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
+    box.classList.remove("dragging");
     const dwPt = (ev.clientX - startX) / state.editScale;
     const dhPt = (ev.clientY - startY) / state.editScale; // kéo xuống = cao hơn (y giảm ở đáy)
     const sx = Math.max(0.1, (w0 + dwPt) / Math.max(1, w0));
     const sy = Math.max(0.1, (h0 + dhPt) / Math.max(1, h0));
     if (Math.abs(sx - 1) > 0.01 || Math.abs(sy - 1) > 0.01) {
-      stageEditOp({ op: "transform", index: o.index, dx: 0, dy: 0, sx, sy });
+      // Engine scale quanh góc DƯỚI-trái; bù dy để neo góc TRÊN-trái đứng yên
+      // (khớp handle góc dưới-phải + preview khi kéo, như Foxit).
+      stageEditOp({ op: "transform", index: o.index, dx: 0, dy: -(h0 * (sy - 1)), sx, sy });
+    } else {
+      loadEditPage(); // trả khung về đúng kích thước cũ
     }
   };
   window.addEventListener("mousemove", onMove);
@@ -2488,12 +2638,29 @@ $("edAddText").addEventListener("click", () => {
 $("edAddImage").addEventListener("click", armAddImage);
 $("edDelete").addEventListener("click", deleteSelectedEditObject);
 $("edReplaceImage").addEventListener("click", replaceSelectedImage);
-$("edFontSize").addEventListener("change", applyTextPropToSelected);
+// Mọi thay đổi thuộc tính chỉ gửi ĐÚNG field đó — engine giữ nguyên font khi
+// không cần thay (chuẩn Foxit: đổi cỡ/màu không được đổi font).
+$("edFontSize").addEventListener("change", () => {
+  const size = Number($("edFontSize").value);
+  if (size > 0) applyTextPropToSelected({ fontSize: size });
+});
+$("edFontFamily").addEventListener("change", () => {
+  const fam = $("edFontFamily").value;
+  if (fam) applyTextPropToSelected({ fontFamily: fam });
+});
+$("edBold").addEventListener("click", () => {
+  const o = state.editObjects.find((x) => x.index === state.editSel);
+  if (o) applyTextPropToSelected({ bold: !o.font_bold });
+});
+$("edItalic").addEventListener("click", () => {
+  const o = state.editObjects.find((x) => x.index === state.editSel);
+  if (o) applyTextPropToSelected({ italic: !o.font_italic });
+});
 $("edColorBtn").addEventListener("click", () => {
   openColorPopover($("edColorBtn"), state.editColor, (rgb) => {
     state.editColor = rgb;
     $("edSw").style.background = rgbCss(rgb);
-    applyTextPropToSelected();
+    applyTextPropToSelected({ color: [rgb[0], rgb[1], rgb[2], 255] });
   });
 });
 $("edSave").addEventListener("click", saveEdits);

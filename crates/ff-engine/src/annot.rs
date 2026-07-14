@@ -334,14 +334,51 @@ pub(crate) fn find_font_bytes(bold: bool, italic: bool) -> Option<Vec<u8>> {
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {
-        let _ = (bold, italic);
-        let candidates: &[&str] = &[
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "/usr/share/fonts/TTF/DejaVuSans.ttf",
-            "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        // [regular, bold, italic, bold-italic] cho các family Linux phổ biến.
+        const FAMILIES: &[[&str; 4]] = &[
+            [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf",
+            ],
+            [
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf",
+            ],
+            [
+                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans-Oblique.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans-BoldOblique.ttf",
+            ],
+            [
+                "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSans-Oblique.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSans-BoldOblique.ttf",
+            ],
         ];
-        candidates.iter().find_map(|p| std::fs::read(p).ok())
+        let idx = match (bold, italic) {
+            (false, false) => 0,
+            (true, false) => 1,
+            (false, true) => 2,
+            (true, true) => 3,
+        };
+        for fam in FAMILIES {
+            if let Ok(bytes) = std::fs::read(fam[idx]) {
+                return Some(bytes);
+            }
+        }
+        // Không có biến thể đúng → hạ cấp về regular đầu tiên có sẵn.
+        for fam in FAMILIES {
+            if let Ok(bytes) = std::fs::read(fam[0]) {
+                return Some(bytes);
+            }
+        }
+        None
     }
 }
 
