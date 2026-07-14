@@ -28,6 +28,19 @@ cargo run
 | E15 | **Lưu thay đổi nội dung** → chọn nơi lưu | Tạo file PDF mới; app mở lại file đó | |
 | E16 | Mở file đã lưu ở **Foxit/Adobe/Chrome** | Nội dung đã sửa hiển thị đúng (text, ảnh, **tiếng Việt đúng dấu**), file không hỏng | |
 
+## Bổ sung Iteration 2 — GIỮ FONT + sửa cả dòng (chuẩn Foxit)
+| # | Thao tác | Kỳ vọng | KQ |
+|---|----------|---------|----|
+| E17 | Bấm đúp 1 dòng text bị cắt thành nhiều mảnh (PDF xuất từ Word thường vậy) | Ô sửa phủ **CẢ DÒNG** (không chỉ 1 mảnh), nội dung ghép đủ | |
+| E18 | Sửa 1 từ trong dòng, Enter | **Font giữ nguyên y hệt** phần còn lại của trang (so bằng mắt + panel chọn hiện tên font cũ) | |
+| E19 | Trong ô sửa đang gõ | Chữ trong ô hiển thị **đúng font/cỡ/màu/đậm-nghiêng** của dòng (WYSIWYG khi gõ, không phải font hệ thống chung chung) | |
+| E20 | Chọn text → chỉ đổi **Cỡ chữ** hoặc **Màu** | Font KHÔNG đổi, nội dung không đổi, vị trí neo không trôi | |
+| E21 | Chọn text → bấm **B** (Đậm) | Chữ thành đậm **cùng họ font** (Times → Times Bold, không nhảy sang Arial) | |
+| E22 | Chọn text → đổi **Font** trong dropdown | Chữ đổi đúng family chọn; dropdown mặc định hiển thị "(giữ nguyên: <font gốc>)" | |
+| E23 | Kéo di chuyển / kéo handle resize | Khung **đi theo con trỏ NGAY khi kéo** (live), thả chuột mới ghi nhận | |
+| E24 | Sửa text tiếng Việt trên file có font nhúng (file Word xuất PDF) | Đúng dấu **và giữ nguyên font nhúng** (mở lại ở Foxit xem tên font trong Edit) | |
+| E25 | Sửa nhiều lần rồi thoát chế độ sửa (không lưu) | Không còn file `ff_edit_*.pdf` rác trong thư mục %TEMP% | |
+
 ## Mẫu phản hồi
 ```
 [Mã] (vd E16) — Phần mềm mở: <Foxit/Adobe/Chrome> — Hiện tượng: <mô tả> —

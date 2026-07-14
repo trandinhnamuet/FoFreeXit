@@ -6,6 +6,7 @@
 
 pub mod annot;
 pub mod edit;
+pub(crate) mod fontmatch;
 pub mod meta;
 pub mod organize;
 pub mod qpdf;

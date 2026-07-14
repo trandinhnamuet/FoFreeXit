@@ -665,6 +665,10 @@ struct ObjectInfoDto {
     rect: RectDto,
     text: Option<String>,
     font_name: Option<String>,
+    font_family: Option<String>,
+    font_bold: Option<bool>,
+    font_italic: Option<bool>,
+    font_embedded: Option<bool>,
     font_size: Option<f32>,
     color: Option<[u8; 4]>,
 }
@@ -683,6 +687,10 @@ fn edit_list_objects(path: String, page: u16, password: Option<String>) -> Resul
             rect: RectDto { left: o.rect.left, bottom: o.rect.bottom, right: o.rect.right, top: o.rect.top },
             text: o.text,
             font_name: o.font_name,
+            font_family: o.font_family,
+            font_bold: o.font_bold,
+            font_italic: o.font_italic,
+            font_embedded: o.font_embedded,
             font_size: o.font_size,
             color: o.color,
         })
@@ -709,10 +717,11 @@ struct EditOpDto {
     text: String,
     font_size: Option<f32>,
     color: Option<[u8; 4]>,
-    #[serde(default)]
-    bold: bool,
-    #[serde(default)]
-    italic: bool,
+    /// setText/addText: None = giữ font gốc; Some = đổi sang family này.
+    font_family: Option<String>,
+    /// setText: None = giữ kiểu gốc. addText: None ≙ false.
+    bold: Option<bool>,
+    italic: Option<bool>,
     #[serde(default)]
     x: f32,
     #[serde(default)]
@@ -737,6 +746,7 @@ fn edit_op_from_dto(d: EditOpDto) -> Result<ff_engine::EditOp, String> {
             text: d.text,
             font_size: d.font_size,
             color: d.color,
+            font_family: d.font_family,
             bold: d.bold,
             italic: d.italic,
         },
@@ -748,8 +758,9 @@ fn edit_op_from_dto(d: EditOpDto) -> Result<ff_engine::EditOp, String> {
             text: d.text,
             font_size: d.font_size.unwrap_or(14.0),
             color: d.color.unwrap_or([0, 0, 0, 255]),
-            bold: d.bold,
-            italic: d.italic,
+            font_family: d.font_family,
+            bold: d.bold.unwrap_or(false),
+            italic: d.italic.unwrap_or(false),
         },
         "addImage" => ff_engine::EditOp::AddImage {
             x: d.x,
@@ -821,6 +832,25 @@ fn edit_preview(input: String, page: u16, ops: Vec<EditOpDto>, width: u32, passw
     result
 }
 
+/// Dọn các file làm việc tạm của chế độ sửa (undo stack). Chỉ xoá file có tên
+/// `ff_edit_*` nằm đúng trong thư mục temp — không bao giờ đụng file người dùng.
+#[tauri::command]
+fn edit_cleanup(paths: Vec<String>) {
+    let tmp = std::env::temp_dir();
+    for p in paths {
+        let path = std::path::PathBuf::from(&p);
+        let name_ok = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n.starts_with("ff_edit_") && n.ends_with(".pdf"))
+            .unwrap_or(false);
+        let dir_ok = path.parent().map(|d| d == tmp).unwrap_or(false);
+        if name_ok && dir_ok {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+}
+
 /// Hộp thoại chọn file ảnh (cho Thêm ảnh / Thay ảnh).
 #[tauri::command]
 fn pick_image(app: tauri::AppHandle) -> Option<String> {
@@ -861,6 +891,7 @@ fn main() {
             edit_apply,
             edit_apply_to_temp,
             edit_preview,
+            edit_cleanup,
             pick_image
         ])
         .run(tauri::generate_context!())

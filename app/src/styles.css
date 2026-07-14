@@ -404,9 +404,28 @@ body.tool-active .annotlayer * { pointer-events: none; }
   border: 2px solid var(--accent);
   background: #fff;
   color: #000;
-  padding: 1px 2px;
+  padding: 0 1px;
   outline: none;
   font-family: inherit;
+  line-height: 1;
   overflow: hidden;
   white-space: pre;
+  box-sizing: content-box;
+}
+
+/* Nút Đậm/Nghiêng trong thanh Sửa nội dung */
+.ed-style {
+  min-width: 28px;
+  padding: 3px 7px;
+}
+.ed-style.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Kéo-thả trực tiếp: box đang kéo nổi lên trên, mờ nhẹ như Foxit */
+.edit-box.dragging {
+  opacity: 0.75;
+  z-index: 6;
+  border-style: solid;
 }
