@@ -2811,6 +2811,119 @@ async function stripMetadataAction() {
   }
 }
 
+async function optimizeSaveAction() {
+  const out = await invoke("pick_save_pdf");
+  if (!out) return;
+  try {
+    await invoke("security_optimize", { input: state.path, output: out });
+    $("status").textContent = `Đã lưu tối ưu (nén + dọn rác) → ${shortName(out)}`;
+    loadDocument(out);
+  } catch (e) {
+    $("secHint").textContent = "Lỗi lưu tối ưu: " + e;
+  }
+}
+
+// --- Chữ ký số (Phase 5 iteration 2) ---
+
+function openCreateIdDialog() {
+  const box = openModal("Tạo Digital ID tự ký", `
+    <p class="muted">Tạo chứng chỉ tự ký (RSA-2048) để ký thử. Nếu có chữ ký của tổ chức phát hành (PFX/PEM) thì dùng thẳng nó ở bước Ký số.</p>
+    <label>Tên hiển thị trong chữ ký</label>
+    <input type="text" id="idCn" placeholder="Nguyễn Văn A">
+    <div class="err" id="idErr"></div>
+    <div class="foot"><button id="idCancel">Huỷ</button><button id="idOk" class="primary">Tạo &amp; lưu…</button></div>
+  `);
+  box.querySelector("#idCancel").addEventListener("click", closeModal);
+  box.querySelector("#idOk").addEventListener("click", async () => {
+    const cn = box.querySelector("#idCn").value.trim();
+    if (!cn) { box.querySelector("#idErr").textContent = "Cần nhập tên."; return; }
+    const out = await invoke("pick_save_pem");
+    if (!out) return;
+    try {
+      await invoke("sig_create_id", { commonName: cn, output: out });
+      closeModal();
+      $("secHint").textContent = `Đã tạo Digital ID → ${shortName(out)} (dùng ở bước Ký số)`;
+    } catch (e) {
+      box.querySelector("#idErr").textContent = "Lỗi: " + e;
+    }
+  });
+}
+
+function openSignDialog() {
+  const box = openModal("Ký số tài liệu", `
+    <label>Tên người ký (hiện trong chữ ký)</label>
+    <input type="text" id="sgName" placeholder="Nguyễn Văn A">
+    <label>Lý do ký</label>
+    <input type="text" id="sgReason" value="Tôi đồng ý với nội dung tài liệu">
+    <label>Digital ID (.pem)</label>
+    <div class="row">
+      <input type="text" id="sgId" readonly placeholder="Chưa chọn — bấm Chọn…">
+      <button id="sgPickId">Chọn…</button>
+    </div>
+    <div class="err" id="sgErr"></div>
+    <div class="foot"><button id="sgCancel">Huỷ</button><button id="sgOk" class="primary">Ký &amp; lưu…</button></div>
+  `);
+  let idPath = null;
+  box.querySelector("#sgPickId").addEventListener("click", async () => {
+    const p = await invoke("pick_any_file");
+    if (p) { idPath = p; box.querySelector("#sgId").value = shortName(p); }
+  });
+  box.querySelector("#sgCancel").addEventListener("click", closeModal);
+  box.querySelector("#sgOk").addEventListener("click", async () => {
+    const name = box.querySelector("#sgName").value.trim();
+    const reason = box.querySelector("#sgReason").value.trim();
+    const err = box.querySelector("#sgErr");
+    if (!name) { err.textContent = "Cần nhập tên người ký."; return; }
+    if (!idPath) { err.textContent = "Cần chọn Digital ID (.pem)."; return; }
+    const out = await invoke("pick_save_pdf");
+    if (!out) return;
+    try {
+      await invoke("sig_sign", { input: state.path, idPem: idPath, reason, signerName: name, output: out });
+      closeModal();
+      $("status").textContent = `Đã ký số → ${shortName(out)}`;
+      loadDocument(out);
+      // Tự kiểm tra chữ ký vừa tạo.
+      verifySignaturesAction(out);
+    } catch (e) {
+      err.textContent = "Lỗi ký: " + e;
+    }
+  });
+}
+
+async function verifySignaturesAction(pathOverride) {
+  const target = typeof pathOverride === "string" ? pathOverride : state.path;
+  let checks;
+  try {
+    checks = await invoke("sig_verify", { input: target });
+  } catch (e) {
+    $("secHint").textContent = "Lỗi kiểm tra: " + e;
+    return;
+  }
+  const rows = checks.length
+    ? checks
+        .map((c, i) => {
+          const badge = c.valid
+            ? '<span class="sig-ok">✓ Hợp lệ</span>'
+            : '<span class="sig-bad">✗ Không hợp lệ</span>';
+          const detail = [];
+          if (!c.cryptoValid) detail.push("chữ ký sai");
+          if (!c.digestMatches) detail.push("nội dung đã bị sửa");
+          if (!c.coversDocument) detail.push("có phần thêm sau khi ký");
+          return `<tr><td>${i + 1}</td><td>${(c.signer || "").replace(/</g, "&lt;")}</td><td>${badge}</td>
+            <td class="muted">${detail.join("; ")}</td></tr>`;
+        })
+        .join("")
+    : `<tr><td colspan="4" class="muted">Tài liệu chưa có chữ ký số nào.</td></tr>`;
+  const box = openModal("Kết quả kiểm tra chữ ký", `
+    <table class="sig-table">
+      <thead><tr><th>#</th><th>Người ký</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="foot"><button id="sigClose" class="primary">Đóng</button></div>
+  `);
+  box.querySelector("#sigClose").addEventListener("click", closeModal);
+}
+
 // ---------- Sự kiện ----------
 
 $("openBtn").addEventListener("click", openFile);
@@ -2933,6 +3046,10 @@ $("secRedactClear").addEventListener("click", clearRedactMarks);
 $("secEncrypt").addEventListener("click", openEncryptDialog);
 $("secDecrypt").addEventListener("click", openDecryptDialog);
 $("secStripMeta").addEventListener("click", stripMetadataAction);
+$("secOptimize").addEventListener("click", optimizeSaveAction);
+$("secCreateId").addEventListener("click", openCreateIdDialog);
+$("secSign").addEventListener("click", openSignDialog);
+$("secVerify").addEventListener("click", () => verifySignaturesAction());
 
 // Sửa nội dung (Phase 4)
 $("editModeBtn").addEventListener("click", toggleEditMode);

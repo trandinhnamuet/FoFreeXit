@@ -67,9 +67,20 @@ fn redact_removes_text_content_for_real() {
     )
     .expect("fixture");
 
-    let mut area = find_text_rect(&pdf, &fx, "TOPSECRET42");
-    // Nới 2pt mỗi phía như người dùng quét chuột.
-    area = Rect { left: area.left - 2.0, bottom: area.bottom - 2.0, right: area.right + 2.0, top: area.top + 2.0 };
+    // Vùng redact = ĐÚNG cụm ký tự "TOPSECRET42" (sub-rect của run, để kiểm tỉa
+    // theo ký tự: phần " tuyệt mật" cùng object phải còn).
+    let boxes = ff_engine::page_char_boxes(&pdf, &fx, 0, None).expect("char boxes");
+    let secret_boxes: Vec<_> = boxes.iter().filter(|b| b.top < 620.0 && b.bottom > 580.0).collect();
+    // Lấy 11 ký tự đầu của dòng (TOPSECRET42) theo thứ tự trái→phải.
+    let mut sorted = secret_boxes.clone();
+    sorted.sort_by(|a, b| a.left.partial_cmp(&b.left).unwrap());
+    let head = &sorted[..sorted.len().min(11)];
+    let area = Rect {
+        left: head.iter().map(|b| b.left).fold(f32::INFINITY, f32::min) - 1.0,
+        right: head.iter().map(|b| b.right).fold(f32::NEG_INFINITY, f32::max) + 1.0,
+        bottom: head.iter().map(|b| b.bottom).fold(f32::INFINITY, f32::min) - 2.0,
+        top: head.iter().map(|b| b.top).fold(f32::NEG_INFINITY, f32::max) + 2.0,
+    };
 
     let touched = redact_areas(&pdf, &fx, 0, &[area], &out, None).expect("redact");
     assert!(touched >= 1, "phải xoá ít nhất 1 object");
@@ -77,6 +88,9 @@ fn redact_removes_text_content_for_real() {
     let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
     assert!(!text.contains("TOPSECRET42"), "nội dung mật phải BIẾN MẤT: {text:?}");
     assert!(text.contains("PUBLICINFO"), "nội dung ngoài vùng phải còn: {text:?}");
+    // Cùng dòng với chuỗi mật vẫn còn phần "tuyệt mật" (tỉa theo ký tự, không
+    // xoá cả dòng) — chỉ TOPSECRET42 bị chạm.
+    assert!(text.contains("mật"), "phần ngoài vùng của cùng dòng phải giữ: {text:?}");
 
     // Render: tâm vùng redact phải ĐEN.
     let png = tmp("ff_redact_out.png");

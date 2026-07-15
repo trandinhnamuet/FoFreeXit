@@ -25,6 +25,17 @@ cargo run
 | S11 | Gỡ mật khẩu với mật khẩu SAI | Báo lỗi rõ ràng, không tạo file hỏng | |
 | S12 | **🧹 Xoá metadata** → lưu → mở file kết quả ở Foxit: File › Properties | Author/Producer/Created… trống; app vẫn mở đọc bình thường | |
 
+## Bổ sung Iteration 2 — Chữ ký số + redact ký tự + lưu tối ưu
+| # | Thao tác | Kỳ vọng | KQ |
+|---|----------|---------|----|
+| S13 | **🪪 Tạo Digital ID** → nhập tên → lưu .pem | Tạo file .pem thành công | |
+| S14 | **✍️ Ký số** → nhập tên/lý do → chọn .pem vừa tạo → lưu | File mới được ký; tự hiện bảng kiểm tra: **Hợp lệ** ✓ | |
+| S15 | Mở file đã ký ở **Foxit/Adobe** | Hiện có chữ ký; xác thực toán học hợp lệ (có thể cảnh báo "chưa tin cậy CA" vì tự ký — bình thường) | |
+| S16 | Sửa 1 chữ trong file đã ký (chế độ Sửa nội dung) rồi lưu, sau đó **🔎 Kiểm tra chữ ký** | Chữ ký chuyển **KHÔNG hợp lệ** (nội dung đã bị sửa) | |
+| S17 | **🔎 Kiểm tra chữ ký** trên file chưa ký | Báo "chưa có chữ ký số nào" | |
+| S18 | Redact 1 CỤM TỪ ở giữa dòng (không phải cả dòng) → Áp dụng | Chỉ cụm đó bị đen/biến mất; phần còn lại của dòng **vẫn hiển thị và copy được** | |
+| S19 | **📦 Lưu tối ưu** file lớn → so dung lượng | File kết quả nhỏ hơn/không phình, mở đọc bình thường | |
+
 ## Mẫu phản hồi
 ```
 [Mã] (vd S5) — Phần mềm mở: <Foxit/Adobe/Chrome> — Hiện tượng: <mô tả> —

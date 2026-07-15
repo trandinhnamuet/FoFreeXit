@@ -413,6 +413,12 @@ body.tool-active .annotlayer * { pointer-events: none; }
   box-sizing: content-box;
 }
 
+/* Bảng kết quả kiểm tra chữ ký (Phase 5) */
+.sig-table { width: 100%; border-collapse: collapse; margin: 4px 0 12px; }
+.sig-table th, .sig-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border, #ddd); font-size: 13px; }
+.sig-ok { color: #1a8f3c; font-weight: 600; }
+.sig-bad { color: #d33; font-weight: 600; }
+
 /* Đánh dấu redact (Phase 5): khối mờ đen viền đỏ, bấm để bỏ */
 .redact-mark {
   position: absolute;
