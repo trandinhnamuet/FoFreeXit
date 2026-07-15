@@ -732,6 +732,9 @@ struct EditOpDto {
     height_pt: f32,
     #[serde(default)]
     image_path: String,
+    /// reflowText: index các run của khối đoạn văn.
+    #[serde(default)]
+    indices: Vec<u16>,
 }
 
 fn one() -> f32 {
@@ -762,6 +765,7 @@ fn edit_op_from_dto(d: EditOpDto) -> Result<ff_engine::EditOp, String> {
             bold: d.bold.unwrap_or(false),
             italic: d.italic.unwrap_or(false),
         },
+        "reflowText" => ff_engine::EditOp::ReflowText { indices: d.indices, text: d.text },
         "addImage" => ff_engine::EditOp::AddImage {
             x: d.x,
             y: d.y,

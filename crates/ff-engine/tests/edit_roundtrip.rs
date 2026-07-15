@@ -575,6 +575,171 @@ fn line_merge_batch_set_text_plus_delete() {
     assert!(!text.contains("nửa sau"), "run bị gộp phải biến mất: {text:?}");
 }
 
+/// Dựng "đoạn văn" 3 dòng bằng font nhúng (AddText) tại x=60, baseline cách 15pt.
+fn make_paragraph_fixture(pdf: &pdfium_render::prelude::Pdfium, out: &std::path::Path) {
+    let mk = |x: f32, y: f32, s: &str| EditOp::AddText {
+        x,
+        y,
+        text: s.into(),
+        font_size: 12.0,
+        color: [0, 0, 0, 255],
+        font_family: None,
+        bold: false,
+        italic: false,
+    };
+    ff_engine::apply_edits(
+        pdf,
+        &sample(),
+        0,
+        &[
+            mk(60.0, 500.0, "Dòng một của đoạn văn mẫu"),
+            mk(60.0, 485.0, "dòng hai nối tiếp nội dung"),
+            mk(60.0, 470.0, "dòng ba kết thúc đoạn."),
+        ],
+        out,
+        None,
+    )
+    .expect("dựng đoạn 3 dòng");
+}
+
+/// Index (và ObjectInfo) các run thuộc đoạn fixture (baseline 470–500).
+fn paragraph_runs(pdf: &pdfium_render::prelude::Pdfium, path: &std::path::Path) -> Vec<ff_engine::ObjectInfo> {
+    ff_engine::list_objects(pdf, path, 0, None)
+        .expect("list")
+        .into_iter()
+        .filter(|o| {
+            o.kind == ObjectKind::Text && o.rect.bottom > 455.0 && o.rect.bottom < 505.0 && o.rect.left > 50.0
+        })
+        .collect()
+}
+
+/// REFLOW (iteration 3): text dài hơn hẳn → tự bẻ thành NHIỀU dòng hơn, mọi
+/// dòng nằm trong bề rộng khối, GIỮ NGUYÊN font nhúng + baseline spacing 15pt.
+#[test]
+fn reflow_wraps_and_keeps_embedded_font() {
+    let pdf = pdfium();
+    let fx = tmp("ff_reflow_fx.pdf");
+    let out = tmp("ff_reflow_out.pdf");
+    make_paragraph_fixture(&pdf, &fx);
+    let runs = paragraph_runs(&pdf, &fx);
+    assert_eq!(runs.len(), 3, "fixture phải có 3 dòng");
+    let font_before = runs[0].font_name.clone().expect("font fixture");
+    let left = runs.iter().map(|r| r.rect.left).fold(f32::INFINITY, f32::min);
+    let right = runs.iter().map(|r| r.rect.right).fold(f32::NEG_INFINITY, f32::max);
+    let width = right - left;
+
+    let long_text = "Nội dung hoàn toàn mới và dài hơn hẳn bản gốc, đủ nhiều từ tiếng Việt \
+để buộc thuật toán reflow phải bẻ lại thành nhiều dòng khác nhau trong đúng bề rộng \
+của khối đoạn văn ban đầu, giữ nguyên phông chữ nhúng và khoảng cách dòng.";
+    ff_engine::apply_edits(
+        &pdf,
+        &fx,
+        0,
+        &[EditOp::ReflowText { indices: runs.iter().map(|r| r.index).collect(), text: long_text.into() }],
+        &out,
+        None,
+    )
+    .expect("reflow");
+
+    // Run mới = mọi text object chứa mảnh của text dài (reflow kéo dài xuống dưới
+    // ngoài cửa sổ baseline của fixture nên không dùng paragraph_runs).
+    let new_runs: Vec<_> = ff_engine::list_objects(&pdf, &out, 0, None)
+        .expect("list out")
+        .into_iter()
+        .filter(|o| {
+            o.kind == ObjectKind::Text
+                && o.text.as_deref().map(|t| long_text.contains(t.trim()) && !t.trim().is_empty()).unwrap_or(false)
+        })
+        .collect();
+    assert!(new_runs.len() > 3, "text dài phải bẻ thành >3 dòng, được {}", new_runs.len());
+    for r in &new_runs {
+        assert_eq!(r.font_name.as_deref(), Some(font_before.as_str()), "reflow phải giữ font nhúng");
+        assert!(r.rect.left >= left - 2.0, "dòng không được tràn trái");
+        assert!(r.rect.right <= left + width + width * 0.05 + 3.0, "dòng không được tràn phải: right={} limit={}", r.rect.right, left + width);
+    }
+    // Baseline cách đều 15pt.
+    let mut bottoms: Vec<f32> = new_runs.iter().map(|r| r.rect.bottom).collect();
+    bottoms.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    for w in bottoms.windows(2) {
+        let d = w[0] - w[1];
+        assert!((d - 15.0).abs() < 2.0, "khoảng baseline phải ~15pt, được {d}");
+    }
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    let norm = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(norm.contains("thuật toán reflow"), "nội dung round-trip: {norm:?}");
+    assert!(!norm.contains("Dòng một của đoạn"), "text cũ phải biến mất");
+}
+
+/// `\n` trong text reflow = ngắt dòng cứng (đoạn mới).
+#[test]
+fn reflow_hard_break_creates_new_line() {
+    let pdf = pdfium();
+    let fx = tmp("ff_reflow_hb_fx.pdf");
+    let out = tmp("ff_reflow_hb_out.pdf");
+    make_paragraph_fixture(&pdf, &fx);
+    let runs = paragraph_runs(&pdf, &fx);
+
+    ff_engine::apply_edits(
+        &pdf,
+        &fx,
+        0,
+        &[EditOp::ReflowText {
+            indices: runs.iter().map(|r| r.index).collect(),
+            text: "Đoạn một ngắn.\nĐoạn hai riêng.".into(),
+        }],
+        &out,
+        None,
+    )
+    .expect("reflow hard break");
+
+    let new_runs: Vec<_> = ff_engine::list_objects(&pdf, &out, 0, None)
+        .expect("list out")
+        .into_iter()
+        .filter(|o| o.text.as_deref().map(|t| t.contains("Đoạn")).unwrap_or(false))
+        .collect();
+    assert_eq!(new_runs.len(), 2, "2 đoạn = 2 dòng riêng");
+    let d = (new_runs[0].rect.bottom - new_runs[1].rect.bottom).abs();
+    assert!((d - 15.0).abs() < 2.0, "2 dòng cách đúng nhịp baseline: {d}");
+}
+
+/// Reflow trên font base-14 (Helvetica, không nhúng) + text ASCII: các dòng
+/// mới dùng font CHUẨN PDF — BaseFont vẫn là Helvetica, file không phình.
+#[test]
+fn reflow_base14_ascii_keeps_standard_font() {
+    let pdf = pdfium();
+    let input = sample();
+    let out = tmp("ff_reflow_b14.pdf");
+    let idx = find_text_index(&pdf, &input, "Page one");
+
+    let long_ascii = "This replacement paragraph is intentionally much longer than the \
+original single line so the reflow engine must wrap it into several lines while keeping \
+the declared standard Helvetica base font untouched.";
+    ff_engine::apply_edits(
+        &pdf,
+        &input,
+        0,
+        &[EditOp::ReflowText { indices: vec![idx], text: long_ascii.into() }],
+        &out,
+        None,
+    )
+    .expect("reflow base14");
+
+    let new_runs: Vec<_> = ff_engine::list_objects(&pdf, &out, 0, None)
+        .expect("list out")
+        .into_iter()
+        .filter(|o| o.text.as_deref().map(|t| long_ascii.contains(t.trim()) && !t.trim().is_empty()).unwrap_or(false))
+        .collect();
+    assert!(new_runs.len() >= 2, "text dài phải bẻ ≥2 dòng, được {}", new_runs.len());
+    for r in &new_runs {
+        let f = r.font_name.clone().unwrap_or_default();
+        assert!(f.contains("Helvetica"), "BaseFont phải giữ Helvetica chuẩn, được {f:?}");
+    }
+    // Extract chèn ngắt dòng tại điểm wrap → chuẩn hoá khoảng trắng trước khi so.
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    let norm = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(norm.contains("standard Helvetica base font untouched"), "round-trip: {norm:?}");
+}
+
 #[test]
 fn add_image_adds_image_object() {
     let pdf = pdfium();

@@ -196,6 +196,61 @@ pub(crate) fn find_family_font_bytes(family: &str, bold: bool, italic: bool) -> 
     }
 }
 
+/// Bẻ dòng kiểu Word cho reflow đoạn (Phase 4 iteration 3): greedy theo TỪ,
+/// tôn trọng `\n` là ngắt dòng cứng; từ đơn dài hơn bề rộng thì cắt theo ký
+/// tự. `measure(c)` trả bề rộng 1 ký tự theo pt (đã nhân cỡ chữ). Dòng rỗng
+/// (từ `\n\n`) được GIỮ trong kết quả để caller giữ nhịp baseline.
+pub(crate) fn wrap_lines(text: &str, max_width: f32, measure: &dyn Fn(char) -> f32) -> Vec<String> {
+    let width_of = |s: &str| s.chars().map(measure).sum::<f32>();
+    // Nới 2% để tránh bẻ sớm vì sai số đo (không kerning).
+    let limit = max_width.max(1.0) * 1.02;
+    let mut out = Vec::new();
+    for para in text.split('\n') {
+        let words: Vec<&str> = para.split_whitespace().collect();
+        if words.is_empty() {
+            out.push(String::new());
+            continue;
+        }
+        let mut line = String::new();
+        for word in words {
+            let candidate_extra = if line.is_empty() { width_of(word) } else { measure(' ') + width_of(word) };
+            if !line.is_empty() && width_of(&line) + candidate_extra > limit {
+                out.push(std::mem::take(&mut line));
+            }
+            if line.is_empty() && width_of(word) > limit {
+                // Từ đơn quá dài: cắt theo ký tự.
+                let mut piece = String::new();
+                for ch in word.chars() {
+                    if !piece.is_empty() && width_of(&piece) + measure(ch) > limit {
+                        out.push(std::mem::take(&mut piece));
+                    }
+                    piece.push(ch);
+                }
+                line = piece;
+            } else {
+                if !line.is_empty() {
+                    line.push(' ');
+                }
+                line.push_str(word);
+            }
+        }
+        if !line.is_empty() {
+            out.push(line);
+        }
+    }
+    out
+}
+
+/// Bề rộng 1 ký tự (pt) theo hmtx của font tại cỡ `size_pt`. Glyph thiếu hoặc
+/// không đo được → xấp xỉ 0.5em (đủ tốt cho bẻ dòng, không dùng để vẽ).
+pub(crate) fn char_advance(face: &ttf_parser::Face<'_>, ch: char, size_pt: f32) -> f32 {
+    let upem = face.units_per_em() as f32;
+    face.glyph_index(ch)
+        .and_then(|g| face.glyph_hor_advance(g))
+        .map(|adv| adv as f32 / upem * size_pt)
+        .unwrap_or(size_pt * 0.5)
+}
+
 /// So khớp mềm 2 key đã chuẩn hoá: bằng nhau, hoặc chứa nhau (đủ dài để tránh nhiễu).
 fn keys_match(a: &str, b: &str) -> bool {
     if a == b {
@@ -229,5 +284,29 @@ mod tests {
         assert!(keys_match("timesnewroman", "timesnewromanps"));
         assert!(!keys_match("arial", "georgia"));
         assert!(keys_match("arial", "arial"));
+    }
+
+    #[test]
+    fn wrap_greedy_by_words() {
+        // Mỗi ký tự rộng 10pt (kể cả space) → bề rộng 35pt chứa tối đa 3 ký tự/dòng…
+        // dùng câu chữ 2-2-3 để kiểm greedy: "ab cd efg", limit 5 ký tự (50pt).
+        let m = |_c: char| 10.0;
+        let lines = wrap_lines("ab cd efg", 50.0, &m);
+        assert_eq!(lines, vec!["ab cd".to_string(), "efg".to_string()]);
+    }
+
+    #[test]
+    fn wrap_respects_hard_breaks_and_empty_lines() {
+        let m = |_c: char| 10.0;
+        let lines = wrap_lines("mot\n\nhai ba", 100.0, &m);
+        assert_eq!(lines, vec!["mot".to_string(), String::new(), "hai ba".to_string()]);
+    }
+
+    #[test]
+    fn wrap_splits_overlong_word() {
+        let m = |_c: char| 10.0;
+        let lines = wrap_lines("abcdefgh", 30.0, &m);
+        // limit 30*1.02 → 3 ký tự/dòng
+        assert_eq!(lines, vec!["abc".to_string(), "def".to_string(), "gh".to_string()]);
     }
 }

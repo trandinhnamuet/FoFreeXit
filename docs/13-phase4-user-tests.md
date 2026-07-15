@@ -41,6 +41,15 @@ cargo run
 | E24 | Sửa text tiếng Việt trên file có font nhúng (file Word xuất PDF) | Đúng dấu **và giữ nguyên font nhúng** (mở lại ở Foxit xem tên font trong Edit) | |
 | E25 | Sửa nhiều lần rồi thoát chế độ sửa (không lưu) | Không còn file `ff_edit_*.pdf` rác trong thư mục %TEMP% | |
 
+## Bổ sung Iteration 3 — Sửa cả đoạn với reflow "như Word"
+| # | Thao tác | Kỳ vọng | KQ |
+|---|----------|---------|----|
+| E26 | Bấm đúp vào 1 đoạn văn NHIỀU dòng | Textarea phủ CẢ ĐOẠN, nội dung ghép đủ các dòng, đúng font/cỡ/màu | |
+| E27 | Thêm 1 câu dài vào giữa đoạn → Ctrl+Enter (hoặc bấm ra ngoài) | Chữ tự bẻ dòng lại trong đúng bề rộng khối, không tràn phải, khoảng cách dòng giữ nguyên, **font giữ nguyên** | |
+| E28 | Trong textarea bấm Enter giữa chừng rồi áp dụng | Vị trí Enter thành xuống dòng cứng (đoạn tách dòng tại đó) | |
+| E29 | Xoá bớt chữ cho đoạn ngắn lại → áp dụng | Đoạn co lại còn ít dòng hơn, không sót dòng cũ | |
+| E30 | Hoàn tác (Ctrl+Z) sau 1 lần reflow | Cả đoạn quay về nguyên trạng trong 1 bước | |
+
 ## Mẫu phản hồi
 ```
 [Mã] (vd E16) — Phần mềm mở: <Foxit/Adobe/Chrome> — Hiện tượng: <mô tả> —

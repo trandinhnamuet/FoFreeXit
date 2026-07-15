@@ -35,12 +35,13 @@
   - [x] UI: chế độ "Tổ chức trang" (lưới + kéo-thả + multi-select), undo/redo toàn cục (chú thích + tổ chức trang chung 1 stack), dialog cho mọi thao tác (có xem trước thật cho Watermark/Header-Footer)
   - [ ] Follow-up: preview thật cho Insert/Extract/Replace/Crop, tách theo outline, watermark ảnh — xem [docs/10-phase3-summary.md](docs/10-phase3-summary.md)
   - **Checklist test cho bạn**: [docs/11-phase3-user-tests.md](docs/11-phase3-user-tests.md)
-- [x] **Phase 4 — Chỉnh sửa nội dung (Edit)** ⭐ tính năng lõi/moat ✅ Iteration 1 + 2 hoàn tất (50/50 test xanh ngoài qpdf)
+- [x] **Phase 4 — Chỉnh sửa nội dung (Edit)** ⭐ tính năng lõi/moat ✅ Iteration 1 + 2 + 3 hoàn tất (52/52 test xanh ngoài qpdf)
   - [x] Engine `edit.rs`: liệt kê object + sửa text run (tiếng Việt), xoá, di chuyển/resize, thêm chữ/ảnh, thay ảnh — round-trip test
   - [x] UI chế độ "Sửa nội dung": overlay đối tượng, sửa text tại chỗ WYSIWYG, thêm chữ/ảnh, xoá, cỡ chữ/màu, undo/redo, lưu
   - [x] **Iteration 2 — GIỮ FONT khi sửa (chuẩn Foxit)**: sửa tại chỗ giữ nguyên font gốc/nhúng (kể cả tiếng Việt); thiếu glyph mới thay font CÙNG HỌ (`fontmatch.rs`); đổi cỡ/màu không đụng font (fix bug phóng đại kép); sửa CẢ DÒNG (gộp run); WYSIWYG khi gõ; B/I + đổi font family; kéo-thả live; dọn file tạm
-  - [ ] Follow-up: reflow đoạn nhiều dòng (kế hoạch trong [docs/14-foxit-gap-analysis.md](docs/14-foxit-gap-analysis.md)), xoay/lật/clip, viền/opacity/căn lề, convert text→path — xem [docs/12-phase4-summary.md](docs/12-phase4-summary.md)
-  - **Checklist test cho bạn**: [docs/13-phase4-user-tests.md](docs/13-phase4-user-tests.md) (mới: E17–E25)
+  - [x] **Iteration 3 — Reflow đoạn "như Word"**: double-click đoạn nhiều dòng → sửa cả đoạn, tự bẻ dòng theo bề rộng khối (đo hmtx bằng ttf-parser), giữ font (nhúng lại bytes gốc / font chuẩn base-14 / cùng họ), giữ nhịp baseline; Enter = ngắt cứng
+  - [ ] Follow-up: reflow v2 (justify, khối xoay, đa font), xoay/lật/clip, viền/opacity/căn lề, convert text→path — xem [docs/12-phase4-summary.md](docs/12-phase4-summary.md)
+  - **Checklist test cho bạn**: [docs/13-phase4-user-tests.md](docs/13-phase4-user-tests.md) (mới: E17–E30)
 - [ ] **Phase 5 — Bảo mật & Chữ ký** (kế tiếp) — xem [docs/03-roadmap.md](docs/03-roadmap.md)
 
 Build & chạy: xem [docs/05-dev-setup.md](docs/05-dev-setup.md).
