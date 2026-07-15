@@ -1161,6 +1161,7 @@ dependencies = [
  "base64 0.22.1",
  "ff-engine",
  "image",
+ "lopdf",
  "pdfium-render",
  "serde",
  "serde_json",

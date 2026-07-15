@@ -41,6 +41,8 @@ const state = {
   editTemps: [],          // mọi file tạm đã materialize trong phiên sửa (để dọn)
   secMode: false,         // thanh Bảo mật (Phase 5) đang mở
   redactMarks: [],        // [{page, rect{left,bottom,right,top}}] chờ áp dụng
+  formMode: false,        // thanh Form (Phase 6) đang mở
+  formFields: [],         // field đọc từ tài liệu hiện tại
 };
 const UNDO_LIMIT = 50;
 let annotIdSeq = 1;
@@ -75,6 +77,7 @@ async function loadDocument(path) {
     state.redoStack = [];
     state.redactMarks = [];
     updateRedactButtons();
+    state.formFields = [];
     updateUndoRedoButtons();
     setTool(null);
     updateAnnotCount();
@@ -2675,6 +2678,189 @@ async function saveEdits() {
   }
 }
 
+// ---------- Phase 6: Form (AcroForm) ----------
+
+function toggleFormMode() {
+  state.formMode = !state.formMode;
+  $("formBar").classList.toggle("hidden", !state.formMode);
+  $("formModeBtn").classList.toggle("active", state.formMode);
+  $("formHint").textContent = "";
+  if (state.formMode) refreshFormCount();
+}
+
+async function refreshFormCount() {
+  try {
+    const fields = await invoke("form_list", { path: state.path });
+    state.formFields = fields;
+    $("fmCount").textContent = fields.length;
+    $("formHint").textContent = fields.length
+      ? `${fields.length} field trong tài liệu`
+      : "Tài liệu chưa có field form — dùng “Thêm field”.";
+  } catch (e) {
+    $("formHint").textContent = "Lỗi đọc form: " + e;
+  }
+}
+
+// Modal liệt kê field + input để điền, nút Lưu.
+async function openFillForm() {
+  let fields;
+  try {
+    fields = await invoke("form_list", { path: state.path });
+  } catch (e) {
+    $("formHint").textContent = "Lỗi đọc form: " + e;
+    return;
+  }
+  if (!fields.length) {
+    openModal("Điền form", `<p class="muted">Tài liệu chưa có field form nào. Hãy dùng “➕ Thêm field”.</p>
+      <div class="foot"><button id="ffClose" class="primary">Đóng</button></div>`)
+      .querySelector("#ffClose").addEventListener("click", closeModal);
+    return;
+  }
+  const rows = fields
+    .map((f, i) => {
+      const label = `${escapeHtml(f.name)} <span class="muted">(${f.kind}${f.pageIndex != null ? `, trang ${f.pageIndex + 1}` : ""})</span>`;
+      let input;
+      if (f.kind === "checkbox" || f.kind === "radio") {
+        const on = f.value && f.value !== "Off";
+        input = `<input type="checkbox" id="ffv${i}" ${on ? "checked" : ""} ${f.readOnly ? "disabled" : ""}>`;
+      } else if ((f.kind === "combo" || f.kind === "list") && f.options.length) {
+        const opts = f.options
+          .map((o) => `<option ${o === f.value ? "selected" : ""}>${escapeHtml(o)}</option>`)
+          .join("");
+        input = `<select id="ffv${i}" ${f.readOnly ? "disabled" : ""}><option value=""></option>${opts}</select>`;
+      } else {
+        input = `<input type="text" id="ffv${i}" value="${escapeHtml(f.value || "")}" ${f.readOnly ? "disabled" : ""}>`;
+      }
+      return `<tr><td>${label}</td><td>${input}</td></tr>`;
+    })
+    .join("");
+  const box = openModal("Điền form", `
+    <table class="form-table"><tbody>${rows}</tbody></table>
+    <div class="err" id="ffErr"></div>
+    <div class="foot"><button id="ffCancel">Huỷ</button><button id="ffOk" class="primary">Lưu &amp; áp dụng…</button></div>
+  `);
+  box.querySelector("#ffCancel").addEventListener("click", closeModal);
+  box.querySelector("#ffOk").addEventListener("click", async () => {
+    const values = fields.map((f, i) => {
+      const el = box.querySelector(`#ffv${i}`);
+      let value;
+      if (f.kind === "checkbox" || f.kind === "radio") value = el.checked ? "on" : "off";
+      else value = el.value;
+      return { name: f.name, value };
+    });
+    const out = await invoke("pick_save_pdf");
+    if (!out) return;
+    try {
+      const n = await invoke("form_fill", { input: state.path, values, output: out });
+      closeModal();
+      $("status").textContent = `Đã điền ${n} field → ${shortName(out)}`;
+      loadDocument(out);
+    } catch (e) {
+      box.querySelector("#ffErr").textContent = "Lỗi: " + e;
+    }
+  });
+}
+
+function openCreateFieldDialog() {
+  const box = openModal("Thêm field mới", `
+    <label>Tên field</label>
+    <input type="text" id="nfName" placeholder="hoTen">
+    <label>Loại</label>
+    <select id="nfKind">
+      <option value="text">Text (ô nhập chữ)</option>
+      <option value="checkbox">Checkbox</option>
+      <option value="combo">Combo box (chọn 1)</option>
+    </select>
+    <div class="row">
+      <div><label>Trang</label><input type="number" id="nfPage" value="1" min="1"></div>
+      <div><label>Cỡ (rộng×cao pt)</label><input type="text" id="nfSize" value="200x20"></div>
+    </div>
+    <div class="row">
+      <div><label>Vị trí X (pt)</label><input type="number" id="nfX" value="80"></div>
+      <div><label>Vị trí Y từ đáy (pt)</label><input type="number" id="nfY" value="700"></div>
+    </div>
+    <label id="nfOptLabel" class="hidden">Lựa chọn (cách nhau dấu phẩy)</label>
+    <input type="text" id="nfOpts" class="hidden" placeholder="Nam, Nữ, Khác">
+    <div class="err" id="nfErr"></div>
+    <div class="foot"><button id="nfCancel">Huỷ</button><button id="nfOk" class="primary">Tạo &amp; lưu…</button></div>
+  `);
+  const kindSel = box.querySelector("#nfKind");
+  const toggleOpts = () => {
+    const isCombo = kindSel.value === "combo";
+    box.querySelector("#nfOptLabel").classList.toggle("hidden", !isCombo);
+    box.querySelector("#nfOpts").classList.toggle("hidden", !isCombo);
+  };
+  kindSel.addEventListener("change", toggleOpts);
+  box.querySelector("#nfCancel").addEventListener("click", closeModal);
+  box.querySelector("#nfOk").addEventListener("click", async () => {
+    const name = box.querySelector("#nfName").value.trim();
+    const err = box.querySelector("#nfErr");
+    if (!name) { err.textContent = "Cần nhập tên field."; return; }
+    const kind = kindSel.value;
+    const page = Math.max(1, Number(box.querySelector("#nfPage").value) || 1) - 1;
+    const m = box.querySelector("#nfSize").value.match(/^\s*(\d+)\s*[x×]\s*(\d+)\s*$/);
+    if (!m) { err.textContent = "Cỡ phải dạng rộng×cao, vd 200x20."; return; }
+    const w = Number(m[1]), h = Number(m[2]);
+    const x = Number(box.querySelector("#nfX").value) || 0;
+    const y = Number(box.querySelector("#nfY").value) || 0;
+    const options = kind === "combo"
+      ? box.querySelector("#nfOpts").value.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+    const field = { name, kind, pageIndex: page, rect: [x, y, x + w, y + h], value: "", options };
+    const out = await invoke("pick_save_pdf");
+    if (!out) return;
+    try {
+      await invoke("form_create", { input: state.path, fields: [field], output: out });
+      closeModal();
+      $("status").textContent = `Đã tạo field “${name}” → ${shortName(out)}`;
+      loadDocument(out);
+    } catch (e) {
+      err.textContent = "Lỗi: " + e;
+    }
+  });
+}
+
+async function flattenFormAction() {
+  const out = await invoke("pick_save_pdf");
+  if (!out) return;
+  try {
+    await invoke("form_flatten", { input: state.path, output: out, password: null });
+    $("status").textContent = `Đã flatten form → ${shortName(out)}`;
+    loadDocument(out);
+  } catch (e) {
+    $("formHint").textContent = "Lỗi flatten: " + e;
+  }
+}
+
+async function exportFormData(kind) {
+  const out = await invoke("pick_save_data");
+  if (!out) return;
+  // Đảm bảo đúng đuôi theo lựa chọn.
+  let target = out;
+  if (kind === "csv" && !/\.csv$/i.test(target)) target = target.replace(/\.[^.]*$/, "") + ".csv";
+  if (kind === "fdf" && !/\.fdf$/i.test(target)) target = target.replace(/\.[^.]*$/, "") + ".fdf";
+  try {
+    await invoke("form_export", { input: state.path, output: target });
+    $("formHint").textContent = `Đã xuất dữ liệu form → ${shortName(target)}`;
+  } catch (e) {
+    $("formHint").textContent = "Lỗi xuất: " + e;
+  }
+}
+
+async function importFormFdf() {
+  const fdf = await invoke("pick_fdf");
+  if (!fdf) return;
+  const out = await invoke("pick_save_pdf");
+  if (!out) return;
+  try {
+    const n = await invoke("form_import_fdf", { input: state.path, fdf, output: out });
+    $("status").textContent = `Đã nhập ${n} field từ FDF → ${shortName(out)}`;
+    loadDocument(out);
+  } catch (e) {
+    $("formHint").textContent = "Lỗi nhập FDF: " + e;
+  }
+}
+
 // ---------- Phase 5: Bảo mật (redact / mật khẩu / metadata) ----------
 
 function toggleSecMode() {
@@ -3038,6 +3224,15 @@ $("orgSave").addEventListener("click", orgSaveChanges);
 $("modalOverlay").addEventListener("click", (e) => {
   if (e.target.id === "modalOverlay") closeModal();
 });
+
+// Form (Phase 6)
+$("formModeBtn").addEventListener("click", toggleFormMode);
+$("fmFill").addEventListener("click", openFillForm);
+$("fmCreate").addEventListener("click", openCreateFieldDialog);
+$("fmFlatten").addEventListener("click", flattenFormAction);
+$("fmExportFdf").addEventListener("click", () => exportFormData("fdf"));
+$("fmExportCsv").addEventListener("click", () => exportFormData("csv"));
+$("fmImportFdf").addEventListener("click", importFormFdf);
 
 // Bảo mật (Phase 5)
 $("secModeBtn").addEventListener("click", toggleSecMode);

@@ -13,6 +13,7 @@
 | [docs/03-roadmap.md](docs/03-roadmap.md) | Lộ trình theo phase, mục tiêu, phương pháp, định nghĩa hoàn thành (DoD) |
 | [docs/04-architecture.md](docs/04-architecture.md) | Kiến trúc kỹ thuật chi tiết (sẽ chi tiết hóa dần) |
 | [docs/14-foxit-gap-analysis.md](docs/14-foxit-gap-analysis.md) | Đánh giá định hướng/công nghệ/tiến độ so với tham vọng thay Foxit; các khoảng cách còn lại + giải pháp |
+| [docs/17-phase6-summary.md](docs/17-phase6-summary.md) | Tổng kết Phase 6 (Form/AcroForm) |
 
 ## Trạng thái hiện tại
 
@@ -48,7 +49,12 @@
   - [x] UI thanh "🔒 Bảo mật": redact 2 bước như Foxit, Đặt/Gỡ mật khẩu + quyền, Xoá metadata, **Tạo Digital ID / Ký số / Kiểm tra chữ ký / Lưu tối ưu**
   - [ ] Về sau: timestamp PAdES-T/LTV, đọc PFX/PKCS#12, multi-sig incremental — xem [docs/15-phase5-summary.md](docs/15-phase5-summary.md) mục 6.6
   - **Checklist test cho bạn**: [docs/16-phase5-user-tests.md](docs/16-phase5-user-tests.md) (mới: S13–S19)
-- [ ] **Phase 6 — Form (AcroForm)** (kế tiếp) — xem [docs/03-roadmap.md](docs/03-roadmap.md)
+- [x] **Phase 6 — Form (AcroForm)** ✅ lõi hoàn tất (67/67 test engine xanh)
+  - [x] Engine `form.rs`: liệt kê field (text/checkbox/radio/combo/list), điền (giữ tiếng Việt qua UTF-16BE + NeedAppearances), tạo field mới (text/checkbox/combo), flatten (PDFium), export/import **FDF** + export **CSV** — round-trip test
+  - [x] UI thanh "📝 Form": Điền form (modal liệt kê field theo loại), Thêm field, Flatten, Xuất FDF/CSV, Nhập FDF
+  - [ ] Follow-up: radio-group/list/pushbutton khi tạo, XFDF, vẽ appearance riêng, điền overlay trực tiếp trên trang — xem [docs/17-phase6-summary.md](docs/17-phase6-summary.md)
+  - **Checklist test cho bạn**: [docs/18-phase6-user-tests.md](docs/18-phase6-user-tests.md)
+- [ ] **Phase 7 — OCR & Convert** (kế tiếp) — xem [docs/03-roadmap.md](docs/03-roadmap.md)
 
 Build & chạy: xem [docs/05-dev-setup.md](docs/05-dev-setup.md).
 

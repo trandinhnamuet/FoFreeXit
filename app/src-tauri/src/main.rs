@@ -1006,6 +1006,181 @@ fn pick_any_file(app: tauri::AppHandle) -> Option<String> {
     app.dialog().file().blocking_pick_file().map(|fp| fp.to_string())
 }
 
+// ---------- Phase 6: Form (AcroForm) ----------
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FormFieldDto {
+    name: String,
+    kind: String,
+    value: Option<String>,
+    page_index: Option<u16>,
+    rect: Option<[f32; 4]>,
+    on_state: Option<String>,
+    options: Vec<String>,
+    read_only: bool,
+}
+
+/// Liệt kê field của form. Chuẩn hoá qua qpdf nếu lopdf không đọc thẳng được.
+#[tauri::command]
+fn form_list(path: String) -> Result<Vec<FormFieldDto>, String> {
+    let p = std::path::Path::new(&path);
+    let fields = match ff_engine::list_form_fields(p) {
+        Ok(f) => f,
+        Err(_) => {
+            let norm = std::env::temp_dir().join(format!("ff_form_norm_{}.pdf", std::process::id()));
+            ff_engine::repair(p, &norm).map_err(|e| e.to_string())?;
+            let r = ff_engine::list_form_fields(&norm).map_err(|e| e.to_string());
+            let _ = std::fs::remove_file(&norm);
+            r?
+        }
+    };
+    Ok(fields
+        .into_iter()
+        .map(|f| FormFieldDto {
+            name: f.name,
+            kind: f.kind.as_str().to_string(),
+            value: f.value,
+            page_index: f.page_index,
+            rect: f.rect,
+            on_state: f.on_state,
+            options: f.options,
+            read_only: f.read_only,
+        })
+        .collect())
+}
+
+#[derive(serde::Deserialize)]
+struct FieldValueDto {
+    name: String,
+    value: String,
+}
+
+/// Chuẩn hoá input qua qpdf (lopdf cần trailer chuẩn) rồi trả path dùng được.
+fn normalized_for_lopdf(input: &str) -> Result<(std::path::PathBuf, Option<std::path::PathBuf>), String> {
+    let p = std::path::PathBuf::from(input);
+    if lopdf::Document::load(&p).is_ok() {
+        return Ok((p, None));
+    }
+    let norm = std::env::temp_dir().join(format!("ff_form_in_{}.pdf", std::process::id()));
+    ff_engine::repair(&p, &norm).map_err(|e| e.to_string())?;
+    Ok((norm.clone(), Some(norm)))
+}
+
+/// Điền form theo danh sách (tên, giá trị), ghi ra `output`.
+#[tauri::command]
+fn form_fill(input: String, values: Vec<FieldValueDto>, output: String) -> Result<usize, String> {
+    let (src, tmp) = normalized_for_lopdf(&input)?;
+    let vals: Vec<ff_engine::FieldValue> = values
+        .into_iter()
+        .map(|v| ff_engine::FieldValue { name: v.name, value: v.value })
+        .collect();
+    let r = ff_engine::fill_form_fields(&src, &vals, std::path::Path::new(&output))
+        .map_err(|e| e.to_string());
+    if let Some(t) = tmp {
+        let _ = std::fs::remove_file(t);
+    }
+    r
+}
+
+/// Flatten form (in giá trị vào trang, bỏ tương tác).
+#[tauri::command]
+fn form_flatten(input: String, output: String, password: Option<String>) -> Result<(), String> {
+    let pdfium = pdfium()?;
+    ff_engine::flatten_form(
+        &pdfium,
+        std::path::Path::new(&input),
+        std::path::Path::new(&output),
+        password.as_deref(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NewFieldDto {
+    name: String,
+    kind: String,
+    page_index: u16,
+    rect: [f32; 4],
+    #[serde(default)]
+    value: String,
+    #[serde(default)]
+    options: Vec<String>,
+}
+
+/// Tạo field mới (text/checkbox/combo).
+#[tauri::command]
+fn form_create(input: String, fields: Vec<NewFieldDto>, output: String) -> Result<(), String> {
+    let (src, tmp) = normalized_for_lopdf(&input)?;
+    let mapped: Vec<ff_engine::NewField> = fields
+        .into_iter()
+        .map(|f| ff_engine::NewField {
+            name: f.name,
+            kind: match f.kind.as_str() {
+                "checkbox" => ff_engine::FieldKind::Checkbox,
+                "combo" => ff_engine::FieldKind::Combo,
+                _ => ff_engine::FieldKind::Text,
+            },
+            page_index: f.page_index,
+            rect: f.rect,
+            value: f.value,
+            options: f.options,
+        })
+        .collect();
+    let r = ff_engine::create_form_fields(&src, &mapped, std::path::Path::new(&output))
+        .map_err(|e| e.to_string());
+    if let Some(t) = tmp {
+        let _ = std::fs::remove_file(t);
+    }
+    r
+}
+
+/// Xuất dữ liệu form ra FDF hoặc CSV theo phần mở rộng của `output`.
+#[tauri::command]
+fn form_export(input: String, output: String) -> Result<(), String> {
+    let p = std::path::Path::new(&output);
+    let inp = std::path::Path::new(&input);
+    if output.to_lowercase().ends_with(".csv") {
+        ff_engine::export_csv(inp, p).map_err(|e| e.to_string())
+    } else {
+        ff_engine::export_fdf(inp, p).map_err(|e| e.to_string())
+    }
+}
+
+/// Import FDF vào form, ghi ra `output`.
+#[tauri::command]
+fn form_import_fdf(input: String, fdf: String, output: String) -> Result<usize, String> {
+    let (src, tmp) = normalized_for_lopdf(&input)?;
+    let r = ff_engine::import_fdf(&src, std::path::Path::new(&fdf), std::path::Path::new(&output))
+        .map_err(|e| e.to_string());
+    if let Some(t) = tmp {
+        let _ = std::fs::remove_file(t);
+    }
+    r
+}
+
+/// Hộp thoại lưu file FDF.
+#[tauri::command]
+fn pick_save_data(app: tauri::AppHandle) -> Option<String> {
+    app.dialog()
+        .file()
+        .add_filter("Dữ liệu form", &["fdf", "csv"])
+        .set_file_name("form-data.fdf")
+        .blocking_save_file()
+        .map(|fp| fp.to_string())
+}
+
+/// Hộp thoại chọn file FDF để import.
+#[tauri::command]
+fn pick_fdf(app: tauri::AppHandle) -> Option<String> {
+    app.dialog()
+        .file()
+        .add_filter("FDF", &["fdf"])
+        .blocking_pick_file()
+        .map(|fp| fp.to_string())
+}
+
 /// Hộp thoại lưu file PEM (Digital ID).
 #[tauri::command]
 fn pick_save_pem(app: tauri::AppHandle) -> Option<String> {
@@ -1085,8 +1260,16 @@ fn main() {
             sig_create_id,
             sig_sign,
             sig_verify,
+            form_list,
+            form_fill,
+            form_flatten,
+            form_create,
+            form_export,
+            form_import_fdf,
             pick_any_file,
             pick_save_pem,
+            pick_save_data,
+            pick_fdf,
             pick_image
         ])
         .run(tauri::generate_context!())
