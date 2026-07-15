@@ -50,11 +50,11 @@ Một ứng dụng desktop có thể **xem, chú thích, tổ chức trang, và 
 - Xoá metadata/ẩn; **chữ ký số** (PAdES, byte range, incremental update giữ chữ ký).
 **DoD:** mã hoá/giải mã round-trip; redaction qua kiểm chứng không còn text bị bôi; ký số được Acrobat xác thực hợp lệ.
 
-## Phase 6 — Form (AcroForm)
+## Phase 6 — Form (AcroForm) ✅ HOÀN TẤT lõi (67/67 test — xem [docs/17-phase6-summary.md](17-phase6-summary.md))
 **Mục tiêu:** Điền & tạo form.
-- Điền form có sẵn, lưu; flatten form.
-- Tạo field: text/checkbox/radio/dropdown/button; import/export dữ liệu (FDF/CSV).
-**DoD:** điền & lưu giữ dữ liệu; tạo form mới mở được ở Acrobat; export/import round-trip.
+- [x] Điền form có sẵn, lưu; flatten form.
+- [x] Tạo field: text/checkbox/combo (radio-group/list/pushbutton: follow-up); import/export dữ liệu FDF + export CSV.
+**DoD:** ✅ điền & lưu giữ dữ liệu (gồm tiếng Việt); tạo form mới; export/import FDF round-trip. Follow-up: XFDF, radio-group/list/pushbutton khi tạo.
 
 ## Phase 7 — OCR & Convert
 **Mục tiêu:** Hai tính năng "đáng tiền" còn lại, qua dự án mở.

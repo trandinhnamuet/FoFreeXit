@@ -36,6 +36,7 @@
       <span class="sep"></span>
       <button id="organizeModeBtn" title="Tổ chức trang">🗂 Tổ chức trang</button>
       <button id="editModeBtn" title="Sửa nội dung trang">✏️ Sửa nội dung</button>
+      <button id="formModeBtn" title="Form: điền, tạo field, flatten, FDF/CSV">📝 Form</button>
       <button id="secModeBtn" title="Bảo mật: redact, mật khẩu, metadata">🔒 Bảo mật</button>
       <div class="spacer"></div>
       <span id="status" class="status"></span>
@@ -101,6 +102,19 @@
       <span class="spacer"></span>
       <span id="editHint" class="status"></span>
       <button id="edSave" disabled>💾 Lưu thay đổi nội dung</button>
+    </div>
+
+    <div id="formBar" class="editbar hidden">
+      <span class="annolabel">Form:</span>
+      <button id="fmFill" title="Xem & điền các field của form">📋 Điền form (<span id="fmCount">0</span>)</button>
+      <button id="fmCreate" title="Thêm field mới (text/checkbox/combo)">➕ Thêm field</button>
+      <button id="fmFlatten" title="In giá trị vào trang, bỏ tính tương tác">🧷 Flatten</button>
+      <span class="sep"></span>
+      <button id="fmExportFdf" title="Xuất dữ liệu form ra FDF">⬆ Xuất FDF</button>
+      <button id="fmExportCsv" title="Xuất dữ liệu form ra CSV">⬆ Xuất CSV</button>
+      <button id="fmImportFdf" title="Nhập dữ liệu form từ FDF">⬇ Nhập FDF</button>
+      <span class="spacer"></span>
+      <span id="formHint" class="status"></span>
     </div>
 
     <div id="secBar" class="editbar hidden">

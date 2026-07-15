@@ -7,6 +7,7 @@
 pub mod annot;
 pub mod edit;
 pub(crate) mod fontmatch;
+pub mod form;
 pub mod meta;
 pub mod organize;
 pub mod qpdf;
@@ -28,6 +29,10 @@ pub use organize::{
 pub use qpdf::{
     decrypt_remove_password, encrypt_with_password, encrypt_with_password_perms, ensure_openable,
     find_qpdf, optimize_save, repair, Permissions,
+};
+pub use form::{
+    create_form_fields, export_csv, export_fdf, fill_form_fields, flatten_form, import_fdf,
+    list_form_fields, parse_fdf, FieldKind, FieldValue, FormField, NewField,
 };
 pub use redact::redact_areas;
 pub use sign::{generate_self_signed_id, sign_pdf, verify_signatures, SignatureCheck};
