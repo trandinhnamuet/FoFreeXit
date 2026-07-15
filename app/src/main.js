@@ -39,6 +39,8 @@ const state = {
   editPendingImage: null, // đường dẫn ảnh chờ đặt (Thêm ảnh)
   editColor: [0, 0, 0],   // màu chữ áp khi sửa/thêm text
   editTemps: [],          // mọi file tạm đã materialize trong phiên sửa (để dọn)
+  secMode: false,         // thanh Bảo mật (Phase 5) đang mở
+  redactMarks: [],        // [{page, rect{left,bottom,right,top}}] chờ áp dụng
 };
 const UNDO_LIMIT = 50;
 let annotIdSeq = 1;
@@ -71,6 +73,8 @@ async function loadDocument(path) {
     state.annotSpecs = [];
     state.undoStack = [];
     state.redoStack = [];
+    state.redactMarks = [];
+    updateRedactButtons();
     updateUndoRedoButtons();
     setTool(null);
     updateAnnotCount();
@@ -599,9 +603,11 @@ function setTool(tool) {
   $("annotHint").textContent = state.tool
     ? state.tool === "note"
       ? "Bấm lên trang để đặt ghi chú"
-      : isTextMarkupTool(state.tool)
-        ? "Kéo chọn văn bản trên trang để tô (bấm lại nút để tắt)"
-        : "Kéo chuột trên trang để vẽ"
+      : state.tool === "redact"
+        ? "Kéo chuột quét vùng cần bôi đen — nội dung sẽ bị XOÁ THẬT khi Áp dụng"
+        : isTextMarkupTool(state.tool)
+          ? "Kéo chọn văn bản trên trang để tô (bấm lại nút để tắt)"
+          : "Kéo chuột trên trang để vẽ"
     : "";
 }
 
@@ -756,6 +762,28 @@ function drawAnnotsForPage(idx) {
       del.addEventListener("click", (ev) => { ev.stopPropagation(); deleteSpec(s.id); });
       el.appendChild(del);
     }
+    layer.appendChild(el);
+  }
+
+  // Đánh dấu redact (Phase 5) — vẽ cùng layer để sống sót qua mọi lần redraw.
+  for (const m of state.redactMarks) {
+    if (m.page !== idx) continue;
+    const el = document.createElement("div");
+    el.className = "redact-mark";
+    Object.assign(el.style, {
+      left: m.rect.left * scale + "px",
+      top: (p.heightPt - m.rect.top) * scale + "px",
+      width: (m.rect.right - m.rect.left) * scale + "px",
+      height: (m.rect.top - m.rect.bottom) * scale + "px",
+    });
+    el.title = "Bấm để bỏ đánh dấu redact";
+    el.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const i = state.redactMarks.indexOf(m);
+      if (i >= 0) state.redactMarks.splice(i, 1);
+      drawAnnotsForPage(idx);
+      updateRedactButtons();
+    });
     layer.appendChild(el);
   }
 }
@@ -1194,6 +1222,13 @@ function onPagesMouseUp() {
     if (tiny) return;
     openCropDialog(d.idx, rect);
     return;
+  }
+  if (tool === "redact") {
+    if (tiny) return;
+    state.redactMarks.push({ page: d.idx, rect });
+    drawAnnotsForPage(d.idx);
+    updateRedactButtons();
+    return; // giữ tool để quét tiếp nhiều vùng (như Foxit Mark for Redaction)
   }
   if (tool === "note") {
     const sz = 18 / scale;
@@ -2640,6 +2675,142 @@ async function saveEdits() {
   }
 }
 
+// ---------- Phase 5: Bảo mật (redact / mật khẩu / metadata) ----------
+
+function toggleSecMode() {
+  state.secMode = !state.secMode;
+  $("secBar").classList.toggle("hidden", !state.secMode);
+  $("secModeBtn").classList.toggle("active", state.secMode);
+  if (!state.secMode && state.tool === "redact") setTool(null);
+  $("secHint").textContent = "";
+}
+
+function updateRedactButtons() {
+  const n = state.redactMarks.length;
+  $("redactCount").textContent = n;
+  $("secRedactApply").disabled = n === 0;
+  $("secRedactClear").disabled = n === 0;
+}
+
+function clearRedactMarks() {
+  const pages = [...new Set(state.redactMarks.map((m) => m.page))];
+  state.redactMarks = [];
+  pages.forEach((p) => drawAnnotsForPage(p));
+  updateRedactButtons();
+}
+
+// Áp dụng redact: XOÁ THẬT nội dung trong các vùng đã đánh dấu → file mới.
+async function applyRedactions() {
+  if (!state.redactMarks.length) return;
+  const out = await invoke("pick_save_pdf");
+  if (!out) return;
+  // Gom theo trang: [{page, rects: [[l,b,r,t], ...]}]
+  const byPage = new Map();
+  for (const m of state.redactMarks) {
+    if (!byPage.has(m.page)) byPage.set(m.page, []);
+    byPage.get(m.page).push([m.rect.left, m.rect.bottom, m.rect.right, m.rect.top]);
+  }
+  const areas = [...byPage.entries()].map(([page, rects]) => ({ page, rects }));
+  try {
+    const n = await invoke("redact_apply", { input: state.path, areas, output: out, password: null });
+    clearRedactMarks();
+    setTool(null);
+    $("status").textContent = `Đã redact (xoá thật) ${n} đối tượng → ${shortName(out)}`;
+    loadDocument(out);
+  } catch (e) {
+    $("secHint").textContent = "Lỗi redact: " + e;
+  }
+}
+
+function openEncryptDialog() {
+  const box = openModal("Đặt mật khẩu (AES-256)", `
+    <label>Mật khẩu mở file (user password)</label>
+    <input type="password" id="secPw1" autocomplete="new-password">
+    <label>Nhập lại mật khẩu</label>
+    <input type="password" id="secPw2" autocomplete="new-password">
+    <label>Mật khẩu chủ sở hữu (owner — để trống = dùng mật khẩu mở)</label>
+    <input type="password" id="secPwOwner" autocomplete="new-password">
+    <label>Quyền hạn khi mở bằng mật khẩu user</label>
+    <div class="row">
+      <label><input type="checkbox" id="secPermPrint" checked> In</label>
+      <label><input type="checkbox" id="secPermModify" checked> Sửa nội dung</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="secPermExtract" checked> Sao chép text/ảnh</label>
+      <label><input type="checkbox" id="secPermAnnotate" checked> Chú thích/điền form</label>
+    </div>
+    <div class="err" id="secEncErr"></div>
+    <div class="foot"><button id="secEncCancel">Huỷ</button><button id="secEncOk" class="primary">Mã hoá…</button></div>
+  `);
+  box.querySelector("#secEncCancel").addEventListener("click", closeModal);
+  box.querySelector("#secEncOk").addEventListener("click", async () => {
+    const p1 = box.querySelector("#secPw1").value;
+    const p2 = box.querySelector("#secPw2").value;
+    const err = box.querySelector("#secEncErr");
+    if (!p1) { err.textContent = "Mật khẩu không được để trống."; return; }
+    if (p1 !== p2) { err.textContent = "Hai lần nhập không khớp."; return; }
+    const out = await invoke("pick_save_pdf");
+    if (!out) return;
+    try {
+      await invoke("security_encrypt", {
+        input: state.path,
+        output: out,
+        userPassword: p1,
+        ownerPassword: box.querySelector("#secPwOwner").value,
+        allowPrint: box.querySelector("#secPermPrint").checked,
+        allowModify: box.querySelector("#secPermModify").checked,
+        allowExtract: box.querySelector("#secPermExtract").checked,
+        allowAnnotate: box.querySelector("#secPermAnnotate").checked,
+      });
+      closeModal();
+      $("status").textContent = `Đã mã hoá AES-256 → ${shortName(out)}`;
+      $("secHint").textContent = "File mã hoá đã lưu riêng — file đang mở giữ nguyên.";
+    } catch (e) {
+      err.textContent = "Lỗi: " + e;
+    }
+  });
+}
+
+function openDecryptDialog() {
+  const box = openModal("Gỡ mật khẩu", `
+    <p class="muted">Chọn file PDF đang có mật khẩu, nhập mật khẩu hiện tại, lưu ra bản không mã hoá.</p>
+    <label>Mật khẩu hiện tại</label>
+    <input type="password" id="secDecPw" autocomplete="current-password">
+    <div class="err" id="secDecErr"></div>
+    <div class="foot"><button id="secDecCancel">Huỷ</button><button id="secDecOk" class="primary">Chọn file &amp; gỡ…</button></div>
+  `);
+  box.querySelector("#secDecCancel").addEventListener("click", closeModal);
+  box.querySelector("#secDecOk").addEventListener("click", async () => {
+    const pw = box.querySelector("#secDecPw").value;
+    const err = box.querySelector("#secDecErr");
+    if (!pw) { err.textContent = "Cần nhập mật khẩu hiện tại."; return; }
+    const inp = await invoke("pick_pdf");
+    if (!inp) return;
+    const out = await invoke("pick_save_pdf");
+    if (!out) return;
+    try {
+      await invoke("security_decrypt", { input: inp, password: pw, output: out });
+      closeModal();
+      $("status").textContent = `Đã gỡ mật khẩu → ${shortName(out)}`;
+      loadDocument(out);
+    } catch (e) {
+      err.textContent = "Lỗi (mật khẩu sai?): " + e;
+    }
+  });
+}
+
+async function stripMetadataAction() {
+  const out = await invoke("pick_save_pdf");
+  if (!out) return;
+  try {
+    await invoke("security_strip_metadata", { input: state.path, output: out });
+    $("status").textContent = `Đã xoá metadata (/Info + XMP) → ${shortName(out)}`;
+    loadDocument(out);
+  } catch (e) {
+    $("secHint").textContent = "Lỗi xoá metadata: " + e;
+  }
+}
+
 // ---------- Sự kiện ----------
 
 $("openBtn").addEventListener("click", openFile);
@@ -2754,6 +2925,14 @@ $("orgSave").addEventListener("click", orgSaveChanges);
 $("modalOverlay").addEventListener("click", (e) => {
   if (e.target.id === "modalOverlay") closeModal();
 });
+
+// Bảo mật (Phase 5)
+$("secModeBtn").addEventListener("click", toggleSecMode);
+$("secRedactApply").addEventListener("click", applyRedactions);
+$("secRedactClear").addEventListener("click", clearRedactMarks);
+$("secEncrypt").addEventListener("click", openEncryptDialog);
+$("secDecrypt").addEventListener("click", openDecryptDialog);
+$("secStripMeta").addEventListener("click", stripMetadataAction);
 
 // Sửa nội dung (Phase 4)
 $("editModeBtn").addEventListener("click", toggleEditMode);

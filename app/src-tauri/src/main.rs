@@ -836,6 +836,109 @@ fn edit_preview(input: String, page: u16, ops: Vec<EditOpDto>, width: u32, passw
     result
 }
 
+// ---------- Phase 5: Bảo mật ----------
+
+/// Vùng redact của 1 trang: rects theo [left, bottom, right, top] (điểm PDF).
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RedactPageDto {
+    page: u16,
+    rects: Vec<[f32; 4]>,
+}
+
+/// Redact THẬT nhiều trang: áp tuần tự qua file tạm, trả tổng số object đã
+/// xoá/bôi đen.
+#[tauri::command]
+fn redact_apply(
+    input: String,
+    areas: Vec<RedactPageDto>,
+    output: String,
+    password: Option<String>,
+) -> Result<usize, String> {
+    if areas.is_empty() {
+        return Err("chưa đánh dấu vùng redact nào".into());
+    }
+    let pdfium = pdfium()?;
+    let mut total = 0usize;
+    let mut cur = std::path::PathBuf::from(&input);
+    let mut temps: Vec<std::path::PathBuf> = Vec::new();
+    let n = areas.len();
+    for (i, a) in areas.iter().enumerate() {
+        let rects: Vec<ff_engine::Rect> = a
+            .rects
+            .iter()
+            .map(|r| ff_engine::Rect { left: r[0], bottom: r[1], right: r[2], top: r[3] })
+            .collect();
+        let dst = if i + 1 == n {
+            std::path::PathBuf::from(&output)
+        } else {
+            std::env::temp_dir().join(format!("ff_redact_{}_{}.pdf", std::process::id(), i))
+        };
+        total += ff_engine::redact_areas(&pdfium, &cur, a.page, &rects, &dst, password.as_deref())
+            .map_err(|e| e.to_string())?;
+        if i > 0 {
+            temps.push(cur.clone());
+        }
+        cur = dst;
+    }
+    for t in temps {
+        let _ = std::fs::remove_file(t);
+    }
+    Ok(total)
+}
+
+/// Đặt mật khẩu + quyền hạn (AES-256 qua qpdf).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+fn security_encrypt(
+    input: String,
+    output: String,
+    user_password: String,
+    owner_password: String,
+    allow_print: bool,
+    allow_modify: bool,
+    allow_extract: bool,
+    allow_annotate: bool,
+) -> Result<(), String> {
+    ff_engine::encrypt_with_password_perms(
+        std::path::Path::new(&input),
+        std::path::Path::new(&output),
+        &user_password,
+        &owner_password,
+        ff_engine::Permissions { allow_print, allow_modify, allow_extract, allow_annotate },
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Gỡ mật khẩu (cần đúng password hiện tại).
+#[tauri::command]
+fn security_decrypt(input: String, password: String, output: String) -> Result<(), String> {
+    ff_engine::decrypt_remove_password(
+        std::path::Path::new(&input),
+        &password,
+        std::path::Path::new(&output),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Xoá metadata nhận dạng (/Info + XMP). File lạ (trailer phi chuẩn) được
+/// chuẩn hoá qua qpdf trước khi lopdf xử lý.
+#[tauri::command]
+fn security_strip_metadata(input: String, output: String) -> Result<(), String> {
+    let inp = std::path::Path::new(&input);
+    let out = std::path::Path::new(&output);
+    match ff_engine::strip_metadata(inp, out) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            let norm = std::env::temp_dir().join(format!("ff_meta_norm_{}.pdf", std::process::id()));
+            ff_engine::repair(inp, &norm).map_err(|e| e.to_string())?;
+            let r = ff_engine::strip_metadata(&norm, out).map_err(|e| e.to_string());
+            let _ = std::fs::remove_file(&norm);
+            r
+        }
+    }
+}
+
 /// Dọn các file làm việc tạm của chế độ sửa (undo stack). Chỉ xoá file có tên
 /// `ff_edit_*` nằm đúng trong thư mục temp — không bao giờ đụng file người dùng.
 #[tauri::command]
@@ -896,6 +999,10 @@ fn main() {
             edit_apply_to_temp,
             edit_preview,
             edit_cleanup,
+            redact_apply,
+            security_encrypt,
+            security_decrypt,
+            security_strip_metadata,
             pick_image
         ])
         .run(tauri::generate_context!())

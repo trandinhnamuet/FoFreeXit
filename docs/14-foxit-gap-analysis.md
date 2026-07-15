@@ -130,11 +130,12 @@ Foxit hơn" — chi phí khổng lồ, không giải quyết gap nào ở mục 
 
 Đã xong (lõi, có test): Viewer ✅ · Annotate ✅ · Organize + lưu vững ✅ ·
 **Edit text/object giữ font ✅ (iteration 2) · Reflow đoạn "như Word" ✅
-(iteration 3)**.
+(iteration 3) · Bảo mật iteration 1 ✅ (mã hoá AES-256 + quyền, gỡ mật khẩu,
+redaction thật kiểm chứng được, xoá metadata — docs/15)**.
 
 Thứ tự đề xuất tiếp theo, bám giá trị người dùng:
-1. **Phase 5 Bảo mật + "Lưu tối ưu"** (mục 3.3 gộp vào đây): mã hoá UI (nợ
-   Phase 3), redaction thật, subset font, dọn rác, chữ ký số.
+1. **Phase 5 Iteration 2**: chữ ký số PAdES + xác thực; "Lưu tối ưu" (mục
+   3.3: subset font, dọn object rác); redact tỉa theo ký tự.
 2. Phase 6 Form → Phase 7 OCR/Convert → Phase 8 phát hành (theo roadmap).
 3. Song song, rải theo từng phase: mở rộng font matching (3.4), nấc 1 của
    hiệu năng phiên sửa (3.2) khi chạm file lớn thực tế, và v2 của reflow

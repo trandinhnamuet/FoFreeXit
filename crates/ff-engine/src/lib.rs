@@ -10,6 +10,7 @@ pub(crate) mod fontmatch;
 pub mod meta;
 pub mod organize;
 pub mod qpdf;
+pub mod redact;
 pub mod render;
 pub mod text;
 pub mod watermark;
@@ -18,12 +19,16 @@ pub use annot::{
     apply_annotations, count_annotations, list_annotations, AnnotInfo, AnnotKind, AnnotSpec,
 };
 pub use edit::{apply_edits, list_objects, EditOp, ObjectInfo, ObjectKind};
-pub use meta::{outline, page_dims, OutlineItem, PageDim};
+pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};
 pub use organize::{
     build_document, delete_pages, extract_pages, identity_plan, merge_files, rotate_pages,
     split_by_page_count, PagePlanEntry, PageSource,
 };
-pub use qpdf::{encrypt_with_password, ensure_openable, find_qpdf, repair};
+pub use qpdf::{
+    decrypt_remove_password, encrypt_with_password, encrypt_with_password_perms, ensure_openable,
+    find_qpdf, repair, Permissions,
+};
+pub use redact::redact_areas;
 pub use render::{bind_pdfium, page_count, render_page_png, PageImage};
 pub use text::{extract_text, page_char_boxes, search, CharBox, Rect, SearchHit};
 pub use watermark::{add_header_footer, add_watermark, Anchor, HeaderFooterSpec, WatermarkSpec};
