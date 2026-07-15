@@ -413,6 +413,14 @@ body.tool-active .annotlayer * { pointer-events: none; }
   box-sizing: content-box;
 }
 
+/* Textarea sửa cả đoạn (reflow) — đè white-space:pre của .edit-inline */
+.edit-inline-block {
+  white-space: pre-wrap;
+  word-break: break-word;
+  resize: none;
+  overflow: hidden;
+}
+
 /* Nút Đậm/Nghiêng trong thanh Sửa nội dung */
 .ed-style {
   min-width: 28px;

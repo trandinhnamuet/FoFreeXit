@@ -2091,7 +2091,7 @@ function buildEditOverlay() {
       selectEditObject(o.index);
     });
     if (o.kind === "text") {
-      box.addEventListener("dblclick", (e) => { e.stopPropagation(); startInlineTextEdit(o); });
+      box.addEventListener("dblclick", (e) => { e.stopPropagation(); startTextEdit(o); });
     }
     ov.appendChild(box);
   });
@@ -2252,6 +2252,134 @@ function composeLineText(runs) {
     s += t;
   }
   return s;
+}
+
+// Gom ĐOẠN VĂN nhiều dòng quanh run `o` (iteration 3): các dòng baseline cách
+// đều (±25%), cỡ chữ tương đồng, giao nhau theo chiều ngang. Trả về mảng dòng
+// trên→dưới, mỗi dòng = mảng run trái→phải.
+function paragraphLines(o) {
+  const fs = o.font_size || 12;
+  const boundsOf = (runs) => ({
+    left: Math.min(...runs.map((r) => r.rect.left)),
+    right: Math.max(...runs.map((r) => r.rect.right)),
+    bottom: runs[0].rect.bottom,
+  });
+  const overlaps = (a, b) =>
+    Math.min(a.right, b.right) - Math.max(a.left, b.left) >
+    0.3 * Math.min(a.right - a.left, b.right - b.left);
+
+  const base = sameLineRuns(o);
+  const used = new Set(base.map((r) => r.index));
+  const lines = [base];
+  const cands = state.editObjects.filter(
+    (x) =>
+      x.kind === "text" &&
+      !used.has(x.index) &&
+      (x.font_size || 12) <= fs * 1.6 &&
+      (x.font_size || 12) >= fs / 1.6
+  );
+  let advance = null; // khoảng baseline đã chốt của đoạn
+
+  const extend = (dir) => {
+    // dir = -1: mở rộng XUỐNG (bottom giảm); +1: mở rộng LÊN.
+    for (;;) {
+      const edge = dir < 0 ? lines[lines.length - 1] : lines[0];
+      const eb = boundsOf(edge);
+      let best = null;
+      let bestGap = Infinity;
+      for (const r of cands) {
+        if (used.has(r.index)) continue;
+        const gap = dir < 0 ? eb.bottom - r.rect.bottom : r.rect.bottom - eb.bottom;
+        if (gap < fs * 0.6 || gap > fs * 2.6) continue; // quá sát/quá xa = không cùng đoạn
+        if (advance && (gap < advance * 0.75 || gap > advance * 1.25)) continue;
+        const line = sameLineRuns(r);
+        if (!overlaps(eb, boundsOf(line))) continue;
+        if (gap < bestGap) {
+          bestGap = gap;
+          best = line;
+        }
+      }
+      if (!best) break;
+      best.forEach((r) => used.add(r.index));
+      if (dir < 0) lines.push(best);
+      else lines.unshift(best);
+      if (advance == null) advance = bestGap;
+    }
+  };
+  extend(-1);
+  extend(+1);
+  return lines;
+}
+
+// Double-click: đoạn ≥2 dòng → sửa CẢ ĐOẠN với reflow; 1 dòng → sửa dòng.
+function startTextEdit(o) {
+  const lines = paragraphLines(o);
+  if (lines.length >= 2) startBlockTextEdit(o, lines);
+  else startInlineTextEdit(o);
+}
+
+// Sửa cả đoạn "như Word" (Foxit Edit Text): textarea phủ khối, gõ tự chảy
+// dòng; commit → engine reflow (bẻ dòng lại theo bề rộng khối, giữ font).
+function startBlockTextEdit(o, lines) {
+  const ov = $("editOverlay");
+  const existing = ov.querySelector(".edit-inline");
+  if (existing) existing.remove();
+
+  const allRuns = lines.flat();
+  const union = {
+    left: Math.min(...allRuns.map((r) => r.rect.left)),
+    right: Math.max(...allRuns.map((r) => r.rect.right)),
+    bottom: Math.min(...allRuns.map((r) => r.rect.bottom)),
+    top: Math.max(...allRuns.map((r) => r.rect.top)),
+  };
+  // Đoạn = 1 dòng chảy; Enter của người dùng = ngắt cứng.
+  const original = lines.map(composeLineText).join(" ");
+
+  const ta = document.createElement("textarea");
+  ta.className = "edit-inline edit-inline-block";
+  ta.value = original;
+  Object.assign(ta.style, editBoxStyle(union));
+  const advPt =
+    lines.length > 1
+      ? lines[0][0].rect.bottom - lines[1][0].rect.bottom
+      : (o.font_size || 12) * 1.25;
+  const advPx = Math.max(8, advPt * state.editScale);
+  // Chừa 2 dòng trống để gõ thêm.
+  ta.style.height = parseFloat(ta.style.height) + 2 * advPx + "px";
+  ta.style.lineHeight = advPx + "px";
+  ta.style.fontSize = Math.max(8, (o.font_size || 12) * state.editScale) + "px";
+  ta.style.fontFamily = cssFontStack(o.font_family);
+  ta.style.fontWeight = o.font_bold ? "bold" : "normal";
+  ta.style.fontStyle = o.font_italic ? "italic" : "normal";
+  if (o.color) ta.style.color = rgbCss(o.color);
+  ov.appendChild(ta);
+  ta.focus();
+  ta.setSelectionRange(0, 0);
+  $("editHint").textContent =
+    "Sửa cả đoạn — Enter: xuống dòng cứng · Ctrl+Enter hoặc bấm ra ngoài: áp dụng · Esc: huỷ";
+
+  let done = false;
+  const commit = (save) => {
+    if (done) return;
+    done = true;
+    const text = ta.value;
+    ta.remove();
+    if (save && text.trim() && text !== original) {
+      stageEditOp({
+        op: "reflowText",
+        indices: allRuns.map((r) => r.index),
+        text,
+      });
+    } else {
+      $("editHint").textContent = "";
+    }
+  };
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); commit(false); }
+    else if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); commit(true); }
+    e.stopPropagation();
+  });
+  ta.addEventListener("blur", () => commit(true));
 }
 
 // Sửa text tại chỗ kiểu Foxit: gộp cả dòng, ô sửa hiển thị đúng font/cỡ/màu,

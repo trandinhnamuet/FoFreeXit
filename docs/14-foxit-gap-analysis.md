@@ -51,21 +51,17 @@ tác tầng PDF object trực tiếp.
 
 Xếp theo mức độ ảnh hưởng trải nghiệm:
 
-### 3.1 Reflow đoạn văn nhiều dòng ("sửa như Word") — GAP LỚN NHẤT CÒN LẠI
-- **Hiện tại:** sửa được cả dòng (Iteration 2), chưa tự bẻ dòng lại cả đoạn.
-- **Foxit:** click vào đoạn → gõ → chữ tự chảy xuống dòng trong khối.
-- **Giải pháp (Iteration 3, khả thi với stack hiện tại):**
-  1. Gom block: các dòng có baseline cách đều (±20%), cùng lề trái/phải giao nhau.
-  2. Đo width chính xác tầng engine bằng `hmtx` của đúng font bytes
-     (`ttf-parser` đã có trong cây phụ thuộc; với font không nhúng thì đo bằng
-     font hệ thống đã match — chấp nhận sai số như chính Foxit).
-  3. UI: textarea phủ block; engine nhận `ReflowBlock { runs, new_text, box }`
-     → tự bẻ dòng theo width, sinh dãy SetText/AddText/Delete với baseline
-     spacing gốc.
-  4. Nghiệm thu so với Foxit: gõ giữa đoạn 5 dòng → không tràn box, giãn dòng
-     giữ nguyên, font giữ nguyên.
-- **Rủi ro:** đoạn justify (giãn từ) và kerning → v1 chấp nhận căn trái/đều
-  theo heuristic, như mức "Edit Text" thường của Foxit.
+### 3.1 Reflow đoạn văn nhiều dòng ("sửa như Word") — ✅ ĐÃ GIẢI (Iteration 3)
+- **Đã làm đúng kế hoạch:** UI gom block theo baseline cách đều + giao ngang;
+  engine `EditOp::ReflowText` tự suy hình học từ matrix/bounds các run, đo
+  width bằng `hmtx` (ttf-parser), bẻ dòng greedy (`\n` = ngắt cứng), tạo lại
+  các dòng đúng baseline spacing; font giữ theo thang 4 mức (bytes nhúng →
+  font chuẩn base-14 qua `FPDFText_LoadStandardFont` → cùng họ → fallback).
+  3 test integration + 3 unit — xem `docs/12` mục Iteration 3.
+- **Còn lại của mục này (v2):** đoạn justify reflow về căn trái; chưa kerning;
+  khối text xoay chưa reflow theo hướng xoay; đoạn lẫn nhiều font thống nhất
+  theo run neo. Đây là các case Foxit xử lý tốt hơn — nâng khi gặp tài liệu
+  thực tế, không chặn trải nghiệm chính.
 
 ### 3.2 Hiệu năng phiên sửa trên file rất lớn
 - **Hiện tại:** mô hình "materialize tức thì" — mỗi thao tác lưu toàn bộ tài
@@ -133,16 +129,16 @@ Foxit hơn" — chi phí khổng lồ, không giải quyết gap nào ở mục 
 ## 5. Tiến độ so với đích + thứ tự việc đề xuất
 
 Đã xong (lõi, có test): Viewer ✅ · Annotate ✅ · Organize + lưu vững ✅ ·
-**Edit text/object giữ font ✅ (iteration 2)**.
+**Edit text/object giữ font ✅ (iteration 2) · Reflow đoạn "như Word" ✅
+(iteration 3)**.
 
 Thứ tự đề xuất tiếp theo, bám giá trị người dùng:
-1. **Iteration 3 của Edit: reflow đoạn** (mục 3.1) — hoàn tất lời hứa "sửa như
-   Word", gap trải nghiệm cuối cùng của tính năng moat.
-2. **Phase 5 Bảo mật + "Lưu tối ưu"** (mục 3.3 gộp vào đây): mã hoá UI (nợ
+1. **Phase 5 Bảo mật + "Lưu tối ưu"** (mục 3.3 gộp vào đây): mã hoá UI (nợ
    Phase 3), redaction thật, subset font, dọn rác, chữ ký số.
-3. Phase 6 Form → Phase 7 OCR/Convert → Phase 8 phát hành (theo roadmap).
-4. Song song, rải theo từng phase: mở rộng font matching (3.4) và nấc 1 của
-   hiệu năng phiên sửa (3.2) khi chạm file lớn thực tế.
+2. Phase 6 Form → Phase 7 OCR/Convert → Phase 8 phát hành (theo roadmap).
+3. Song song, rải theo từng phase: mở rộng font matching (3.4), nấc 1 của
+   hiệu năng phiên sửa (3.2) khi chạm file lớn thực tế, và v2 của reflow
+   (justify/xoay — mục 3.1).
 
 ## 6. Checklist FINAL TARGET & RULE cho chính tài liệu này
 - [x] Đối chiếu từng tính năng với hành vi Foxit làm chuẩn nghiệm thu.

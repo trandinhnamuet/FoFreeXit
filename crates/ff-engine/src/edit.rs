@@ -130,6 +130,11 @@ pub enum EditOp {
     },
     /// Thêm ảnh mới từ file, khung width_pt × height_pt tại (x,y).
     AddImage { x: f32, y: f32, width_pt: f32, height_pt: f32, image_path: String },
+    /// Sửa CẢ ĐOẠN nhiều dòng với reflow "như Word" (iteration 3): mọi run
+    /// trong `indices` bị thay bằng `text` mới, tự bẻ dòng theo bề rộng khối
+    /// (đo bằng hmtx của font), giữ baseline spacing + font/cỡ/màu của run
+    /// neo (run có baseline cao nhất). `\n` trong `text` = ngắt dòng cứng.
+    ReflowText { indices: Vec<u16>, text: String },
 }
 
 fn quad_to_rect(q: &PdfQuadPoints) -> Rect {
@@ -220,8 +225,68 @@ pub fn list_objects(
 }
 
 /// Key nhận diện 1 font thay thế cần nạp: (family chuẩn hoá — rỗng = font mặc
-/// định, đậm, nghiêng).
+/// định, đậm, nghiêng). Builtin base-14 dùng prefix "b14:" trong family.
 type FontKey = (String, bool, bool);
+
+/// Nguồn font cần nạp vào document ở pha (B).
+enum FontLoad {
+    /// Nhúng TTF/OTF từ bytes (font hệ thống hoặc copy font nhúng gốc).
+    Bytes(Vec<u8>),
+    /// Font chuẩn base-14 của PDF — KHÔNG nhúng, BaseFont giữ tên chuẩn.
+    Builtin(PdfFontBuiltin),
+}
+
+/// Map family (đã chuẩn hoá) + kiểu chữ → font chuẩn base-14 tương ứng, nếu
+/// family là (hoặc metric-compatible với) một trong Helvetica/Times/Courier.
+fn builtin_for(family_key: &str, bold: bool, italic: bool) -> Option<PdfFontBuiltin> {
+    use PdfFontBuiltin::*;
+    let group = if matches!(family_key, "helvetica" | "helveticaneue" | "arial") {
+        0
+    } else if matches!(family_key, "times" | "timesroman" | "timesnewroman") {
+        1
+    } else if matches!(family_key, "courier" | "couriernew") {
+        2
+    } else {
+        return None;
+    };
+    Some(match (group, bold, italic) {
+        (0, false, false) => Helvetica,
+        (0, true, false) => HelveticaBold,
+        (0, false, true) => HelveticaOblique,
+        (0, true, true) => HelveticaBoldOblique,
+        (1, false, false) => TimesRoman,
+        (1, true, false) => TimesBold,
+        (1, false, true) => TimesItalic,
+        (1, true, true) => TimesBoldItalic,
+        (_, false, false) => Courier,
+        (_, true, false) => CourierBold,
+        (_, false, true) => CourierOblique,
+        (_, true, true) => CourierBoldOblique,
+    })
+}
+
+/// Kế hoạch reflow 1 đoạn, dựng ở pha (A) từ hình học các run gốc.
+struct ReflowPlan {
+    /// Run text hợp lệ sẽ bị thay (đã sort, dedup).
+    indices: Vec<u16>,
+    /// Key font đã nạp ở pha (B) để tạo các dòng mới.
+    font_key: FontKey,
+    /// Bytes để ĐO bề rộng (hmtx) — có thể khác font vẽ (vd base-14 đo bằng
+    /// font metric-compatible). None = xấp xỉ 0.5em/ký tự.
+    measure_bytes: Option<Vec<u8>>,
+    /// Khối: lề trái + bề rộng bẻ dòng (điểm PDF).
+    left: f32,
+    width: f32,
+    /// Baseline dòng đầu (y của gốc text) + khoảng cách baseline giữa các dòng.
+    first_baseline: f32,
+    line_advance: f32,
+    /// Phần tuyến tính matrix của run neo (giữ scale/nghiêng khi tạo dòng mới).
+    linear: (f32, f32, f32, f32),
+    /// Cỡ Tf cho object mới (unscaled) + cỡ hiển thị (để đo).
+    tf: f32,
+    scaled: f32,
+    color: PdfColor,
+}
 
 /// Cách xử lý 1 op SetText, quyết định ở pha lập kế hoạch.
 enum SetTextMode {
@@ -287,7 +352,8 @@ pub fn apply_edits(
     // ---- (A) Lập kế hoạch font (mượn trang lần 1, chỉ đọc) ----
     let mut set_text_modes: HashMap<usize, SetTextMode> = HashMap::new();
     let mut add_text_keys: HashMap<usize, FontKey> = HashMap::new();
-    let mut font_bytes_needed: HashMap<FontKey, Vec<u8>> = HashMap::new();
+    let mut reflow_plans: HashMap<usize, ReflowPlan> = HashMap::new();
+    let mut font_needed: HashMap<FontKey, FontLoad> = HashMap::new();
     {
         let page = document
             .pages()
@@ -348,7 +414,7 @@ pub fn apply_edits(
                                 target_italic,
                                 text,
                             )?;
-                            font_bytes_needed.entry(key.clone()).or_insert(bytes);
+                            font_needed.entry(key.clone()).or_insert(FontLoad::Bytes(bytes));
                             SetTextMode::Substitute(key)
                         }
                     } else {
@@ -358,7 +424,7 @@ pub fn apply_edits(
                             .unwrap_or(cur_family);
                         let (key, bytes) =
                             resolve_substitute_font(&family, target_bold, target_italic, text)?;
-                        font_bytes_needed.entry(key.clone()).or_insert(bytes);
+                        font_needed.entry(key.clone()).or_insert(FontLoad::Bytes(bytes));
                         SetTextMode::Substitute(key)
                     };
                     set_text_modes.insert(opi, mode);
@@ -366,21 +432,144 @@ pub fn apply_edits(
                 EditOp::AddText { text, font_family, bold, italic, .. } => {
                     let family = font_family.clone().unwrap_or_default();
                     let (key, bytes) = resolve_substitute_font(&family, *bold, *italic, text)?;
-                    font_bytes_needed.entry(key.clone()).or_insert(bytes);
+                    font_needed.entry(key.clone()).or_insert(FontLoad::Bytes(bytes));
                     add_text_keys.insert(opi, key);
+                }
+                EditOp::ReflowText { indices, text } => {
+                    // Run text hợp lệ của khối (sort + dedup).
+                    let mut idxs: Vec<u16> = indices.iter().copied().filter(|i| valid(*i)).collect();
+                    idxs.sort_unstable();
+                    idxs.dedup();
+                    // Hình học từng run: gốc text (e,f của matrix) + bounds.
+                    struct RunGeo {
+                        idx: u16,
+                        f: f32,
+                        left: f32,
+                        right: f32,
+                    }
+                    let mut geos: Vec<RunGeo> = Vec::new();
+                    let mut old_text_all = String::new();
+                    for &i in &idxs {
+                        let obj = page.objects().get(i as usize).map_err(err)?;
+                        let Some(t) = obj.as_text_object() else { continue };
+                        let m = obj.matrix().map_err(err)?;
+                        let b = obj.bounds().map(|q| quad_to_rect(&q)).unwrap_or(Rect {
+                            left: m.e(),
+                            bottom: m.f(),
+                            right: m.e(),
+                            top: m.f(),
+                        });
+                        old_text_all.push_str(&t.text());
+                        old_text_all.push(' ');
+                        geos.push(RunGeo { idx: i, f: m.f(), left: b.left, right: b.right });
+                    }
+                    if geos.is_empty() {
+                        continue;
+                    }
+                    idxs = geos.iter().map(|g| g.idx).collect();
+                    // Run neo: baseline cao nhất, trái nhất.
+                    let anchor_idx = geos
+                        .iter()
+                        .max_by(|a, b| {
+                            a.f.partial_cmp(&b.f)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                                .then(b.left.partial_cmp(&a.left).unwrap_or(std::cmp::Ordering::Equal))
+                        })
+                        .map(|g| g.idx)
+                        .unwrap_or(idxs[0]);
+                    let anchor = page.objects().get(anchor_idx as usize).map_err(err)?;
+                    let t = anchor.as_text_object().expect("anchor là text");
+                    let (family, bold, italic) = text_object_style(t);
+                    let m = anchor.matrix().map_err(err)?;
+                    let unscaled = t.unscaled_font_size().value;
+                    let scaled = t.scaled_font_size().value.max(1.0);
+                    let color = t.fill_color().unwrap_or(PdfColor::new(0, 0, 0, 255));
+
+                    // Baseline: gom cụm giá trị f (dung sai 1pt) → dòng; advance =
+                    // median hiệu 2 cụm kề nhau; 1 dòng → 1.25 × cỡ hiển thị.
+                    let mut baselines: Vec<f32> = Vec::new();
+                    let mut fs: Vec<f32> = geos.iter().map(|g| g.f).collect();
+                    fs.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+                    for f in fs {
+                        if baselines.last().map_or(true, |&p| (p - f).abs() > 1.0) {
+                            baselines.push(f);
+                        }
+                    }
+                    let line_advance = if baselines.len() >= 2 {
+                        let mut diffs: Vec<f32> =
+                            baselines.windows(2).map(|w| (w[0] - w[1]).abs()).collect();
+                        diffs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                        diffs[diffs.len() / 2].max(1.0)
+                    } else {
+                        scaled * 1.25
+                    };
+                    let first_baseline = baselines[0];
+                    let left = geos.iter().map(|g| g.left).fold(f32::INFINITY, f32::min);
+                    let right = geos.iter().map(|g| g.right).fold(f32::NEG_INFINITY, f32::max);
+                    let width = (right - left).max(20.0);
+
+                    // Thang font cho các dòng mới (giữ font như SetText):
+                    // (1) font NHÚNG parse được + phủ đủ glyph → nhúng lại chính bytes đó
+                    //     (same glyphs — trông y hệt);
+                    // (2) family thuộc nhóm base-14 + text ASCII → font chuẩn PDF,
+                    //     BaseFont giữ tên chuẩn, không phình file;
+                    // (3) font hệ thống CÙNG HỌ; (4) fallback mặc định.
+                    let fam_key = fontmatch::normalize_key(&family);
+                    let ascii_only =
+                        text.chars().all(|c| c.is_control() || (' '..='~').contains(&c));
+                    let embedded_bytes = if t.font().is_embedded().unwrap_or(false) {
+                        t.font().data().ok().filter(|b| fontmatch::coverage_ok(b, text))
+                    } else {
+                        None
+                    };
+                    let (font_key, load, measure_bytes) = if let Some(bytes) = embedded_bytes {
+                        let key = (format!("emb:{fam_key}:{anchor_idx}"), bold, italic);
+                        (key, FontLoad::Bytes(bytes.clone()), Some(bytes))
+                    } else if let (Some(builtin), true) =
+                        (builtin_for(&fam_key, bold, italic), ascii_only)
+                    {
+                        // Đo bằng font hệ thống metric-compatible (Liberation/Arial…).
+                        let measure = fontmatch::find_family_font_bytes(&family, bold, italic)
+                            .or_else(|| find_font_bytes(bold, italic));
+                        ((format!("b14:{fam_key}"), bold, italic), FontLoad::Builtin(builtin), measure)
+                    } else {
+                        let (key, bytes) = resolve_substitute_font(&family, bold, italic, text)?;
+                        (key, FontLoad::Bytes(bytes.clone()), Some(bytes))
+                    };
+                    font_needed.entry(font_key.clone()).or_insert(load);
+
+                    reflow_plans.insert(
+                        opi,
+                        ReflowPlan {
+                            indices: idxs,
+                            font_key,
+                            measure_bytes,
+                            left,
+                            width,
+                            first_baseline,
+                            line_advance,
+                            linear: (m.a(), m.b(), m.c(), m.d()),
+                            tf: unscaled.max(1.0),
+                            scaled,
+                            color,
+                        },
+                    );
                 }
                 _ => {}
             }
         }
     }
 
-    // ---- (B) Nạp các font thay thế cần dùng (cần fonts_mut → ngoài mượn trang) ----
+    // ---- (B) Nạp các font cần dùng (cần fonts_mut → ngoài mượn trang) ----
     let mut tokens: HashMap<FontKey, PdfFontToken> = HashMap::new();
-    for (key, bytes) in &font_bytes_needed {
-        let token = document
-            .fonts_mut()
-            .load_true_type_from_bytes(bytes, true)
-            .map_err(|e| EngineError::Pdfium(format!("nạp font: {e}")))?;
+    for (key, load) in &font_needed {
+        let token = match load {
+            FontLoad::Bytes(bytes) => document
+                .fonts_mut()
+                .load_true_type_from_bytes(bytes, true)
+                .map_err(|e| EngineError::Pdfium(format!("nạp font: {e}")))?,
+            FontLoad::Builtin(builtin) => document.fonts_mut().new_built_in(*builtin),
+        };
         tokens.insert(key.clone(), token);
     }
 
@@ -508,6 +697,11 @@ pub fn apply_edits(
                 EditOp::ReplaceImage { index, .. } | EditOp::Delete { index } => {
                     to_remove.push(*index)
                 }
+                EditOp::ReflowText { .. } => {
+                    if let Some(plan) = reflow_plans.get(&opi) {
+                        to_remove.extend_from_slice(&plan.indices);
+                    }
+                }
                 _ => {}
             }
         }
@@ -623,6 +817,45 @@ pub fn apply_edits(
                             Some(PdfPoints::new(height_pt.max(1.0))),
                         )
                         .map_err(err)?;
+                }
+                EditOp::ReflowText { text, .. } => {
+                    let Some(plan) = reflow_plans.get(&opi) else { continue };
+                    let token = tokens.get(&plan.font_key).copied().ok_or_else(|| {
+                        EngineError::Pdfium("thiếu token font cho ReflowText".into())
+                    })?;
+                    // Đo bề rộng ký tự theo hmtx của font (tại cỡ hiển thị);
+                    // không parse được → xấp xỉ 0.5em.
+                    let face = plan
+                        .measure_bytes
+                        .as_deref()
+                        .and_then(|b| ttf_parser::Face::parse(b, 0).ok());
+                    let scaled = plan.scaled;
+                    let measure = move |c: char| match &face {
+                        Some(f) => fontmatch::char_advance(f, c, scaled),
+                        None => scaled * 0.5,
+                    };
+                    let lines = fontmatch::wrap_lines(text, plan.width, &measure);
+                    let (a, b, c2, d) = plan.linear;
+                    for (i, line) in lines.iter().enumerate() {
+                        if line.is_empty() {
+                            continue; // đoạn trống vẫn chiếm 1 nhịp baseline
+                        }
+                        let y = plan.first_baseline - (i as f32) * plan.line_advance;
+                        let mut obj = page
+                            .objects_mut()
+                            .create_text_object(
+                                PdfPoints::ZERO,
+                                PdfPoints::ZERO,
+                                line.clone(),
+                                token,
+                                PdfPoints::new(plan.tf),
+                            )
+                            .map_err(err)?;
+                        // Giữ scale/nghiêng của run neo; đặt gốc dòng tại (left, y).
+                        obj.apply_matrix(PdfMatrix::new(a, b, c2, d, plan.left, y))
+                            .map_err(err)?;
+                        obj.set_fill_color(plan.color).map_err(err)?;
+                    }
                 }
                 _ => {}
             }

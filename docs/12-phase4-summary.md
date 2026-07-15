@@ -1,8 +1,57 @@
-# 12 — Tổng kết Phase 4 (Chỉnh sửa nội dung — Edit) · Iteration 1 + 2
+# 12 — Tổng kết Phase 4 (Chỉnh sửa nội dung — Edit) · Iteration 1 + 2 + 3
 
-> Trạng thái sau Iteration 2: **sửa text GIỮ NGUYÊN FONT (chuẩn Foxit)**.
-> 50/50 test engine xanh ngoài qpdf (14 test edit + 3 unit fontmatch + 33 test cũ).
-> Iteration 1: 43/43, đã chạy app thật + chụp ảnh xác minh.
+> Trạng thái sau Iteration 3: **sửa CẢ ĐOẠN với reflow "như Word" + GIỮ FONT**.
+> 52/52 test engine xanh ngoài qpdf (17 test edit + 6 unit fontmatch + 29 test cũ).
+
+## Iteration 3 — Reflow đoạn văn "như Word" (mới nhất)
+
+Đóng gap trải nghiệm cuối cùng của tính năng moat (mục 3.1 của
+`docs/14-foxit-gap-analysis.md`): double-click vào đoạn nhiều dòng → sửa cả
+đoạn trong 1 ô, chữ tự bẻ dòng lại theo bề rộng khối khi commit.
+
+### Engine — `EditOp::ReflowText { indices, text }`
+- Engine TỰ suy hình học từ các run: lề trái/bề rộng khối từ bounds, baseline
+  từ `matrix.f` (gom cụm ±1pt), khoảng cách dòng = median hiệu baseline
+  (1 dòng → 1.25× cỡ hiển thị) — UI chỉ cần gửi indices + text mới.
+- **Bẻ dòng đo bằng hmtx thật** (`fontmatch::wrap_lines` + `char_advance` qua
+  ttf-parser): greedy theo từ, `\n` = ngắt cứng, từ quá dài cắt theo ký tự,
+  dòng rỗng giữ nhịp baseline. Không kerning (chấp nhận v1, nới 2%).
+- **Giữ font theo thang 4 mức** (nhất quán triết lý iteration 2):
+  1. Font NHÚNG parse được + phủ đủ glyph → nhúng lại chính bytes đó (glyph y hệt);
+  2. Family nhóm base-14 (Helvetica/Times/Courier + Arial alias) + text ASCII →
+     **font chuẩn PDF qua `FPDFText_LoadStandardFont`** — BaseFont giữ tên chuẩn,
+     KHÔNG nhúng, file không phình; đo width bằng font metric-compatible
+     (Liberation/Arial);
+  3. Font hệ thống cùng họ (coverage-checked); 4. fallback mặc định.
+- Dòng mới giữ phần tuyến tính matrix của run neo (scale/nghiêng), gốc tại
+  (lề trái, baseline thứ i); Tf = unscaled của run neo → cỡ hiển thị không đổi.
+- Đoạn dài ra thì các dòng mới nối xuống dưới theo đúng nhịp baseline (hành vi
+  tương tự Foxit khi khối text nở ra).
+
+### UI
+- Double-click: **đoạn ≥2 dòng → textarea sửa cả đoạn** (`paragraphLines` gom
+  dòng baseline cách đều ±25%, cỡ chữ tương đồng, giao ngang ≥30%); 1 dòng →
+  ô sửa dòng như iteration 2.
+- Textarea WYSIWYG: đúng font/cỡ/màu/kiểu + line-height đúng nhịp baseline;
+  nội dung khởi tạo = các dòng nối bằng khoảng trắng (đoạn chảy tự nhiên);
+  **Enter = ngắt cứng, Ctrl+Enter hoặc bấm ra ngoài = áp dụng, Esc = huỷ**.
+- 1 commit = 1 op `reflowText` = 1 nấc undo.
+
+### Test mới (3 integration + 3 unit)
+- `reflow_wraps_and_keeps_embedded_font` — đoạn 3 dòng font nhúng + text Việt
+  dài gấp mấy lần → bẻ >3 dòng, mọi dòng trong bề rộng khối, **font nhúng giữ
+  nguyên**, baseline đều 15pt±2, text cũ biến mất.
+- `reflow_hard_break_creates_new_line` — `\n` ra đúng 2 dòng cách 1 nhịp.
+- `reflow_base14_ascii_keeps_standard_font` — Helvetica không nhúng + ASCII
+  dài → nhiều dòng, **BaseFont vẫn "Helvetica" chuẩn** (builtin, không nhúng).
+- Unit `wrap_lines`: greedy theo từ / ngắt cứng + dòng rỗng / cắt từ quá dài.
+
+### Giới hạn ghi nhận (v1, sẽ nâng ở vòng sau)
+- Đoạn justify (giãn đều 2 lề) reflow về căn trái; chưa kerning; khối text
+  XOAY chưa reflow theo hướng xoay (dòng mới đặt theo trục ngang).
+- Khối lẫn NHIỀU font/cỡ trong 1 đoạn: dòng mới thống nhất theo run neo.
+
+> Iteration 1: 43/43 test, đã chạy app thật + chụp ảnh xác minh.
 
 ## Iteration 2 — Giữ font gốc + trải nghiệm Foxit (mới)
 
