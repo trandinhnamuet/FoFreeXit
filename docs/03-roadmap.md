@@ -43,7 +43,7 @@ Một ứng dụng desktop có thể **xem, chú thích, tổ chức trang, và 
 - Thêm text box mới, đổi font/size/màu.
 **DoD:** sửa được text 1 dòng & 1 đoạn trên ≥80% file mẫu thường; thêm/xoá/di chuyển ảnh; lưu mở lại đúng; tiếng Việt hiển thị & sửa đúng dấu; có test corpus chuyên cho edit.
 
-## Phase 5 — Bảo mật & Chữ ký ✅ Iteration 1 HOÀN TẤT (mã hoá+quyền, gỡ mật khẩu, redaction thật, xoá metadata — xem [docs/15-phase5-summary.md](15-phase5-summary.md)) · Iteration 2: chữ ký số
+## Phase 5 — Bảo mật & Chữ ký ✅ HOÀN TẤT (mã hoá+quyền, gỡ mật khẩu, redaction thật + tỉa ký tự, xoá metadata, **chữ ký số PKCS#7/PAdES + xác thực**, lưu tối ưu — xem [docs/15-phase5-summary.md](15-phase5-summary.md))
 **Mục tiêu:** Tính năng đáng tiền cho doanh nghiệp.
 - Mật khẩu mở/permission; mã hoá **AES-256**; xoá mật khẩu.
 - **Redaction thật** (xoá nội dung + ảnh + metadata, không chỉ vẽ đè) + kiểm chứng đã xoá.

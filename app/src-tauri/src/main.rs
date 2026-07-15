@@ -939,6 +939,84 @@ fn security_strip_metadata(input: String, output: String) -> Result<(), String> 
     }
 }
 
+/// Lưu tối ưu: nén object stream + dọn object rác.
+#[tauri::command]
+fn security_optimize(input: String, output: String) -> Result<(), String> {
+    ff_engine::optimize_save(std::path::Path::new(&input), std::path::Path::new(&output))
+        .map_err(|e| e.to_string())
+}
+
+/// Tạo Digital ID tự ký (RSA-2048) ghi ra file PEM.
+#[tauri::command]
+fn sig_create_id(common_name: String, output: String) -> Result<(), String> {
+    ff_engine::generate_self_signed_id(&common_name, std::path::Path::new(&output))
+        .map_err(|e| e.to_string())
+}
+
+/// Ký số `input` bằng identity PEM, ghi ra `output`.
+#[tauri::command]
+fn sig_sign(
+    input: String,
+    id_pem: String,
+    reason: String,
+    signer_name: String,
+    output: String,
+) -> Result<(), String> {
+    ff_engine::sign_pdf(
+        std::path::Path::new(&input),
+        std::path::Path::new(&id_pem),
+        &reason,
+        &signer_name,
+        std::path::Path::new(&output),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Kết quả xác thực 1 chữ ký cho UI.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SignatureCheckDto {
+    signer: String,
+    crypto_valid: bool,
+    digest_matches: bool,
+    covers_document: bool,
+    valid: bool,
+}
+
+/// Xác thực mọi chữ ký trong `input`.
+#[tauri::command]
+fn sig_verify(input: String) -> Result<Vec<SignatureCheckDto>, String> {
+    let checks =
+        ff_engine::verify_signatures(std::path::Path::new(&input)).map_err(|e| e.to_string())?;
+    Ok(checks
+        .into_iter()
+        .map(|c| SignatureCheckDto {
+            signer: c.signer.clone(),
+            crypto_valid: c.crypto_valid,
+            digest_matches: c.digest_matches,
+            covers_document: c.covers_document,
+            valid: c.is_valid(),
+        })
+        .collect())
+}
+
+/// Hộp thoại chọn file bất kỳ (dùng cho chọn Digital ID .pem / PDF để xác thực).
+#[tauri::command]
+fn pick_any_file(app: tauri::AppHandle) -> Option<String> {
+    app.dialog().file().blocking_pick_file().map(|fp| fp.to_string())
+}
+
+/// Hộp thoại lưu file PEM (Digital ID).
+#[tauri::command]
+fn pick_save_pem(app: tauri::AppHandle) -> Option<String> {
+    app.dialog()
+        .file()
+        .add_filter("Digital ID (PEM)", &["pem"])
+        .set_file_name("my-digital-id.pem")
+        .blocking_save_file()
+        .map(|fp| fp.to_string())
+}
+
 /// Dọn các file làm việc tạm của chế độ sửa (undo stack). Chỉ xoá file có tên
 /// `ff_edit_*` nằm đúng trong thư mục temp — không bao giờ đụng file người dùng.
 #[tauri::command]
@@ -1003,6 +1081,12 @@ fn main() {
             security_encrypt,
             security_decrypt,
             security_strip_metadata,
+            security_optimize,
+            sig_create_id,
+            sig_sign,
+            sig_verify,
+            pick_any_file,
+            pick_save_pem,
             pick_image
         ])
         .run(tauri::generate_context!())

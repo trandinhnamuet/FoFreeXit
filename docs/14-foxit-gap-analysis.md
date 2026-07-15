@@ -100,7 +100,7 @@ Xếp theo mức độ ảnh hưởng trải nghiệm:
 ### 3.5 Các tính năng Foxit chưa bắt đầu (không phải rào cản kỹ thuật)
 | Nhóm | Đường đi đã chốt trong roadmap | Rủi ro công nghệ |
 |---|---|---|
-| Bảo mật, redaction, chữ ký số PAdES (Phase 5) | QPDF (mã hoá AES-256 sẵn), redaction = xoá object thật (đã có nền edit.rs), ký số qua `cryptographic-message-syntax`/`rustls` + incremental update | Trung bình — byte-range + incremental update phải chuẩn; có spec rõ, test bằng Acrobat |
+| ~~Bảo mật, redaction, chữ ký số PAdES (Phase 5)~~ ✅ ĐÃ LÀM | AES-256+quyền, redaction thật (tỉa ký tự), **chữ ký số PKCS#7/CMS + xác thực + phát hiện giả mạo** (`sign.rs`), lưu tối ưu — 62/62 test | Đã giải; còn lại timestamp/LTV/PFX/multi-sig (docs/15 mục 6.6) |
 | Form AcroForm (Phase 6) | PDFium có FPDF_FORMFILL đầy đủ (fill/flatten); tạo field mới bằng lopdf | Thấp-trung bình |
 | OCR (Phase 7) | Tesseract (tiếng Việt có traineddata chuẩn) + lớp text ẩn — kỹ thuật giống watermark.rs đã làm | Thấp, chủ yếu là chất lượng tiền xử lý ảnh |
 | Convert Office↔PDF (Phase 7) | LibreOffice headless; PDF→Word "đủ dùng" trước | PDF→Word giữ layout hoàn hảo là bài khó với CẢ Foxit — đặt kỳ vọng "tương đương Foxit" chứ không hơn |
@@ -133,13 +133,16 @@ Foxit hơn" — chi phí khổng lồ, không giải quyết gap nào ở mục 
 (iteration 3) · Bảo mật iteration 1 ✅ (mã hoá AES-256 + quyền, gỡ mật khẩu,
 redaction thật kiểm chứng được, xoá metadata — docs/15)**.
 
+**Phase 5 đã HOÀN TẤT** (iter 1+2): mã hoá+quyền, gỡ mật khẩu, redaction thật
++ tỉa ký tự, xoá metadata, **chữ ký số PKCS#7/PAdES + xác thực**, lưu tối ưu.
+
 Thứ tự đề xuất tiếp theo, bám giá trị người dùng:
-1. **Phase 5 Iteration 2**: chữ ký số PAdES + xác thực; "Lưu tối ưu" (mục
-   3.3: subset font, dọn object rác); redact tỉa theo ký tự.
-2. Phase 6 Form → Phase 7 OCR/Convert → Phase 8 phát hành (theo roadmap).
+1. **Phase 6 — Form (AcroForm)**: điền form (PDFium FPDF_FORMFILL), flatten,
+   tạo field text/checkbox/radio/dropdown, import/export FDF/CSV.
+2. Phase 7 OCR/Convert → Phase 8 phát hành (theo roadmap).
 3. Song song, rải theo từng phase: mở rộng font matching (3.4), nấc 1 của
-   hiệu năng phiên sửa (3.2) khi chạm file lớn thực tế, và v2 của reflow
-   (justify/xoay — mục 3.1).
+   hiệu năng phiên sửa (3.2) khi chạm file lớn thực tế, v2 của reflow
+   (justify/xoay — mục 3.1), và nâng chữ ký (timestamp/LTV/PFX/multi-sig).
 
 ## 6. Checklist FINAL TARGET & RULE cho chính tài liệu này
 - [x] Đối chiếu từng tính năng với hành vi Foxit làm chuẩn nghiệm thu.

@@ -157,6 +157,15 @@ pub fn encrypt_with_password_perms(
     ])
 }
 
+/// Lưu tối ưu: nén object stream + dọn object không còn tham chiếu (rác sau
+/// khi sửa/redact — object đã tách khỏi trang nhưng vẫn nằm trong file).
+/// `--object-streams=generate` gộp object; qpdf tự loại object mồ côi khi ghi.
+pub fn optimize_save(input: &Path, output: &Path) -> Result<(), EngineError> {
+    let i = path_arg(input);
+    let o = path_arg(output);
+    run_qpdf(&["--object-streams=generate", "--compress-streams=y", "--", &i, &o])
+}
+
 /// GỠ mật khẩu/mã hoá: giải mã `input` (mở bằng `password`) và ghi bản KHÔNG
 /// mã hoá ra `output`. Cần đúng password (user hoặc owner).
 pub fn decrypt_remove_password(

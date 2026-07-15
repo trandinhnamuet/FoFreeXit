@@ -42,11 +42,12 @@
   - [x] **Iteration 3 — Reflow đoạn "như Word"**: double-click đoạn nhiều dòng → sửa cả đoạn, tự bẻ dòng theo bề rộng khối (đo hmtx bằng ttf-parser), giữ font (nhúng lại bytes gốc / font chuẩn base-14 / cùng họ), giữ nhịp baseline; Enter = ngắt cứng
   - [ ] Follow-up: reflow v2 (justify, khối xoay, đa font), xoay/lật/clip, viền/opacity/căn lề, convert text→path — xem [docs/12-phase4-summary.md](docs/12-phase4-summary.md)
   - **Checklist test cho bạn**: [docs/13-phase4-user-tests.md](docs/13-phase4-user-tests.md) (mới: E17–E30)
-- [x] **Phase 5 — Bảo mật** ✅ Iteration 1 hoàn tất (58/58 test engine xanh)
-  - [x] Engine: mã hoá AES-256 + quyền hạn (in/sửa/copy/chú thích), gỡ mật khẩu (`qpdf.rs`); **redaction THẬT** (`redact.rs`: xoá object, bôi đen pixel ảnh trong chính dữ liệu ảnh — test kiểm bytes/pixel/extract); xoá metadata /Info + XMP (`meta.rs`)
-  - [x] UI thanh "🔒 Bảo mật": đánh dấu redact 2 bước như Foxit (quét vùng → Áp dụng), dialog Đặt/Gỡ mật khẩu + checkbox quyền, Xoá metadata
-  - [ ] Iteration 2: chữ ký số PAdES + xác thực, lưu tối ưu (subset font + dọn rác), redact tỉa theo ký tự — xem [docs/15-phase5-summary.md](docs/15-phase5-summary.md)
-  - **Checklist test cho bạn**: [docs/16-phase5-user-tests.md](docs/16-phase5-user-tests.md)
+- [x] **Phase 5 — Bảo mật** ✅ Iteration 1 + 2 hoàn tất (62/62 test engine xanh)
+  - [x] Engine: mã hoá AES-256 + quyền hạn (in/sửa/copy/chú thích), gỡ mật khẩu (`qpdf.rs`); **redaction THẬT** (`redact.rs`: xoá object, bôi đen pixel ảnh trong chính dữ liệu ảnh, **tỉa theo ký tự** giữ phần ngoài vùng — test kiểm bytes/pixel/extract); xoá metadata /Info + XMP (`meta.rs`)
+  - [x] **Chữ ký số PKCS#7/PAdES** (`sign.rs`): tạo Digital ID tự ký (RSA-2048), ký (CMS SignedData detached, ByteRange/Contents đúng chuẩn Adobe), **xác thực + phát hiện giả mạo**; lưu tối ưu (nén + dọn object rác)
+  - [x] UI thanh "🔒 Bảo mật": redact 2 bước như Foxit, Đặt/Gỡ mật khẩu + quyền, Xoá metadata, **Tạo Digital ID / Ký số / Kiểm tra chữ ký / Lưu tối ưu**
+  - [ ] Về sau: timestamp PAdES-T/LTV, đọc PFX/PKCS#12, multi-sig incremental — xem [docs/15-phase5-summary.md](docs/15-phase5-summary.md) mục 6.6
+  - **Checklist test cho bạn**: [docs/16-phase5-user-tests.md](docs/16-phase5-user-tests.md) (mới: S13–S19)
 - [ ] **Phase 6 — Form (AcroForm)** (kế tiếp) — xem [docs/03-roadmap.md](docs/03-roadmap.md)
 
 Build & chạy: xem [docs/05-dev-setup.md](docs/05-dev-setup.md).

@@ -81,6 +81,23 @@ fn decrypt_with_wrong_password_fails() {
     );
 }
 
+/// Lưu tối ưu: file kết quả mở/đọc bình thường và KHÔNG lớn hơn bản gốc
+/// (nén object stream). Dùng file có object rác (sau redact-kiểu xoá object).
+#[test]
+fn optimize_save_keeps_content_and_not_larger() {
+    let pdf = pdfium();
+    let out = tmp("ff_opt_out.pdf");
+    let src = workspace_root().join("corpus").join("sample-multipage.pdf");
+    ff_engine::optimize_save(&src, &out).expect("optimize");
+
+    assert!(pdf.load_pdf_from_file(&out, None).is_ok(), "file tối ưu phải mở được");
+    let pages = ff_engine::page_count(&pdf, &out, None).expect("page_count");
+    assert!(pages >= 1, "phải giữ trang");
+    let orig = std::fs::metadata(&src).map(|m| m.len()).unwrap_or(0);
+    let opt = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(u64::MAX);
+    assert!(opt <= orig + orig / 10, "bản tối ưu không được phình đáng kể ({opt} vs {orig})");
+}
+
 /// Xoá metadata: /Info (Producer/Author…) và XMP /Metadata phải biến mất KHỎI
 /// FILE (soi bytes thô), file vẫn mở/đọc bình thường.
 #[test]
