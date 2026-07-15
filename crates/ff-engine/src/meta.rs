@@ -1,10 +1,45 @@
-//! Metadata tài liệu: kích thước trang & outline (bookmarks).
+//! Metadata tài liệu: kích thước trang & outline (bookmarks) + xoá metadata
+//! nhận dạng (Phase 5).
 
 use std::path::Path;
 
 use pdfium_render::prelude::*;
 
 use crate::EngineError;
+
+/// Xoá metadata nhận dạng khỏi file (Phase 5 — riêng tư): /Info trong trailer
+/// (Author/Producer/CreationDate…) và stream XMP `/Metadata` trong catalog —
+/// xoá cả THAM CHIẾU lẫn OBJECT đích để nội dung không còn nằm trong file.
+/// Thao tác tầng PDF object qua lopdf; file mã hoá cần gỡ mật khẩu trước.
+pub fn strip_metadata(input: &Path, output: &Path) -> Result<(), EngineError> {
+    let mut doc = lopdf::Document::load(input)
+        .map_err(|e| EngineError::Pdfium(format!("lopdf load: {e}")))?;
+
+    // /Info: gỡ tham chiếu trong trailer + xoá object đích.
+    if let Ok(id) = doc.trailer.get(b"Info").and_then(|o| o.as_reference()) {
+        doc.objects.remove(&id);
+    }
+    doc.trailer.remove(b"Info");
+
+    // /Metadata (XMP) trong catalog: gỡ tham chiếu + xoá stream đích.
+    if let Ok(root_id) = doc.trailer.get(b"Root").and_then(|o| o.as_reference()) {
+        let meta_id = doc
+            .get_object(root_id)
+            .ok()
+            .and_then(|c| c.as_dict().ok())
+            .and_then(|d| d.get(b"Metadata").ok().and_then(|o| o.as_reference().ok()));
+        if let Ok(lopdf::Object::Dictionary(dict)) = doc.get_object_mut(root_id) {
+            dict.remove(b"Metadata");
+        }
+        if let Some(id) = meta_id {
+            doc.objects.remove(&id);
+        }
+    }
+
+    doc.save(output)
+        .map_err(|e| EngineError::Pdfium(format!("lopdf save: {e}")))?;
+    Ok(())
+}
 
 /// Kích thước một trang theo điểm PDF (points, 1/72 inch).
 #[derive(Debug, Clone, Copy, PartialEq)]

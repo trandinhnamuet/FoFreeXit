@@ -36,6 +36,7 @@
       <span class="sep"></span>
       <button id="organizeModeBtn" title="Tổ chức trang">🗂 Tổ chức trang</button>
       <button id="editModeBtn" title="Sửa nội dung trang">✏️ Sửa nội dung</button>
+      <button id="secModeBtn" title="Bảo mật: redact, mật khẩu, metadata">🔒 Bảo mật</button>
       <div class="spacer"></div>
       <span id="status" class="status"></span>
     </header>
@@ -100,6 +101,19 @@
       <span class="spacer"></span>
       <span id="editHint" class="status"></span>
       <button id="edSave" disabled>💾 Lưu thay đổi nội dung</button>
+    </div>
+
+    <div id="secBar" class="editbar hidden">
+      <span class="annolabel">Bảo mật:</span>
+      <button id="secRedactTool" class="atool" data-tool="redact" title="Kéo chuột trên trang để đánh dấu vùng cần bôi đen — nội dung bị XOÁ THẬT khi áp dụng">⬛ Đánh dấu redact</button>
+      <button id="secRedactApply" disabled title="Xoá thật nội dung trong các vùng đã đánh dấu, lưu ra file mới">Áp dụng redact (<span id="redactCount">0</span>)</button>
+      <button id="secRedactClear" disabled title="Bỏ toàn bộ đánh dấu">Bỏ đánh dấu</button>
+      <span class="sep"></span>
+      <button id="secEncrypt" title="Đặt mật khẩu mở file + quyền hạn (AES-256)">🔑 Đặt mật khẩu</button>
+      <button id="secDecrypt" title="Gỡ mật khẩu (cần mật khẩu hiện tại)">🔓 Gỡ mật khẩu</button>
+      <button id="secStripMeta" title="Xoá /Info (tác giả, phần mềm tạo...) và XMP metadata khỏi file">🧹 Xoá metadata</button>
+      <span class="spacer"></span>
+      <span id="secHint" class="status"></span>
     </div>
 
     <div class="body">

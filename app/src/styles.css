@@ -413,6 +413,18 @@ body.tool-active .annotlayer * { pointer-events: none; }
   box-sizing: content-box;
 }
 
+/* Đánh dấu redact (Phase 5): khối mờ đen viền đỏ, bấm để bỏ */
+.redact-mark {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1.5px dashed #e33;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.redact-mark:hover {
+  background: rgba(0, 0, 0, 0.4);
+}
+
 /* Textarea sửa cả đoạn (reflow) — đè white-space:pre của .edit-inline */
 .edit-inline-block {
   white-space: pre-wrap;

@@ -94,26 +94,80 @@ pub fn repair(input: &Path, output: &Path) -> Result<(), EngineError> {
     run_qpdf(&[&i, &o])
 }
 
-/// Mã hoá `input` (đang KHÔNG mã hoá) thành `output`, dùng AES-256, với user
-/// password (mở file) và owner password (đổi quyền) chỉ định. Permissions để
-/// mặc định (đầy đủ) cho V1 — đủ cho DoD "ghi không làm hỏng file mã hoá".
+/// Quyền hạn áp khi mã hoá (Phase 5) — map thẳng sang cờ AES-256 của qpdf.
+/// Mặc định: cho phép tất cả (chỉ chặn bằng mật khẩu mở file).
+#[derive(Clone, Copy, Debug)]
+pub struct Permissions {
+    /// In tài liệu (`--print=full|none`).
+    pub allow_print: bool,
+    /// Sửa nội dung (`--modify=all|none`).
+    pub allow_modify: bool,
+    /// Sao chép/trích text & ảnh (`--extract=y|n`).
+    pub allow_extract: bool,
+    /// Thêm/sửa chú thích + điền form (`--annotate=y|n`).
+    pub allow_annotate: bool,
+}
+
+impl Default for Permissions {
+    fn default() -> Self {
+        Self { allow_print: true, allow_modify: true, allow_extract: true, allow_annotate: true }
+    }
+}
+
+/// Mã hoá `input` (đang KHÔNG mã hoá) thành `output`, AES-256, permissions
+/// đầy đủ. Giữ cho tương thích — bản đầy đủ: [`encrypt_with_password_perms`].
 pub fn encrypt_with_password(
     input: &Path,
     output: &Path,
     user_password: &str,
     owner_password: &str,
 ) -> Result<(), EngineError> {
+    encrypt_with_password_perms(input, output, user_password, owner_password, Permissions::default())
+}
+
+/// Mã hoá AES-256 với user password (mở file), owner password (đổi quyền) và
+/// bộ quyền hạn chỉ định. Owner password rỗng → qpdf dùng user password làm
+/// owner (tránh file "khoá quyền nhưng ai cũng mở được" thiếu chủ đích).
+pub fn encrypt_with_password_perms(
+    input: &Path,
+    output: &Path,
+    user_password: &str,
+    owner_password: &str,
+    perms: Permissions,
+) -> Result<(), EngineError> {
     let i = path_arg(input);
     let o = path_arg(output);
+    let owner = if owner_password.is_empty() { user_password } else { owner_password };
+    let print = if perms.allow_print { "--print=full" } else { "--print=none" };
+    let modify = if perms.allow_modify { "--modify=all" } else { "--modify=none" };
+    let extract = if perms.allow_extract { "--extract=y" } else { "--extract=n" };
+    let annotate = if perms.allow_annotate { "--annotate=y" } else { "--annotate=n" };
     run_qpdf(&[
         "--encrypt",
         user_password,
-        owner_password,
+        owner,
         "256",
+        print,
+        modify,
+        extract,
+        annotate,
         "--",
         &i,
         &o,
     ])
+}
+
+/// GỠ mật khẩu/mã hoá: giải mã `input` (mở bằng `password`) và ghi bản KHÔNG
+/// mã hoá ra `output`. Cần đúng password (user hoặc owner).
+pub fn decrypt_remove_password(
+    input: &Path,
+    password: &str,
+    output: &Path,
+) -> Result<(), EngineError> {
+    let i = path_arg(input);
+    let o = path_arg(output);
+    let pw = format!("--password={password}");
+    run_qpdf(&[&pw, "--decrypt", &i, &o])
 }
 
 /// Mở `input` bằng PDFium an toàn cho cả file hỏng và file mã hoá:
