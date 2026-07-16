@@ -41,6 +41,13 @@ cargo run
 | E24 | Sửa text tiếng Việt trên file có font nhúng (file Word xuất PDF) | Đúng dấu **và giữ nguyên font nhúng** (mở lại ở Foxit xem tên font trong Edit) | |
 | E25 | Sửa nhiều lần rồi thoát chế độ sửa (không lưu) | Không còn file `ff_edit_*.pdf` rác trong thư mục %TEMP% | |
 
+## Bổ sung — Đúp chuột vào chữ từ viewer thường (chuẩn Foxit Editor)
+| # | Thao tác | Kỳ vọng | KQ |
+|---|----------|---------|----|
+| E31 | Đang XEM bình thường (không bật chế độ sửa), **đúp chuột vào 1 dòng chữ** | Tự vào chế độ Sửa nội dung đúng trang đó và Ô SỬA mở sẵn ngay tại dòng/đoạn vừa đúp | |
+| E32 | Đúp chuột vào VÙNG TRỐNG của trang | Không có gì xảy ra (như Foxit) | |
+| E33 | Đang cầm công cụ chú thích (highlight/note...) rồi đúp vào chữ | KHÔNG nhảy vào chế độ sửa (công cụ chú thích được ưu tiên) | |
+
 ## Bổ sung Iteration 3 — Sửa cả đoạn với reflow "như Word"
 | # | Thao tác | Kỳ vọng | KQ |
 |---|----------|---------|----|

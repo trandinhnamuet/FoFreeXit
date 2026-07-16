@@ -41,6 +41,7 @@
   - [x] UI chế độ "Sửa nội dung": overlay đối tượng, sửa text tại chỗ WYSIWYG, thêm chữ/ảnh, xoá, cỡ chữ/màu, undo/redo, lưu
   - [x] **Iteration 2 — GIỮ FONT khi sửa (chuẩn Foxit)**: sửa tại chỗ giữ nguyên font gốc/nhúng (kể cả tiếng Việt); thiếu glyph mới thay font CÙNG HỌ (`fontmatch.rs`); đổi cỡ/màu không đụng font (fix bug phóng đại kép); sửa CẢ DÒNG (gộp run); WYSIWYG khi gõ; B/I + đổi font family; kéo-thả live; dọn file tạm
   - [x] **Iteration 3 — Reflow đoạn "như Word"**: double-click đoạn nhiều dòng → sửa cả đoạn, tự bẻ dòng theo bề rộng khối (đo hmtx bằng ttf-parser), giữ font (nhúng lại bytes gốc / font chuẩn base-14 / cùng họ), giữ nhịp baseline; Enter = ngắt cứng
+  - [x] **Đúp chuột từ viewer thường (chuẩn Foxit)**: đang xem, đúp vào chữ → tự vào chế độ sửa đúng trang + mở ngay ô sửa tại đoạn đó; đúp vùng trống không làm gì
   - [ ] Follow-up: reflow v2 (justify, khối xoay, đa font), xoay/lật/clip, viền/opacity/căn lề, convert text→path — xem [docs/12-phase4-summary.md](docs/12-phase4-summary.md)
   - **Checklist test cho bạn**: [docs/13-phase4-user-tests.md](docs/13-phase4-user-tests.md) (mới: E17–E30)
 - [x] **Phase 5 — Bảo mật** ✅ Iteration 1 + 2 hoàn tất (62/62 test engine xanh)
