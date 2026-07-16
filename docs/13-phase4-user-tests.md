@@ -41,6 +41,15 @@ cargo run
 | E24 | Sửa text tiếng Việt trên file có font nhúng (file Word xuất PDF) | Đúng dấu **và giữ nguyên font nhúng** (mở lại ở Foxit xem tên font trong Edit) | |
 | E25 | Sửa nhiều lần rồi thoát chế độ sửa (không lưu) | Không còn file `ff_edit_*.pdf` rác trong thư mục %TEMP% | |
 
+## Bổ sung — Sửa đoạn hoàn chỉnh với PDF Word-export (khắc phục theo phản hồi thật)
+| # | Thao tác | Kỳ vọng | KQ |
+|---|----------|---------|----|
+| E34 | Mở PDF xuất từ Word (tiêu đề bị cắt thành từng từ/ký tự), bật chế độ Sửa | Overlay hiện **1 khung mỗi DÒNG** (không phải hàng chục ô nhỏ từng từ) | |
+| E35 | Đúp vào tiêu đề 2 dòng (kể cả đúp vào KHE giữa 2 từ) | Ô sửa mở cho **CẢ ĐOẠN 2 DÒNG, giữ nguyên xuống dòng** | |
+| E36 | Trong ô sửa: click chuột chỗ khác của đoạn để đổi vị trí con trỏ | Con trỏ di chuyển bình thường, **KHÔNG thoát edit** | |
+| E37 | Sửa vài chữ rồi Ctrl+Enter | Chữ mới thay SẠCH chữ cũ (không chồng chữ), tiêu đề căn giữa **vẫn căn giữa** | |
+| E38 | Khi ô sửa đang mở | Ô che kín chữ cũ bên dưới (không thấy 2 lớp chữ) | |
+
 ## Bổ sung — Đúp chuột vào chữ từ viewer thường (chuẩn Foxit Editor)
 | # | Thao tác | Kỳ vọng | KQ |
 |---|----------|---------|----|

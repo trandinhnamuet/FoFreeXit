@@ -46,6 +46,20 @@
   dài → nhiều dòng, **BaseFont vẫn "Helvetica" chuẩn** (builtin, không nhúng).
 - Unit `wrap_lines`: greedy theo từ / ngắt cứng + dòng rỗng / cắt từ quá dài.
 
+### Vá theo phản hồi file thật (Word-export, run cắt theo từ/ký tự)
+Kiểm với PDF thật xuất từ Word (tiêu đề 2 dòng bị cắt thành 41 run per-word/
+per-char xen run rỗng, cỡ 22.5pt + 20pt, bbox chữ có dấu tụt thấp):
+- **UI cluster DÒNG theo GIAO DỌC** (≥50% chiều cao nhỏ) thay vì so baseline —
+  miễn nhiễm dấu tiếng Việt; overlay 1 khung/dòng (file thật: 231 ô → 18 khung);
+  chọn/kéo/xoá/đổi thuộc tính tác động CẢ DÒNG (batch ops).
+- **Đúp mở CẢ ĐOẠN giữ xuống dòng** (`\n` giữa các dòng gốc — sửa được cả vị
+  trí ngắt dòng); đúp trúng KHE giữa các từ vẫn mở (hit-test theo điểm);
+  click trong ô sửa di chuyển con trỏ, không thoát edit; ô che kín chữ cũ.
+- **Engine ReflowText tự NỞ danh sách run theo bbox khối** (tâm nằm trong
+  union + 2pt) — không bao giờ sót run rỗng/lệch bbox → hết cảnh chữ mới đè
+  chữ cũ; **phát hiện khối căn giữa** (tâm các dòng trùng tâm khối) → dòng mới
+  giữ căn giữa. 2 test hồi quy mới (nở indices, giữ căn giữa) — 19 test edit.
+
 ### Giới hạn ghi nhận (v1, sẽ nâng ở vòng sau)
 - Đoạn justify (giãn đều 2 lề) reflow về căn trái; chưa kerning; khối text
   XOAY chưa reflow theo hướng xoay (dòng mới đặt theo trục ngang).
