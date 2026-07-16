@@ -2200,7 +2200,7 @@ function buildEditOverlay() {
       e.stopPropagation();
       selectEditObject(rep.index, line.runs.map((r) => r.index));
     });
-    box.addEventListener("dblclick", (e) => { e.stopPropagation(); startTextEdit(rep); });
+    box.addEventListener("dblclick", (e) => { e.stopPropagation(); startTextEdit(rep, e); });
     ov.appendChild(box);
   });
 
@@ -2460,20 +2460,24 @@ function paragraphLines(o) {
 
 // Double-click vào chữ: LUÔN mở ô sửa CẢ ĐOẠN (kể cả đoạn 1 dòng) — một
 // đường code duy nhất, giữ nguyên cấu trúc xuống dòng, commit qua reflow.
-function startTextEdit(o) {
-  startBlockTextEdit(o, paragraphLines(o));
+// `ev` (nếu có) = sự kiện chuột để đặt con trỏ đúng chỗ vừa đúp.
+function startTextEdit(o, ev) {
+  startBlockTextEdit(o, paragraphLines(o), ev);
 }
 
-// Sửa cả đoạn "như Word" (Foxit Edit Text): textarea phủ kín khối (che chữ
-// cũ bên dưới), MỖI DÒNG GỐC = 1 dòng textarea (giữ xuống dòng — sửa được cả
-// vị trí ngắt dòng); click trong ô = di chuyển con trỏ; commit → engine
-// reflow: xoá SẠCH mọi run của khối (kể cả run sót — engine tự nở theo bbox),
-// giữ font + giữ căn giữa nếu khối gốc căn giữa.
-function startBlockTextEdit(o, lines) {
+// Sửa cả đoạn WYSIWYG (chuẩn Foxit Edit Text): contenteditable phủ kín khối,
+// MỖI DÒNG GỐC = 1 div giữ ĐÚNG font/cỡ/màu/đậm-nghiêng CỦA DÒNG ĐÓ (tiêu đề
+// 22.5/20pt hiện đúng 2 cỡ), khối căn giữa hiện căn giữa — chữ trong ô nằm
+// TRÙNG vị trí chữ gốc, không xê dịch. Enter = xuống dòng; click trong ô =
+// di chuyển con trỏ; commit → engine reflow (xoá sạch run cũ, giữ font gốc,
+// giữ cỡ từng dòng, giữ căn giữa).
+function startBlockTextEdit(o, lines, ev) {
   const ov = $("editOverlay");
   const existing = ov.querySelector(".edit-inline");
   if (existing) existing.remove();
 
+  const s = state.editScale;
+  const p = state.pages[state.editPage];
   const allRuns = lines.flatMap((l) => l.runs);
   const union = {
     left: Math.min(...lines.map((l) => l.rect.left)),
@@ -2481,42 +2485,111 @@ function startBlockTextEdit(o, lines) {
     bottom: Math.min(...lines.map((l) => l.rect.bottom)),
     top: Math.max(...lines.map((l) => l.rect.top)),
   };
-  // Giữ đúng cấu trúc dòng gốc: mỗi dòng thị giác = 1 dòng trong ô sửa.
-  const original = lines.map((l) => composeLineText(l.runs)).join("\n");
+  const bw = union.right - union.left;
+  const bc = (union.left + union.right) / 2;
 
-  const ta = document.createElement("textarea");
-  ta.className = "edit-inline edit-inline-block";
-  ta.value = original;
-  Object.assign(ta.style, editBoxStyle(union));
+  // Căn giữa? — cùng tiêu chí với engine: tâm mọi dòng ≈ tâm khối và có ít
+  // nhất 1 dòng thụt vào so với lề trái.
+  const tol = Math.max(2, bw * 0.02);
+  const centered =
+    lines.every((l) => Math.abs((l.rect.left + l.rect.right) / 2 - bc) <= tol) &&
+    lines.some((l) => l.rect.left - union.left > tol);
+
   const advPt =
     lines.length > 1
       ? Math.abs(lines[0].rect.bottom - lines[1].rect.bottom)
       : (o.font_size || 12) * 1.25;
-  const advPx = Math.max(8, advPt * state.editScale);
-  // Cao đủ số dòng + 1 dòng trống để gõ thêm; rộng thêm chút để gõ dài hơn.
-  ta.style.height = (lines.length + 1) * advPx + 6 + "px";
-  const p = state.pages[state.editPage];
-  const maxW = (p.widthPt - union.left) * state.editScale - 4;
-  ta.style.width = Math.min(maxW, parseFloat(ta.style.width) + 60) + "px";
-  ta.style.lineHeight = advPx + "px";
-  ta.style.fontSize = Math.max(8, (o.font_size || 12) * state.editScale) + "px";
-  ta.style.fontFamily = cssFontStack(o.font_family);
-  ta.style.fontWeight = o.font_bold ? "bold" : "normal";
-  ta.style.fontStyle = o.font_italic ? "italic" : "normal";
-  if (o.color) ta.style.color = rgbCss(o.color);
-  ov.appendChild(ta);
-  ta.focus();
-  ta.setSelectionRange(0, 0);
-  ta.scrollIntoView({ block: "center", behavior: "instant" });
+  const advPx = Math.max(8, advPt * s);
+
+  const original = lines.map((l) => composeLineText(l.runs)).join("\n");
+
+  const ce = document.createElement("div");
+  ce.className = "edit-inline edit-inline-wys";
+  ce.contentEditable = "plaintext-only";
+  ce.spellcheck = false;
+
+  // Khung: khối căn giữa nở đều 2 phía (tâm giữ nguyên → chữ không xê dịch);
+  // khối thường giữ mép trái, nở sang phải — khớp giới hạn nở 35% của engine.
+  let leftPt;
+  let widthPt;
+  if (centered) {
+    const grow = Math.min(bw * 0.175, bc - 8 - bw / 2, p.widthPt - 8 - bc - bw / 2);
+    const g = Math.max(0, grow);
+    leftPt = union.left - g;
+    widthPt = bw + 2 * g;
+  } else {
+    leftPt = union.left;
+    widthPt = Math.min(bw * 1.35, p.widthPt - union.left - 8);
+  }
+  // Bù lệch dọc: line-box của trình duyệt căn giữa glyph trong line-height,
+  // còn bbox PDF ôm sát glyph → đẩy khung lên (advPx − cỡ chữ)/2 cho trùng.
+  const fs0 = (lines[0].fs || o.font_size || 12) * s;
+  const topPx = Math.max(0, (p.heightPt - union.top) * s - Math.max(0, (advPx - fs0) / 2));
+  Object.assign(ce.style, {
+    left: leftPt * s + "px",
+    top: topPx + "px",
+    width: widthPt * s + "px",
+    minHeight: lines.length * advPx + 4 + "px",
+    textAlign: centered ? "center" : "left",
+  });
+
+  // MỖI DÒNG 1 div với đúng cỡ/màu/kiểu của dòng đó (WYSIWYG khi gõ).
+  for (const l of lines) {
+    const rep = l.runs.find((r) => (r.text || "").trim()) || l.runs[0] || o;
+    const div = document.createElement("div");
+    div.className = "edit-line";
+    const t = composeLineText(l.runs);
+    if (t) div.textContent = t;
+    else div.innerHTML = "<br>";
+    div.style.fontSize = Math.max(6, (l.fs || 12) * s) + "px";
+    div.style.lineHeight = advPx + "px";
+    div.style.fontFamily = cssFontStack(rep.font_family || o.font_family);
+    div.style.fontWeight = (rep.font_bold != null ? rep.font_bold : o.font_bold) ? "bold" : "normal";
+    div.style.fontStyle = (rep.font_italic != null ? rep.font_italic : o.font_italic) ? "italic" : "normal";
+    if (rep.color || o.color) div.style.color = rgbCss(rep.color || o.color);
+    ce.appendChild(div);
+  }
+  ov.appendChild(ce);
+  // WebView không hỗ trợ plaintext-only (hiếm) → contenteditable thường.
+  if (!ce.isContentEditable) ce.contentEditable = "true";
+  ce.focus();
+
+  // Đặt con trỏ đúng chỗ vừa đúp (như Foxit); không có toạ độ → đầu đoạn.
+  let placed = false;
+  if (ev && document.caretRangeFromPoint) {
+    const r = document.caretRangeFromPoint(ev.clientX, ev.clientY);
+    if (r && ce.contains(r.startContainer)) {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      placed = true;
+    }
+  }
+  if (!placed) {
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(ce, 0);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  ce.scrollIntoView({ block: "center", behavior: "instant" });
   $("editHint").textContent =
     "Sửa cả đoạn — Enter: xuống dòng · Ctrl+Enter hoặc bấm ra ngoài: áp dụng · Esc: huỷ";
+
+  // Đọc nội dung theo DÒNG từ contenteditable (div/br → \n).
+  const readText = () => {
+    let t = ce.innerText != null ? ce.innerText : ce.textContent;
+    t = t.replace(/\u00a0/g, " ").replace(/\n+$/, "");
+    return t;
+  };
 
   let done = false;
   const commit = (save) => {
     if (done) return;
     done = true;
-    const text = ta.value;
-    ta.remove();
+    const text = readText();
+    ce.remove();
     if (save && text.trim() && text !== original) {
       stageEditOp({
         op: "reflowText",
@@ -2527,16 +2600,23 @@ function startBlockTextEdit(o, lines) {
       $("editHint").textContent = "";
     }
   };
-  ta.addEventListener("keydown", (e) => {
+  ce.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); commit(false); }
     else if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); commit(true); }
     e.stopPropagation();
   });
+  // Dán luôn ở dạng chữ thuần (khi rơi về contenteditable thường).
+  ce.addEventListener("paste", (e) => {
+    if (ce.contentEditable === "plaintext-only") return;
+    e.preventDefault();
+    const t = (e.clipboardData || window.clipboardData).getData("text/plain");
+    document.execCommand("insertText", false, t);
+  });
   // Click/chọn chữ TRONG ô sửa không được lan xuống overlay (gây thoát edit).
-  ta.addEventListener("mousedown", (e) => e.stopPropagation());
-  ta.addEventListener("click", (e) => e.stopPropagation());
-  ta.addEventListener("dblclick", (e) => e.stopPropagation());
-  ta.addEventListener("blur", () => commit(true));
+  ce.addEventListener("mousedown", (e) => e.stopPropagation());
+  ce.addEventListener("click", (e) => e.stopPropagation());
+  ce.addEventListener("dblclick", (e) => e.stopPropagation());
+  ce.addEventListener("blur", () => commit(true));
 }
 
 // Đổi thuộc tính chữ cho CẢ DÒNG đang chọn: setText từng run (giữ nội dung
@@ -3453,7 +3533,7 @@ $("editOverlay").addEventListener("dblclick", (e) => {
   const x = (e.clientX - r.left) / state.editScale;
   const y = p.heightPt - (e.clientY - r.top) / state.editScale;
   const hit = pickTextAt(state.editObjects, x, y);
-  if (hit) startTextEdit(hit);
+  if (hit) startTextEdit(hit, e);
 });
 
 // Phím tắt chuẩn của trình xem PDF (Foxit/Adobe): điều hướng trang, zoom,
