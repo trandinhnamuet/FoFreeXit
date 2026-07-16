@@ -277,6 +277,8 @@ struct ReflowPlan {
     /// Khối: lề trái + bề rộng bẻ dòng (điểm PDF).
     left: f32,
     width: f32,
+    /// Khối gốc căn giữa → dòng mới đặt x = tâm khối − w/2.
+    centered: bool,
     /// Baseline dòng đầu (y của gốc text) + khoảng cách baseline giữa các dòng.
     first_baseline: f32,
     line_advance: f32,
@@ -447,11 +449,11 @@ pub fn apply_edits(
                         left: f32,
                         right: f32,
                     }
-                    let mut geos: Vec<RunGeo> = Vec::new();
-                    let mut old_text_all = String::new();
-                    for &i in &idxs {
+                    let geo_of = |i: u16| -> Result<Option<RunGeo>, EngineError> {
                         let obj = page.objects().get(i as usize).map_err(err)?;
-                        let Some(t) = obj.as_text_object() else { continue };
+                        if obj.as_text_object().is_none() {
+                            return Ok(None);
+                        }
                         let m = obj.matrix().map_err(err)?;
                         let b = obj.bounds().map(|q| quad_to_rect(&q)).unwrap_or(Rect {
                             left: m.e(),
@@ -459,14 +461,72 @@ pub fn apply_edits(
                             right: m.e(),
                             top: m.f(),
                         });
-                        old_text_all.push_str(&t.text());
-                        old_text_all.push(' ');
-                        geos.push(RunGeo { idx: i, f: m.f(), left: b.left, right: b.right });
+                        Ok(Some(RunGeo { idx: i, f: m.f(), left: b.left, right: b.right }))
+                    };
+                    let mut geos: Vec<RunGeo> = Vec::new();
+                    for &i in &idxs {
+                        if let Some(g) = geo_of(i)? {
+                            geos.push(g);
+                        }
                     }
                     if geos.is_empty() {
                         continue;
                     }
-                    idxs = geos.iter().map(|g| g.idx).collect();
+
+                    // NỞ danh sách run theo bbox khối (an toàn — chống sót): PDF từ
+                    // Word hay cắt 1 dòng thành run theo TỪNG TỪ/KÝ TỰ xen run rỗng,
+                    // bbox chữ có dấu tụt thấp — UI có thể sót vài run. Mọi text
+                    // object có TÂM nằm trong bbox khối (nới 2pt) đều thuộc khối →
+                    // đưa hết vào để xoá sạch, không còn chữ cũ đè dưới chữ mới.
+                    {
+                        let mut bb = Rect {
+                            left: f32::INFINITY,
+                            bottom: f32::INFINITY,
+                            right: f32::NEG_INFINITY,
+                            top: f32::NEG_INFINITY,
+                        };
+                        for &i in &idxs {
+                            let obj = page.objects().get(i as usize).map_err(err)?;
+                            if obj.as_text_object().is_none() {
+                                continue;
+                            }
+                            if let Ok(q) = obj.bounds() {
+                                let r = quad_to_rect(&q);
+                                bb.left = bb.left.min(r.left);
+                                bb.bottom = bb.bottom.min(r.bottom);
+                                bb.right = bb.right.max(r.right);
+                                bb.top = bb.top.max(r.top);
+                            }
+                        }
+                        let pad = 2.0;
+                        for i in 0..obj_count as u16 {
+                            if idxs.contains(&i) {
+                                continue;
+                            }
+                            let obj = page.objects().get(i as usize).map_err(err)?;
+                            if obj.as_text_object().is_none() {
+                                continue;
+                            }
+                            let (cx, cy) = match obj.bounds() {
+                                Ok(q) => {
+                                    let r = quad_to_rect(&q);
+                                    ((r.left + r.right) / 2.0, (r.bottom + r.top) / 2.0)
+                                }
+                                Err(_) => continue,
+                            };
+                            if cx >= bb.left - pad
+                                && cx <= bb.right + pad
+                                && cy >= bb.bottom - pad
+                                && cy <= bb.top + pad
+                            {
+                                idxs.push(i);
+                                if let Some(g) = geo_of(i)? {
+                                    geos.push(g);
+                                }
+                            }
+                        }
+                        idxs.sort_unstable();
+                    }
                     // Run neo: baseline cao nhất, trái nhất.
                     let anchor_idx = geos
                         .iter()
@@ -508,6 +568,33 @@ pub fn apply_edits(
                     let right = geos.iter().map(|g| g.right).fold(f32::NEG_INFINITY, f32::max);
                     let width = (right - left).max(20.0);
 
+                    // Phát hiện CĂN GIỮA (tiêu đề...): mọi dòng gốc có tâm ≈ tâm
+                    // khối và có ít nhất 1 dòng thụt vào so với lề trái → các dòng
+                    // mới cũng đặt căn giữa (giữ bố cục như Foxit).
+                    let block_center = (left + right) / 2.0;
+                    let centered = {
+                        let tol = (width * 0.02).max(2.0);
+                        let mut any_indented = false;
+                        let mut all_centered = true;
+                        for &bl in &baselines {
+                            let (mut l, mut r) = (f32::INFINITY, f32::NEG_INFINITY);
+                            for g in geos.iter().filter(|g| (g.f - bl).abs() <= 1.0) {
+                                l = l.min(g.left);
+                                r = r.max(g.right);
+                            }
+                            if !l.is_finite() || r - l < 1.0 {
+                                continue;
+                            }
+                            if ((l + r) / 2.0 - block_center).abs() > tol {
+                                all_centered = false;
+                            }
+                            if l - left > tol {
+                                any_indented = true;
+                            }
+                        }
+                        all_centered && any_indented
+                    };
+
                     // Thang font cho các dòng mới (giữ font như SetText):
                     // (1) font NHÚNG parse được + phủ đủ glyph → nhúng lại chính bytes đó
                     //     (same glyphs — trông y hệt);
@@ -546,6 +633,7 @@ pub fn apply_edits(
                             measure_bytes,
                             left,
                             width,
+                            centered,
                             first_baseline,
                             line_advance,
                             linear: (m.a(), m.b(), m.c(), m.d()),
@@ -841,6 +929,13 @@ pub fn apply_edits(
                             continue; // đoạn trống vẫn chiếm 1 nhịp baseline
                         }
                         let y = plan.first_baseline - (i as f32) * plan.line_advance;
+                        // Khối căn giữa → từng dòng mới cũng căn giữa theo tâm khối.
+                        let x = if plan.centered {
+                            let w: f32 = line.chars().map(&measure).sum();
+                            (plan.left + plan.width / 2.0 - w / 2.0).max(plan.left)
+                        } else {
+                            plan.left
+                        };
                         let mut obj = page
                             .objects_mut()
                             .create_text_object(
@@ -851,8 +946,8 @@ pub fn apply_edits(
                                 PdfPoints::new(plan.tf),
                             )
                             .map_err(err)?;
-                        // Giữ scale/nghiêng của run neo; đặt gốc dòng tại (left, y).
-                        obj.apply_matrix(PdfMatrix::new(a, b, c2, d, plan.left, y))
+                        // Giữ scale/nghiêng của run neo; đặt gốc dòng tại (x, y).
+                        obj.apply_matrix(PdfMatrix::new(a, b, c2, d, x, y))
                             .map_err(err)?;
                         obj.set_fill_color(plan.color).map_err(err)?;
                     }

@@ -740,6 +740,138 @@ the declared standard Helvetica base font untouched.";
     assert!(norm.contains("standard Helvetica base font untouched"), "round-trip: {norm:?}");
 }
 
+/// Engine tự NỞ danh sách run theo bbox khối: dòng bị cắt làm 3 run, UI chỉ
+/// gửi run ĐẦU + CUỐI (sót run giữa — như run rỗng/lệch bbox của Word) —
+/// run giữa vẫn bị thay sạch, không còn chữ cũ đè dưới chữ mới.
+#[test]
+fn reflow_expands_indices_to_cover_block() {
+    let pdf = pdfium();
+    let fx = tmp("ff_reflow_exp_fx.pdf");
+    let out = tmp("ff_reflow_exp_out.pdf");
+    let mk = |x: f32, s: &str| EditOp::AddText {
+        x,
+        y: 400.0,
+        text: s.into(),
+        font_size: 14.0,
+        color: [0, 0, 0, 255],
+        font_family: None,
+        bold: false,
+        italic: false,
+    };
+    // 1 dòng thị giác bị cắt thành 3 run sát nhau (kiểu Word).
+    ff_engine::apply_edits(
+        &pdf,
+        &sample(),
+        0,
+        &[mk(60.0, "Mảnh một"), mk(125.0, "mảnh hai"), mk(188.0, "mảnh ba.")],
+        &fx,
+        None,
+    )
+    .expect("fixture 3 mảnh");
+    let first = find_text_index(&pdf, &fx, "Mảnh một");
+    let third = find_text_index(&pdf, &fx, "mảnh ba");
+
+    ff_engine::apply_edits(
+        &pdf,
+        &fx,
+        0,
+        &[EditOp::ReflowText { indices: vec![first, third], text: "Dòng đã thay hoàn toàn".into() }],
+        &out,
+        None,
+    )
+    .expect("reflow partial");
+
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    let norm = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(norm.contains("Dòng đã thay hoàn toàn"), "text mới: {norm:?}");
+    assert!(!norm.contains("mảnh hai"), "run GIỮA bị sót phải được nở vào và xoá: {norm:?}");
+    assert!(!norm.contains("Mảnh một"), "run đã đưa phải bị thay: {norm:?}");
+}
+
+/// Khối gốc CĂN GIỮA (dòng ngắn thụt vào, tâm trùng nhau) → các dòng mới cũng
+/// đặt căn giữa theo tâm khối (không dồn hết về lề trái).
+#[test]
+fn reflow_preserves_centered_alignment() {
+    let pdf = pdfium();
+    let probe = tmp("ff_center_probe.pdf");
+    let fx = tmp("ff_center_fx.pdf");
+    let out = tmp("ff_center_out.pdf");
+    let mk = |x: f32, y: f32, s: &str| EditOp::AddText {
+        x,
+        y,
+        text: s.into(),
+        font_size: 16.0,
+        color: [0, 0, 0, 255],
+        font_family: None,
+        bold: false,
+        italic: false,
+    };
+    // Đo bề rộng thật 2 dòng để dựng fixture căn giữa quanh tâm 300.
+    ff_engine::apply_edits(
+        &pdf,
+        &sample(),
+        0,
+        &[mk(10.0, 500.0, "TIÊU ĐỀ DÀI Ở DÒNG TRÊN"), mk(10.0, 460.0, "DÒNG DƯỚI NGẮN")],
+        &probe,
+        None,
+    )
+    .expect("probe");
+    let objs = ff_engine::list_objects(&pdf, &probe, 0, None).expect("list probe");
+    let w = |needle: &str| {
+        let o = objs
+            .iter()
+            .find(|o| o.text.as_deref().map(|t| t.contains(needle)).unwrap_or(false))
+            .expect(needle);
+        o.rect.right - o.rect.left
+    };
+    let (w1, w2) = (w("DÒNG TRÊN"), w("DÒNG DƯỚI"));
+    let cx = 300.0;
+    ff_engine::apply_edits(
+        &pdf,
+        &sample(),
+        0,
+        &[
+            mk(cx - w1 / 2.0, 500.0, "TIÊU ĐỀ DÀI Ở DÒNG TRÊN"),
+            mk(cx - w2 / 2.0, 480.0, "DÒNG DƯỚI NGẮN"),
+        ],
+        &fx,
+        None,
+    )
+    .expect("fixture centered");
+    let idxs: Vec<u16> = ff_engine::list_objects(&pdf, &fx, 0, None)
+        .expect("list fx")
+        .into_iter()
+        .filter(|o| o.text.as_deref().map(|t| t.contains("DÒNG")).unwrap_or(false))
+        .map(|o| o.index)
+        .collect();
+    assert_eq!(idxs.len(), 2);
+
+    ff_engine::apply_edits(
+        &pdf,
+        &fx,
+        0,
+        &[EditOp::ReflowText {
+            indices: idxs,
+            text: "TIÊU ĐỀ MỚI DÀI HƠN CHÚT\nNGẮN".into(),
+        }],
+        &out,
+        None,
+    )
+    .expect("reflow centered");
+
+    let after = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
+    let mut checked = 0;
+    for o in &after {
+        let Some(t) = &o.text else { continue };
+        if t.contains("TIÊU ĐỀ MỚI") || t.trim() == "NGẮN" {
+            let c = (o.rect.left + o.rect.right) / 2.0;
+            assert!((c - cx).abs() < 6.0, "dòng mới phải căn giữa quanh {cx}: center={c} text={t:?}");
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 2, "phải kiểm được 2 dòng mới");
+}
+
 #[test]
 fn add_image_adds_image_object() {
     let pdf = pdfium();

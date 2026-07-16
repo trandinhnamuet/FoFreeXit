@@ -33,7 +33,8 @@ const state = {
   editUndo: [],           // stack đường dẫn editBase trước mỗi op
   editRedo: [],
   editObjects: [],        // ObjectInfo của editPage (đọc lại từ editBase sau mỗi op)
-  editSel: null,          // index object đang chọn
+  editSel: null,          // index object đại diện đang chọn
+  editSelRuns: [],        // mọi run thuộc khung đang chọn (dòng text = nhiều run)
   editScale: 1,           // px/pt của ảnh stage
   editArm: null,          // 'text' | 'image' khi đang chờ click đặt; null = không
   editPendingImage: null, // đường dẫn ảnh chờ đặt (Thêm ảnh)
@@ -2181,28 +2182,45 @@ function buildEditOverlay() {
   const ov = $("editOverlay");
   ov.innerHTML = "";
   ov.classList.toggle("armed", !!state.editArm);
-  const img = $("editImg");
-  // Khớp kích thước overlay với ảnh thực tế hiển thị.
-  state.editObjects.forEach((o) => {
-    if (o.kind === "path" || o.kind === "shading") return; // path/shading: chưa cho chọn ở v1
+
+  // TEXT: 1 khung mỗi DÒNG thị giác (như Foxit) — không vẽ ô chi chít từng
+  // run khi PDF cắt dòng thành từng từ/ký tự. Chọn/kéo/xoá tác động CẢ DÒNG.
+  const lines = clusterTextLines(state.editObjects);
+  lines.forEach((line) => {
     const box = document.createElement("div");
-    box.className = "edit-box kind-" + o.kind + (state.editSel === o.index ? " selected" : "");
+    box.className = "edit-box kind-text";
+    const rep = line.runs.find((r) => (r.text || "").trim()) || line.runs[0];
+    box.dataset.index = String(rep.index);
+    box.dataset.runs = JSON.stringify(line.runs.map((r) => r.index));
+    Object.assign(box.style, editBoxStyle(line.rect));
+    box.title = composeLineText(line.runs);
+    box.addEventListener("mousedown", (e) => onEditBoxMouseDown(e, rep, line.runs));
+    box.addEventListener("click", (e) => {
+      if (state.editArm) return;
+      e.stopPropagation();
+      selectEditObject(rep.index, line.runs.map((r) => r.index));
+    });
+    box.addEventListener("dblclick", (e) => { e.stopPropagation(); startTextEdit(rep); });
+    ov.appendChild(box);
+  });
+
+  // Ảnh/form: khung theo từng object như cũ (có resize).
+  state.editObjects.forEach((o) => {
+    if (o.kind !== "image" && o.kind !== "form") return;
+    const box = document.createElement("div");
+    box.className = "edit-box kind-" + o.kind;
     box.dataset.index = String(o.index);
     Object.assign(box.style, editBoxStyle(o.rect));
-    box.title = o.kind === "text" ? (o.text || "") : o.kind;
-    box.addEventListener("mousedown", (e) => onEditBoxMouseDown(e, o));
+    box.title = o.kind;
+    box.addEventListener("mousedown", (e) => onEditBoxMouseDown(e, o, [o.index]));
     box.addEventListener("click", (e) => {
-      if (state.editArm) return; // đang chờ đặt chữ/ảnh → để click rơi xuống overlay
+      if (state.editArm) return;
       e.stopPropagation();
-      selectEditObject(o.index);
+      selectEditObject(o.index, [o.index]);
     });
-    if (o.kind === "text") {
-      box.addEventListener("dblclick", (e) => { e.stopPropagation(); startTextEdit(o); });
-    }
     ov.appendChild(box);
   });
   refreshEditSelection();
-  void img;
 }
 
 // Cập nhật trạng thái chọn TẠI CHỖ (không dựng lại overlay) — quan trọng để
@@ -2213,20 +2231,24 @@ function refreshEditSelection() {
     const isSel = Number(box.dataset.index) === state.editSel;
     box.classList.toggle("selected", isSel);
     const existing = box.querySelector(".ed-handle");
-    if (isSel && !existing) {
-      const o = state.editObjects.find((x) => x.index === state.editSel);
+    const o = state.editObjects.find((x) => x.index === Number(box.dataset.index));
+    const resizable = o && (o.kind === "image" || o.kind === "form");
+    if (isSel && resizable && !existing) {
       const h = document.createElement("div");
       h.className = "ed-handle";
       h.addEventListener("mousedown", (e) => onEditResizeMouseDown(e, o));
       box.appendChild(h);
-    } else if (!isSel && existing) {
+    } else if ((!isSel || !resizable) && existing) {
       existing.remove();
     }
   });
 }
 
-function selectEditObject(index) {
+// Chọn 1 khung. `runIndices`: mọi run thuộc khung (dòng text = nhiều run) —
+// thao tác xoá/kéo/đổi thuộc tính áp cho TẤT CẢ.
+function selectEditObject(index, runIndices) {
   state.editSel = index != null && index >= 0 ? index : null;
+  state.editSelRuns = state.editSel != null ? (runIndices || [state.editSel]) : [];
   const o = state.editObjects.find((x) => x.index === state.editSel);
   const isText = o && o.kind === "text";
   const isImage = o && o.kind === "image";
@@ -2315,36 +2337,6 @@ function cssFontStack(family) {
   return `"${family}", ${generic}`;
 }
 
-// Gom các text run CÙNG DÒNG với `o` (baseline xấp xỉ, liền kề theo chiều
-// ngang) — PDF hay cắt 1 dòng nhìn thấy thành nhiều run; Foxit cho sửa cả
-// dòng nên ta cũng vậy. Trả về mảng run đã xếp trái→phải (luôn chứa `o`).
-function sameLineRuns(o) {
-  const fs = o.font_size || 12;
-  const tol = Math.max(1.5, fs * 0.25);
-  const cands = state.editObjects
-    .filter(
-      (x) =>
-        x.kind === "text" &&
-        Math.abs(x.rect.bottom - o.rect.bottom) <= tol &&
-        (x.font_size || 12) <= fs * 2.2 &&
-        (x.font_size || 12) >= fs / 2.2
-    )
-    .sort((a, b) => a.rect.left - b.rect.left);
-  const i0 = cands.findIndex((x) => x.index === o.index);
-  if (i0 < 0) return [o];
-  const gapMax = Math.max(fs * 1.2, 6); // hở quá 1.2em coi như cột khác
-  const runs = [cands[i0]];
-  for (let i = i0 - 1; i >= 0; i--) {
-    if (runs[0].rect.left - cands[i].rect.right <= gapMax) runs.unshift(cands[i]);
-    else break;
-  }
-  for (let i = i0 + 1; i < cands.length; i++) {
-    if (cands[i].rect.left - runs[runs.length - 1].rect.right <= gapMax) runs.push(cands[i]);
-    else break;
-  }
-  return runs;
-}
-
 // Ghép nội dung 1 dòng từ các run: chèn khoảng trắng khi 2 run hở nhau rõ.
 function composeLineText(runs) {
   let s = "";
@@ -2360,86 +2352,137 @@ function composeLineText(runs) {
   return s;
 }
 
-// Gom ĐOẠN VĂN nhiều dòng quanh run `o` (iteration 3): các dòng baseline cách
-// đều (±25%), cỡ chữ tương đồng, giao nhau theo chiều ngang. Trả về mảng dòng
-// trên→dưới, mỗi dòng = mảng run trái→phải.
-function paragraphLines(o) {
-  const fs = o.font_size || 12;
-  const boundsOf = (runs) => ({
-    left: Math.min(...runs.map((r) => r.rect.left)),
-    right: Math.max(...runs.map((r) => r.rect.right)),
-    bottom: runs[0].rect.bottom,
-  });
-  const overlaps = (a, b) =>
-    Math.min(a.right, b.right) - Math.max(a.left, b.left) >
-    0.3 * Math.min(a.right - a.left, b.right - b.left);
+// Gom TOÀN BỘ text run của trang thành các DÒNG thị giác. PDF từ Word hay cắt
+// 1 dòng thành run theo TỪNG TỪ/KÝ TỰ xen run rỗng, bbox chữ có dấu (Ạ, Ợ)
+// tụt thấp hơn hẳn — nên cluster theo GIAO DỌC (≥50% chiều cao nhỏ hơn) thay
+// vì so baseline, rồi tách cột theo khoảng hở ngang lớn. Trả mảng dòng
+// {runs (trái→phải, gồm cả run rỗng trong tầm), rect (union), fs (cỡ lớn nhất)}.
+function clusterTextLines(objs) {
+  const texts = objs.filter((o) => o.kind === "text");
+  const real = texts.filter((o) => o.rect.top - o.rect.bottom > 0.5 && o.rect.right - o.rect.left > 0.1);
+  const degenerate = texts.filter((o) => !real.includes(o)); // run rỗng/điểm
 
-  const base = sameLineRuns(o);
-  const used = new Set(base.map((r) => r.index));
-  const lines = [base];
-  const cands = state.editObjects.filter(
-    (x) =>
-      x.kind === "text" &&
-      !used.has(x.index) &&
-      (x.font_size || 12) <= fs * 1.6 &&
-      (x.font_size || 12) >= fs / 1.6
-  );
-  let advance = null; // khoảng baseline đã chốt của đoạn
-
-  const extend = (dir) => {
-    // dir = -1: mở rộng XUỐNG (bottom giảm); +1: mở rộng LÊN.
-    for (;;) {
-      const edge = dir < 0 ? lines[lines.length - 1] : lines[0];
-      const eb = boundsOf(edge);
-      let best = null;
-      let bestGap = Infinity;
-      for (const r of cands) {
-        if (used.has(r.index)) continue;
-        const gap = dir < 0 ? eb.bottom - r.rect.bottom : r.rect.bottom - eb.bottom;
-        if (gap < fs * 0.6 || gap > fs * 2.6) continue; // quá sát/quá xa = không cùng đoạn
-        if (advance && (gap < advance * 0.75 || gap > advance * 1.25)) continue;
-        const line = sameLineRuns(r);
-        if (!overlaps(eb, boundsOf(line))) continue;
-        if (gap < bestGap) {
-          bestGap = gap;
-          best = line;
-        }
-      }
-      if (!best) break;
-      best.forEach((r) => used.add(r.index));
-      if (dir < 0) lines.push(best);
-      else lines.unshift(best);
-      if (advance == null) advance = bestGap;
+  // (1) Cụm theo giao dọc.
+  const bands = [];
+  for (const r of real.slice().sort((a, b) => b.rect.bottom - a.rect.bottom)) {
+    const h = r.rect.top - r.rect.bottom;
+    const band = bands.find((bd) => {
+      const ov = Math.min(bd.top, r.rect.top) - Math.max(bd.bottom, r.rect.bottom);
+      return ov > 0.5 * Math.min(bd.top - bd.bottom, h);
+    });
+    if (band) {
+      band.runs.push(r);
+      band.top = Math.max(band.top, r.rect.top);
+      band.bottom = Math.min(band.bottom, r.rect.bottom);
+    } else {
+      bands.push({ top: r.rect.top, bottom: r.rect.bottom, runs: [r] });
     }
-  };
-  extend(-1);
-  extend(+1);
+  }
+
+  // (2) Trong mỗi cụm dọc: xếp trái→phải, tách dòng/cột khi hở quá lớn.
+  const lines = [];
+  for (const band of bands) {
+    band.runs.sort((a, b) => a.rect.left - b.rect.left);
+    let cur = null;
+    for (const r of band.runs) {
+      const fs = r.font_size || 12;
+      const gapMax = Math.max(fs * 1.7, 10);
+      if (cur && r.rect.left - cur.rect.right <= gapMax) {
+        cur.runs.push(r);
+        cur.rect.right = Math.max(cur.rect.right, r.rect.right);
+        cur.rect.top = Math.max(cur.rect.top, r.rect.top);
+        cur.rect.bottom = Math.min(cur.rect.bottom, r.rect.bottom);
+        cur.fs = Math.max(cur.fs, fs);
+      } else {
+        cur = { runs: [r], fs, rect: { left: r.rect.left, right: r.rect.right, top: r.rect.top, bottom: r.rect.bottom } };
+        lines.push(cur);
+      }
+    }
+  }
+
+  // (3) Gắn run rỗng vào dòng chứa nó (để khi sửa xoá sạch, không sót).
+  for (const d of degenerate) {
+    const line = lines.find(
+      (l) =>
+        d.rect.bottom >= l.rect.bottom - 3 &&
+        d.rect.bottom <= l.rect.top + 3 &&
+        d.rect.left >= l.rect.left - 6 &&
+        d.rect.left <= l.rect.right + 6
+    );
+    if (line) line.runs.push(d);
+  }
+  for (const l of lines) l.runs.sort((a, b) => a.rect.left - b.rect.left);
   return lines;
 }
 
-// Double-click: đoạn ≥2 dòng → sửa CẢ ĐOẠN với reflow; 1 dòng → sửa dòng.
-function startTextEdit(o) {
-  const lines = paragraphLines(o);
-  if (lines.length >= 2) startBlockTextEdit(o, lines);
-  else startInlineTextEdit(o);
+// Gom ĐOẠN VĂN nhiều dòng quanh run `o`: các dòng kề nhau theo chiều dọc
+// (khoảng hở ≤ 1.3× chiều cao dòng), giao ngang ≥30%, cỡ chữ tương đồng
+// (≤1.8× — tiêu đề 2 dòng 22.5/20pt vẫn là 1 đoạn). Trả mảng dòng trên→dưới.
+function paragraphLines(o) {
+  const all = clusterTextLines(state.editObjects);
+  const mine = all.find((l) => l.runs.some((r) => r.index === o.index));
+  if (!mine) return [ { runs: [o], fs: o.font_size || 12, rect: { ...o.rect } } ];
+
+  const hOf = (l) => Math.max(1, l.rect.top - l.rect.bottom);
+  const overlaps = (a, b) =>
+    Math.min(a.rect.right, b.rect.right) - Math.max(a.rect.left, b.rect.left) >
+    0.3 * Math.min(a.rect.right - a.rect.left, b.rect.right - b.rect.left);
+  const sizeOk = (a, b) => {
+    const r = a.fs / b.fs;
+    return r <= 1.8 && r >= 1 / 1.8;
+  };
+
+  const sorted = all.slice().sort((a, b) => b.rect.bottom - a.rect.bottom); // trên→dưới
+  const iMine = sorted.indexOf(mine);
+  const block = [mine];
+  let advance = null;
+  // Mở rộng XUỐNG rồi LÊN, khoá nhịp khoảng cách dòng ±35% sau lần đầu.
+  const tryDir = (step) => {
+    let edge = mine;
+    for (let i = iMine + step; i >= 0 && i < sorted.length; i += step) {
+      const cand = sorted[i];
+      const gap = step > 0 ? edge.rect.bottom - cand.rect.top : cand.rect.bottom - edge.rect.top;
+      const maxGap = 1.3 * Math.max(hOf(edge), hOf(cand));
+      if (gap < -3 || gap > maxGap) break;
+      if (!overlaps(edge, cand) || !sizeOk(edge, cand)) break;
+      const adv = Math.abs(edge.rect.bottom - cand.rect.bottom);
+      if (advance && (adv < advance * 0.65 || adv > advance * 1.35)) break;
+      if (advance == null) advance = adv;
+      if (step > 0) block.push(cand);
+      else block.unshift(cand);
+      edge = cand;
+    }
+  };
+  tryDir(+1);
+  tryDir(-1);
+  return block.map((l) => l); // mỗi phần tử: {runs, fs, rect}
 }
 
-// Sửa cả đoạn "như Word" (Foxit Edit Text): textarea phủ khối, gõ tự chảy
-// dòng; commit → engine reflow (bẻ dòng lại theo bề rộng khối, giữ font).
+// Double-click vào chữ: LUÔN mở ô sửa CẢ ĐOẠN (kể cả đoạn 1 dòng) — một
+// đường code duy nhất, giữ nguyên cấu trúc xuống dòng, commit qua reflow.
+function startTextEdit(o) {
+  startBlockTextEdit(o, paragraphLines(o));
+}
+
+// Sửa cả đoạn "như Word" (Foxit Edit Text): textarea phủ kín khối (che chữ
+// cũ bên dưới), MỖI DÒNG GỐC = 1 dòng textarea (giữ xuống dòng — sửa được cả
+// vị trí ngắt dòng); click trong ô = di chuyển con trỏ; commit → engine
+// reflow: xoá SẠCH mọi run của khối (kể cả run sót — engine tự nở theo bbox),
+// giữ font + giữ căn giữa nếu khối gốc căn giữa.
 function startBlockTextEdit(o, lines) {
   const ov = $("editOverlay");
   const existing = ov.querySelector(".edit-inline");
   if (existing) existing.remove();
 
-  const allRuns = lines.flat();
+  const allRuns = lines.flatMap((l) => l.runs);
   const union = {
-    left: Math.min(...allRuns.map((r) => r.rect.left)),
-    right: Math.max(...allRuns.map((r) => r.rect.right)),
-    bottom: Math.min(...allRuns.map((r) => r.rect.bottom)),
-    top: Math.max(...allRuns.map((r) => r.rect.top)),
+    left: Math.min(...lines.map((l) => l.rect.left)),
+    right: Math.max(...lines.map((l) => l.rect.right)),
+    bottom: Math.min(...lines.map((l) => l.rect.bottom)),
+    top: Math.max(...lines.map((l) => l.rect.top)),
   };
-  // Đoạn = 1 dòng chảy; Enter của người dùng = ngắt cứng.
-  const original = lines.map(composeLineText).join(" ");
+  // Giữ đúng cấu trúc dòng gốc: mỗi dòng thị giác = 1 dòng trong ô sửa.
+  const original = lines.map((l) => composeLineText(l.runs)).join("\n");
 
   const ta = document.createElement("textarea");
   ta.className = "edit-inline edit-inline-block";
@@ -2447,11 +2490,14 @@ function startBlockTextEdit(o, lines) {
   Object.assign(ta.style, editBoxStyle(union));
   const advPt =
     lines.length > 1
-      ? lines[0][0].rect.bottom - lines[1][0].rect.bottom
+      ? Math.abs(lines[0].rect.bottom - lines[1].rect.bottom)
       : (o.font_size || 12) * 1.25;
   const advPx = Math.max(8, advPt * state.editScale);
-  // Chừa 2 dòng trống để gõ thêm.
-  ta.style.height = parseFloat(ta.style.height) + 2 * advPx + "px";
+  // Cao đủ số dòng + 1 dòng trống để gõ thêm; rộng thêm chút để gõ dài hơn.
+  ta.style.height = (lines.length + 1) * advPx + 6 + "px";
+  const p = state.pages[state.editPage];
+  const maxW = (p.widthPt - union.left) * state.editScale - 4;
+  ta.style.width = Math.min(maxW, parseFloat(ta.style.width) + 60) + "px";
   ta.style.lineHeight = advPx + "px";
   ta.style.fontSize = Math.max(8, (o.font_size || 12) * state.editScale) + "px";
   ta.style.fontFamily = cssFontStack(o.font_family);
@@ -2461,8 +2507,9 @@ function startBlockTextEdit(o, lines) {
   ov.appendChild(ta);
   ta.focus();
   ta.setSelectionRange(0, 0);
+  ta.scrollIntoView({ block: "center", behavior: "instant" });
   $("editHint").textContent =
-    "Sửa cả đoạn — Enter: xuống dòng cứng · Ctrl+Enter hoặc bấm ra ngoài: áp dụng · Esc: huỷ";
+    "Sửa cả đoạn — Enter: xuống dòng · Ctrl+Enter hoặc bấm ra ngoài: áp dụng · Esc: huỷ";
 
   let done = false;
   const commit = (save) => {
@@ -2485,102 +2532,44 @@ function startBlockTextEdit(o, lines) {
     else if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); commit(true); }
     e.stopPropagation();
   });
+  // Click/chọn chữ TRONG ô sửa không được lan xuống overlay (gây thoát edit).
+  ta.addEventListener("mousedown", (e) => e.stopPropagation());
+  ta.addEventListener("click", (e) => e.stopPropagation());
+  ta.addEventListener("dblclick", (e) => e.stopPropagation());
   ta.addEventListener("blur", () => commit(true));
 }
 
-// Sửa text tại chỗ kiểu Foxit: gộp cả dòng, ô sửa hiển thị đúng font/cỡ/màu,
-// Enter/blur commit — engine GIỮ FONT GỐC (chỉ thay khi thiếu glyph).
-function startInlineTextEdit(o) {
-  const ov = $("editOverlay");
-  const existing = ov.querySelector(".edit-inline");
-  if (existing) existing.remove();
-
-  const runs = sameLineRuns(o);
-  const original = composeLineText(runs);
-  const union = {
-    left: Math.min(...runs.map((r) => r.rect.left)),
-    right: Math.max(...runs.map((r) => r.rect.right)),
-    bottom: Math.min(...runs.map((r) => r.rect.bottom)),
-    top: Math.max(...runs.map((r) => r.rect.top)),
-  };
-
-  const inp = document.createElement("input");
-  inp.className = "edit-inline";
-  inp.value = original;
-  const st = editBoxStyle(union);
-  Object.assign(inp.style, st);
-  // Chừa chỗ gõ thêm về bên phải (không tràn khung trang).
-  const p = state.pages[state.editPage];
-  const maxW = (p.widthPt - union.left) * state.editScale - 4;
-  inp.style.width = Math.min(maxW, parseFloat(st.width) + 220) + "px";
-  // WYSIWYG khi gõ: đúng font/cỡ/màu/kiểu của run đầu.
-  inp.style.fontSize = Math.max(8, (o.font_size || 12) * state.editScale) + "px";
-  inp.style.fontFamily = cssFontStack(o.font_family);
-  inp.style.fontWeight = o.font_bold ? "bold" : "normal";
-  inp.style.fontStyle = o.font_italic ? "italic" : "normal";
-  if (o.color) inp.style.color = rgbCss(o.color);
-  ov.appendChild(inp);
-  inp.focus();
-  inp.select();
-
-  let done = false;
-  const commit = (save) => {
-    if (done) return;
-    done = true;
-    const text = inp.value;
-    inp.remove();
-    if (save && text !== original) {
-      // Run đầu nhận toàn bộ text mới (giữ font/cỡ/màu gốc — mọi field null),
-      // các run còn lại của dòng bị xoá.
-      const ops = [
-        {
-          op: "setText",
-          index: runs[0].index,
-          text,
-          fontSize: null,
-          color: null,
-          fontFamily: null,
-          bold: null,
-          italic: null,
-        },
-        ...runs.slice(1).map((r) => ({ op: "delete", index: r.index })),
-      ];
-      stageEditOps(ops);
-    }
-  };
-  inp.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); commit(true); }
-    else if (e.key === "Escape") { e.preventDefault(); commit(false); }
-    e.stopPropagation();
-  });
-  inp.addEventListener("blur", () => commit(true));
-}
-
-// Đổi thuộc tính chữ cho run đang chọn. `part` chỉ chứa field muốn đổi —
-// mọi field khác gửi null = GIỮ NGUYÊN (engine không đụng font khi không cần).
+// Đổi thuộc tính chữ cho CẢ DÒNG đang chọn: setText từng run (giữ nội dung
+// từng run), `part` chỉ chứa field muốn đổi — field khác null = GIỮ NGUYÊN.
 function applyTextPropToSelected(part) {
-  const o = state.editObjects.find((x) => x.index === state.editSel);
-  if (!o || o.kind !== "text") return;
-  stageEditOp({
-    op: "setText",
-    index: o.index,
-    text: o.text || "",
-    fontSize: null,
-    color: null,
-    fontFamily: null,
-    bold: null,
-    italic: null,
-    ...part,
-  });
+  const runs = state.editSelRuns
+    .map((i) => state.editObjects.find((x) => x.index === i))
+    .filter((x) => x && x.kind === "text");
+  if (!runs.length) return;
+  stageEditOps(
+    runs.map((r) => ({
+      op: "setText",
+      index: r.index,
+      text: r.text || "",
+      fontSize: null,
+      color: null,
+      fontFamily: null,
+      bold: null,
+      italic: null,
+      ...part,
+    }))
+  );
 }
 
 function deleteSelectedEditObject() {
-  if (state.editSel == null) return;
-  stageEditOp({ op: "delete", index: state.editSel });
+  if (!state.editSelRuns.length) return;
+  stageEditOps(state.editSelRuns.map((i) => ({ op: "delete", index: i })));
 }
 
 // Click lên trang khi đang "armed" để đặt chữ/ảnh mới.
 function onEditStageClick(e) {
+  // Click vào ô sửa đang mở (di chuyển con trỏ) — không được đụng overlay.
+  if (e.target.closest && e.target.closest(".edit-inline")) return;
   if (!state.editArm) { selectEditObject(-1); state.editSel = null; buildEditOverlay(); return; }
   const img = $("editImg");
   const r = img.getBoundingClientRect();
@@ -2645,12 +2634,13 @@ function promptAddText(pdfX, pdfY) {
   inp.addEventListener("blur", () => commit(true));
 }
 
-// Kéo để di chuyển object đang chọn — box đi theo con trỏ NGAY (live feedback
-// như Foxit), thả chuột mới commit vào engine.
-function onEditBoxMouseDown(e, o) {
+// Kéo để di chuyển khung đang chọn (dòng text = kéo CẢ DÒNG) — box đi theo
+// con trỏ NGAY (live feedback như Foxit), thả chuột mới commit vào engine.
+function onEditBoxMouseDown(e, o, runs) {
   if (state.editArm) return;
   if (e.target.classList.contains("ed-handle")) return;
-  selectEditObject(o.index);
+  const runIndices = (runs && runs.length ? runs : [o]).map((r) => (typeof r === "number" ? r : r.index));
+  selectEditObject(o.index, runIndices);
   const box = e.currentTarget;
   const startX = e.clientX, startY = e.clientY;
   const left0 = parseFloat(box.style.left), top0 = parseFloat(box.style.top);
@@ -2673,7 +2663,7 @@ function onEditBoxMouseDown(e, o) {
     if (!moved) return;
     const dx = (ev.clientX - startX) / state.editScale;
     const dy = -(ev.clientY - startY) / state.editScale; // CSS y xuống = PDF y giảm
-    stageEditOp({ op: "transform", index: o.index, dx, dy, sx: 1, sy: 1 });
+    stageEditOps(runIndices.map((i) => ({ op: "transform", index: i, dx, dy, sx: 1, sy: 1 })));
   };
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);
@@ -3453,6 +3443,18 @@ $("edColorBtn").addEventListener("click", () => {
 });
 $("edSave").addEventListener("click", saveEdits);
 $("editOverlay").addEventListener("click", onEditStageClick);
+// Đúp vào KHE giữa các khung (PDF cắt run rời rạc) vẫn mở ô sửa tại chữ gần đó.
+$("editOverlay").addEventListener("dblclick", (e) => {
+  if (state.editArm) return;
+  if (e.target.closest && e.target.closest(".edit-inline")) return;
+  const img = $("editImg");
+  const r = img.getBoundingClientRect();
+  const p = state.pages[state.editPage];
+  const x = (e.clientX - r.left) / state.editScale;
+  const y = p.heightPt - (e.clientY - r.top) / state.editScale;
+  const hit = pickTextAt(state.editObjects, x, y);
+  if (hit) startTextEdit(hit);
+});
 
 // Phím tắt chuẩn của trình xem PDF (Foxit/Adobe): điều hướng trang, zoom,
 // tìm kiếm, xoá/bỏ chọn annotation.
