@@ -1,0 +1,79 @@
+name: Build Windows portable
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "crates/**"
+      - "Cargo.lock"
+      - "scripts/fetch-pdfium.ps1"
+      - "scripts/fetch-qpdf.ps1"
+      - ".github/workflows/build-windows.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Fetch PDFium (Windows x64)
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/fetch-pdfium.ps1
+
+      - name: Fetch QPDF (Windows x64)
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/fetch-qpdf.ps1
+
+      - name: Build release
+        working-directory: app/src-tauri
+        run: cargo build --release
+
+      - name: Assemble portable folder
+        shell: pwsh
+        run: |
+          $dist = "dist/FoFreeXit"
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          Copy-Item "app/src-tauri/target/release/fofreexit-app.exe" "$dist/FoFreeXit.exe"
+          Copy-Item "pdfium.dll" "$dist/pdfium.dll"
+          Copy-Item "qpdf/bin/*.exe" "$dist/"
+          Copy-Item "qpdf/bin/*.dll" "$dist/"
+          Copy-Item "scripts/portable-readme.txt" "$dist/DOC-doc-truoc-khi-chay.txt"
+          Compress-Archive -Path "$dist/*" -DestinationPath "FoFreeXit-portable-win64.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FoFreeXit-portable-win64
+          path: FoFreeXit-portable-win64.zip
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: win-build-${{ github.run_number }}
+          name: "FoFreeXit Windows portable (build ${{ github.run_number }})"
+          body: |
+            Ban build Windows portable tu dong (khong can cai Rust/Visual Studio).
+            Giai nen `FoFreeXit-portable-win64.zip` roi chay `FoFreeXit.exe`.
+            Commit: ${{ github.sha }}
+          files: FoFreeXit-portable-win64.zip
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
