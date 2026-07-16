@@ -107,7 +107,14 @@ async function loadDocument(path) {
     updateCurrentPage();
     updateZoomLabel();
 
-    state.pagePlan = await invoke("organize_identity_plan", { path: state.path, password: null }).catch(() => []);
+    // Khởi tạo plan mặc định ngay (tất cả trang theo thứ tự gốc).
+    // Load plan thực tế ở background để không block UI khi mở file.
+    state.pagePlan = state.pages.map((p) => ({ page: p.index, rotate: 0 }));
+    invoke("organize_identity_plan", { path: state.path, password: null })
+      .then((plan) => {
+        state.pagePlan = plan;
+      })
+      .catch(() => {});
     state.orgSelected = new Set();
     state.orgAnchor = null;
     state.orgThumbs = new Map();
@@ -2525,24 +2532,41 @@ function startBlockTextEdit(o, lines, ev) {
   // còn bbox PDF ôm sát glyph → đẩy khung lên (advPx − cỡ chữ)/2 cho trùng.
   const fs0 = (lines[0].fs || o.font_size || 12) * s;
   const topPx = Math.max(0, (p.heightPt - union.top) * s - Math.max(0, (advPx - fs0) / 2));
+  // Tính advance cho TỪNG DÒNG dựa trên vị trí gốc trong PDF để giữ layout.
+  const perLineAdvances = [];
+  for (let i = 0; i < lines.length; i++) {
+    let linAdvPx;
+    if (i < lines.length - 1) {
+      // Advance = khoảng cách giữa dòng này và dòng tiếp theo (giữ nguyên từ PDF).
+      const gap = lines[i].rect.bottom - lines[i + 1].rect.top;
+      linAdvPx = Math.max(8, gap * s);
+    } else {
+      // Dòng cuối: dùng cỡ chữ × 1.25.
+      linAdvPx = Math.max(8, (lines[i].fs || 12) * s * 1.25);
+    }
+    perLineAdvances.push(linAdvPx);
+  }
+  const totalHeightPx = perLineAdvances.reduce((a, b) => a + b, 0);
+
   Object.assign(ce.style, {
     left: leftPt * s + "px",
     top: topPx + "px",
     width: widthPt * s + "px",
-    minHeight: lines.length * advPx + 4 + "px",
+    minHeight: totalHeightPx + 4 + "px",
     textAlign: centered ? "center" : "left",
   });
 
-  // MỖI DÒNG 1 div với đúng cỡ/màu/kiểu của dòng đó (WYSIWYG khi gõ).
-  for (const l of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
     const rep = l.runs.find((r) => (r.text || "").trim()) || l.runs[0] || o;
     const div = document.createElement("div");
     div.className = "edit-line";
     const t = composeLineText(l.runs);
     if (t) div.textContent = t;
     else div.innerHTML = "<br>";
-    div.style.fontSize = Math.max(6, (l.fs || 12) * s) + "px";
-    div.style.lineHeight = advPx + "px";
+    const divFs = Math.max(6, (l.fs || 12) * s);
+    div.style.fontSize = divFs + "px";
+    div.style.lineHeight = perLineAdvances[i] + "px";
     div.style.fontFamily = cssFontStack(rep.font_family || o.font_family);
     div.style.fontWeight = (rep.font_bold != null ? rep.font_bold : o.font_bold) ? "bold" : "normal";
     div.style.fontStyle = (rep.font_italic != null ? rep.font_italic : o.font_italic) ? "italic" : "normal";
