@@ -37,6 +37,7 @@ const state = {
   editScale: 1,           // px/pt của ảnh stage
   editArm: null,          // 'text' | 'image' khi đang chờ click đặt; null = không
   editPendingImage: null, // đường dẫn ảnh chờ đặt (Thêm ảnh)
+  editPendingPoint: null, // điểm PDF chờ mở ô sửa (đúp chuột từ viewer thường)
   editColor: [0, 0, 0],   // màu chữ áp khi sửa/thêm text
   editTemps: [],          // mọi file tạm đã materialize trong phiên sửa (để dọn)
   secMode: false,         // thanh Bảo mật (Phase 5) đang mở
@@ -2033,11 +2034,11 @@ function openCropDialog(pageIdx, rectPdf) {
 
 const EDIT_STAGE_W = 820; // px bề rộng ảnh trang khi sửa
 
-function enterEditMode() {
+function enterEditMode(pageIndex) {
   if (!state.path) { $("status").textContent = "Hãy mở file trước khi sửa nội dung"; return; }
   if (state.organizeMode) exitOrganizeMode();
   state.editMode = true;
-  state.editPage = state.current;
+  state.editPage = Number.isInteger(pageIndex) ? pageIndex : state.current;
   state.editBase = state.path;
   state.editUndo = [];
   state.editRedo = [];
@@ -2079,6 +2080,34 @@ function toggleEditMode() {
   else enterEditMode();
 }
 
+// Đúp chuột vào CHỮ trên viewer thường (chuẩn Foxit Editor): tự vào chế độ
+// Sửa nội dung đúng trang + mở ngay ô sửa tại đoạn vừa đúp. Đúp vùng trống
+// hoặc đang cầm công cụ chú thích thì không làm gì.
+async function onViewerDblClick(e) {
+  if (state.editMode || state.organizeMode || state.tool) return;
+  // Chú thích có handler đúp riêng (freetext) hoặc là element tương tác — bỏ qua.
+  if (e.target.closest(".a-editor, .a-hl, .a-box, .a-text, .a-note, .redact-mark")) return;
+  const slot = e.target.closest(".page-slot");
+  if (!slot) return;
+  const idx = Number(slot.dataset.index);
+  const r = slot.getBoundingClientRect();
+  const p = cssToPdf(idx, e.clientX - r.left, e.clientY - r.top);
+
+  let objs;
+  try {
+    objs = await invoke("edit_list_objects", { path: state.path, page: idx, password: null });
+  } catch (_) {
+    return; // trang không đọc được object → giữ nguyên viewer
+  }
+  if (!pickTextAt(objs, p.x, p.y)) return; // đúp vùng trống: như Foxit, không làm gì
+
+  // Bỏ selection từ đúp chuột (browser tự bôi 1 từ trong text layer).
+  const sel = window.getSelection();
+  if (sel) sel.removeAllRanges();
+  state.editPendingPoint = { x: p.x, y: p.y };
+  enterEditMode(idx);
+}
+
 // Đọc lại object + render ảnh trang hiện tại từ editBase, dựng overlay box.
 async function loadEditPage() {
   const p = state.pages[state.editPage];
@@ -2097,6 +2126,44 @@ async function loadEditPage() {
   }
   $("edSave").disabled = state.editBase === state.path; // chưa có thay đổi nào
   updateEditUndoButtons();
+
+  // Đúp chuột từ viewer thường (kiểu Foxit): vào thẳng ô sửa tại điểm đã đúp.
+  const pending = state.editPendingPoint;
+  if (pending) {
+    state.editPendingPoint = null;
+    const o = pickTextAt(state.editObjects, pending.x, pending.y);
+    if (o) {
+      selectEditObject(o.index);
+      startTextEdit(o);
+    }
+  }
+}
+
+// Text object dưới điểm (x,y) điểm PDF: ưu tiên box CHỨA điểm (nới 3pt, chọn
+// box nhỏ nhất khi chồng nhau), fallback box gần nhất trong 12pt.
+function pickTextAt(objs, x, y) {
+  const texts = objs.filter((o) => o.kind === "text");
+  const pad = 3;
+  const containing = texts.filter(
+    (o) => x >= o.rect.left - pad && x <= o.rect.right + pad && y >= o.rect.bottom - pad && y <= o.rect.top + pad
+  );
+  if (containing.length) {
+    containing.sort(
+      (a, b) =>
+        (a.rect.right - a.rect.left) * (a.rect.top - a.rect.bottom) -
+        (b.rect.right - b.rect.left) * (b.rect.top - b.rect.bottom)
+    );
+    return containing[0];
+  }
+  let best = null;
+  let bestD = 12;
+  for (const o of texts) {
+    const dx = Math.max(o.rect.left - x, 0, x - o.rect.right);
+    const dy = Math.max(o.rect.bottom - y, 0, y - o.rect.top);
+    const d = Math.hypot(dx, dy);
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  return best;
 }
 
 function editBoxStyle(rect) {
@@ -3299,6 +3366,7 @@ $("saveAnnots").addEventListener("click", saveAnnots);
 $("undoBtn").addEventListener("click", () => (state.editMode ? editUndo() : undo()));
 $("redoBtn").addEventListener("click", () => (state.editMode ? editRedo() : redo()));
 $("pages").addEventListener("mousedown", onPagesMouseDown);
+$("pages").addEventListener("dblclick", onViewerDblClick);
 window.addEventListener("mousemove", onPagesMouseMove);
 window.addEventListener("mouseup", onPagesMouseUp);
 
