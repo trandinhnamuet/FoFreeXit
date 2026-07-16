@@ -54,7 +54,13 @@
   - [x] UI thanh "📝 Form": Điền form (modal liệt kê field theo loại), Thêm field, Flatten, Xuất FDF/CSV, Nhập FDF
   - [ ] Follow-up: radio-group/list/pushbutton khi tạo, XFDF, vẽ appearance riêng, điền overlay trực tiếp trên trang — xem [docs/17-phase6-summary.md](docs/17-phase6-summary.md)
   - **Checklist test cho bạn**: [docs/18-phase6-user-tests.md](docs/18-phase6-user-tests.md)
-- [ ] **Phase 7 — OCR & Convert** (kế tiếp) — xem [docs/03-roadmap.md](docs/03-roadmap.md)
+- [x] **Phase 7 — OCR & Convert** ✅ lõi hoàn tất (73/73 test engine xanh)
+  - [x] Engine `ocr.rs`: OCR Tesseract (sidecar, **Việt + Anh**) → lớp text ẨN khớp toạ độ trên trang gốc (searchable/copy được, ảnh không đổi) — test dựng PDF-scan giả lập thật
+  - [x] Engine `convert.rs`: PDF→PNG (theo DPI), PDF→TXT, PDF→DOCX tự viết (dòng thị giác + cỡ chữ, zip tự ghi); Office↔PDF qua LibreOffice headless (tự phát hiện, fallback rõ ràng)
+  - [x] UI thanh "🔁 Chuyển đổi": OCR (chọn ngôn ngữ), Xuất PNG/TXT/Word (tự chọn engine), Office→PDF; báo thiếu công cụ ngoài
+  - [ ] Follow-up: tiền xử lý ảnh scan (deskew), OCR theo vùng, PDF→Excel — xem [docs/19-phase7-summary.md](docs/19-phase7-summary.md)
+  - **Checklist test cho bạn**: [docs/20-phase7-user-tests.md](docs/20-phase7-user-tests.md)
+- [ ] **Phase 8 — Hoàn thiện & Phát hành** (kế tiếp) — xem [docs/03-roadmap.md](docs/03-roadmap.md)
 
 Build & chạy: xem [docs/05-dev-setup.md](docs/05-dev-setup.md).
 

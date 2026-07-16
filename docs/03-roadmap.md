@@ -56,11 +56,11 @@ Một ứng dụng desktop có thể **xem, chú thích, tổ chức trang, và 
 - [x] Tạo field: text/checkbox/combo (radio-group/list/pushbutton: follow-up); import/export dữ liệu FDF + export CSV.
 **DoD:** ✅ điền & lưu giữ dữ liệu (gồm tiếng Việt); tạo form mới; export/import FDF round-trip. Follow-up: XFDF, radio-group/list/pushbutton khi tạo.
 
-## Phase 7 — OCR & Convert
+## Phase 7 — OCR & Convert ✅ HOÀN TẤT lõi (73/73 test — xem [docs/19-phase7-summary.md](19-phase7-summary.md))
 **Mục tiêu:** Hai tính năng "đáng tiền" còn lại, qua dự án mở.
-- **OCR**: Tesseract + tiền xử lý ảnh + layout → tạo searchable PDF (lớp text vô hình khớp toạ độ). Đa ngôn ngữ gồm tiếng Việt.
-- **Convert**: PDF→ảnh (sẵn từ PDFium); Office↔PDF qua **LibreOffice headless**; PDF→Word/Excel (giữ layout — bài toán khó, làm bản "đủ dùng" trước).
-**DoD:** OCR scan tạo PDF search được (Việt + Anh); convert Office↔PDF ổn; PDF→Word giữ được text & bố cục cơ bản.
+- [x] **OCR**: Tesseract → searchable PDF (lớp text vô hình khớp toạ độ trên trang GỐC). Việt + Anh, test đúng dấu. (Tiền xử lý ảnh deskew/denoise: follow-up.)
+- [x] **Convert**: PDF→ảnh PNG; Office↔PDF qua **LibreOffice headless**; PDF→Word bản "đủ dùng" tự viết (text + bố cục cơ bản) + bản LibreOffice khi có; PDF→TXT. (PDF→Excel: follow-up.)
+**DoD:** ✅ OCR scan search được (Việt + Anh, kiểm toạ độ); ✅ Office↔PDF round-trip; ✅ PDF→Word giữ text & bố cục cơ bản.
 
 ## Phase 8 — Hoàn thiện & Phát hành
 - So sánh 2 PDF (compare); in ấn đúng; preferences; đa ngôn ngữ UI (Việt/Anh); accessibility.

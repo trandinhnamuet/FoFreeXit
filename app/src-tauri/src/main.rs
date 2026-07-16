@@ -1160,6 +1160,110 @@ fn form_import_fdf(input: String, fdf: String, output: String) -> Result<usize, 
     r
 }
 
+// ---------- Phase 7: OCR & Chuyển đổi ----------
+
+/// OCR toàn bộ tài liệu (Tesseract) → thêm lớp text ẩn, trả số từ nhận dạng.
+#[tauri::command]
+fn ocr_run(input: String, lang: String, output: String) -> Result<usize, String> {
+    let pdfium = pdfium()?;
+    ff_engine::ocr_add_text_layer(
+        &pdfium,
+        std::path::Path::new(&input),
+        &[],
+        &lang,
+        std::path::Path::new(&output),
+        None,
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// PDF → PNG mỗi trang theo DPI, trả danh sách file.
+#[tauri::command]
+fn convert_images(input: String, out_dir: String, dpi: f32) -> Result<Vec<String>, String> {
+    let pdfium = pdfium()?;
+    ff_engine::export_images(
+        &pdfium,
+        std::path::Path::new(&input),
+        std::path::Path::new(&out_dir),
+        dpi.clamp(36.0, 600.0),
+        None,
+    )
+    .map(|v| v.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+    .map_err(|e| e.to_string())
+}
+
+/// PDF → TXT.
+#[tauri::command]
+fn convert_txt(input: String, output: String) -> Result<(), String> {
+    let pdfium = pdfium()?;
+    ff_engine::export_text(&pdfium, std::path::Path::new(&input), std::path::Path::new(&output), None)
+        .map_err(|e| e.to_string())
+}
+
+/// PDF → DOCX. Ưu tiên LibreOffice (layout tốt hơn) nếu máy có; không có thì
+/// dùng bộ chuyển tự viết (text + bố cục cơ bản). Trả tên engine đã dùng.
+#[tauri::command]
+fn convert_docx(input: String, output: String) -> Result<String, String> {
+    let inp = std::path::Path::new(&input);
+    let out = std::path::PathBuf::from(&output);
+    if ff_engine::find_soffice().is_ok() {
+        let dir = out.parent().map(|p| p.to_path_buf()).unwrap_or_else(std::env::temp_dir);
+        match ff_engine::pdf_to_docx_via_soffice(inp, &dir) {
+            Ok(produced) => {
+                if produced != out {
+                    std::fs::rename(&produced, &out)
+                        .or_else(|_| std::fs::copy(&produced, &out).map(|_| ()))
+                        .map_err(|e| e.to_string())?;
+                    let _ = std::fs::remove_file(&produced);
+                }
+                return Ok("libreoffice".into());
+            }
+            Err(_) => { /* rơi xuống bộ tự viết */ }
+        }
+    }
+    let pdfium = pdfium()?;
+    ff_engine::export_docx(&pdfium, inp, &out, None).map_err(|e| e.to_string())?;
+    Ok("basic".into())
+}
+
+/// Office (docx/xlsx/pptx/odt...) → PDF qua LibreOffice. Trả đường dẫn PDF.
+#[tauri::command]
+fn office_convert(input: String, out_dir: String) -> Result<String, String> {
+    ff_engine::office_to_pdf(std::path::Path::new(&input), std::path::Path::new(&out_dir))
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| e.to_string())
+}
+
+/// Kiểm tra công cụ ngoài (cho UI hiện trạng thái).
+#[tauri::command]
+fn convert_tools_status() -> serde_json::Value {
+    serde_json::json!({
+        "tesseract": ff_engine::find_tesseract().is_ok(),
+        "soffice": ff_engine::find_soffice().is_ok(),
+    })
+}
+
+/// Hộp thoại chọn file Office để chuyển sang PDF.
+#[tauri::command]
+fn pick_office_file(app: tauri::AppHandle) -> Option<String> {
+    app.dialog()
+        .file()
+        .add_filter("Tài liệu Office", &["docx", "doc", "xlsx", "xls", "pptx", "ppt", "odt", "ods", "odp", "rtf"])
+        .blocking_pick_file()
+        .map(|fp| fp.to_string())
+}
+
+/// Hộp thoại lưu file theo đuôi tuỳ ý.
+#[tauri::command]
+fn pick_save_as(app: tauri::AppHandle, ext: String, name: String) -> Option<String> {
+    app.dialog()
+        .file()
+        .add_filter(ext.to_uppercase(), &[ext.as_str()])
+        .set_file_name(&name)
+        .blocking_save_file()
+        .map(|fp| fp.to_string())
+}
+
 /// Hộp thoại lưu file FDF.
 #[tauri::command]
 fn pick_save_data(app: tauri::AppHandle) -> Option<String> {
@@ -1266,6 +1370,14 @@ fn main() {
             form_create,
             form_export,
             form_import_fdf,
+            ocr_run,
+            convert_images,
+            convert_txt,
+            convert_docx,
+            office_convert,
+            convert_tools_status,
+            pick_office_file,
+            pick_save_as,
             pick_any_file,
             pick_save_pem,
             pick_save_data,

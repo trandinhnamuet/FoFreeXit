@@ -43,6 +43,7 @@ const state = {
   redactMarks: [],        // [{page, rect{left,bottom,right,top}}] chờ áp dụng
   formMode: false,        // thanh Form (Phase 6) đang mở
   formFields: [],         // field đọc từ tài liệu hiện tại
+  convMode: false,        // thanh Chuyển đổi (Phase 7) đang mở
 };
 const UNDO_LIMIT = 50;
 let annotIdSeq = 1;
@@ -2678,6 +2679,98 @@ async function saveEdits() {
   }
 }
 
+// ---------- Phase 7: OCR & Chuyển đổi ----------
+
+async function toggleConvMode() {
+  state.convMode = !state.convMode;
+  $("convBar").classList.toggle("hidden", !state.convMode);
+  $("convModeBtn").classList.toggle("active", state.convMode);
+  if (state.convMode) {
+    try {
+      const st = await invoke("convert_tools_status");
+      const miss = [];
+      if (!st.tesseract) miss.push("Tesseract (OCR)");
+      if (!st.soffice) miss.push("LibreOffice (Office↔PDF chất lượng cao)");
+      $("convHint").textContent = miss.length
+        ? `Chưa cài: ${miss.join(", ")} — các nút liên quan sẽ báo lỗi kèm hướng dẫn`
+        : "";
+      $("cvOcr").disabled = !st.tesseract;
+      $("cvOffice").disabled = !st.soffice;
+    } catch (_) { /* trạng thái chỉ để gợi ý */ }
+  } else {
+    $("convHint").textContent = "";
+  }
+}
+
+async function runOcrAction() {
+  const lang = $("cvLang").value || "vie+eng";
+  const out = await invoke("pick_save_pdf");
+  if (!out) return;
+  $("convHint").textContent = "Đang OCR… (tài liệu dài có thể mất vài phút)";
+  try {
+    const n = await invoke("ocr_run", { input: state.path, lang, output: out });
+    $("status").textContent = `OCR xong: ${n} từ, đã thêm lớp text ẩn → ${shortName(out)}`;
+    $("convHint").textContent = "";
+    loadDocument(out);
+  } catch (e) {
+    $("convHint").textContent = "Lỗi OCR: " + e;
+  }
+}
+
+async function exportPngAction() {
+  const dir = await invoke("pick_dir");
+  if (!dir) return;
+  try {
+    const files = await invoke("convert_images", { input: state.path, outDir: dir, dpi: 150 });
+    $("status").textContent = `Đã xuất ${files.length} ảnh PNG (150 DPI) vào ${dir}`;
+  } catch (e) {
+    $("convHint").textContent = "Lỗi xuất PNG: " + e;
+  }
+}
+
+async function exportTxtAction() {
+  const base = shortName(state.path).replace(/\.pdf$/i, "");
+  const out = await invoke("pick_save_as", { ext: "txt", name: base + ".txt" });
+  if (!out) return;
+  try {
+    await invoke("convert_txt", { input: state.path, output: out });
+    $("status").textContent = `Đã xuất text → ${shortName(out)}`;
+  } catch (e) {
+    $("convHint").textContent = "Lỗi xuất TXT: " + e;
+  }
+}
+
+async function exportDocxAction() {
+  const base = shortName(state.path).replace(/\.pdf$/i, "");
+  const out = await invoke("pick_save_as", { ext: "docx", name: base + ".docx" });
+  if (!out) return;
+  $("convHint").textContent = "Đang chuyển sang Word…";
+  try {
+    const engine = await invoke("convert_docx", { input: state.path, output: out });
+    const note = engine === "libreoffice" ? "LibreOffice (giữ layout tốt)" : "bộ chuyển cơ bản (text + bố cục)";
+    $("status").textContent = `Đã xuất Word (${note}) → ${shortName(out)}`;
+    $("convHint").textContent = "";
+  } catch (e) {
+    $("convHint").textContent = "Lỗi xuất Word: " + e;
+  }
+}
+
+async function officeToPdfAction() {
+  const src = await invoke("pick_office_file");
+  if (!src) return;
+  const dir = await invoke("pick_dir");
+  if (!dir) return;
+  $("convHint").textContent = "Đang chuyển Office → PDF…";
+  try {
+    const out = await invoke("office_convert", { input: src, outDir: dir });
+    $("status").textContent = `Đã chuyển → ${shortName(out)}`;
+    $("convHint").textContent = "";
+    loadDocument(out);
+  } catch (e) {
+    $("convHint").textContent = "Lỗi Office→PDF (máy cần LibreOffice): " + e;
+  }
+}
+
 // ---------- Phase 6: Form (AcroForm) ----------
 
 function toggleFormMode() {
@@ -3224,6 +3317,14 @@ $("orgSave").addEventListener("click", orgSaveChanges);
 $("modalOverlay").addEventListener("click", (e) => {
   if (e.target.id === "modalOverlay") closeModal();
 });
+
+// OCR & Chuyển đổi (Phase 7)
+$("convModeBtn").addEventListener("click", toggleConvMode);
+$("cvOcr").addEventListener("click", runOcrAction);
+$("cvPng").addEventListener("click", exportPngAction);
+$("cvTxt").addEventListener("click", exportTxtAction);
+$("cvDocx").addEventListener("click", exportDocxAction);
+$("cvOffice").addEventListener("click", officeToPdfAction);
 
 // Form (Phase 6)
 $("formModeBtn").addEventListener("click", toggleFormMode);

@@ -102,8 +102,8 @@ Xếp theo mức độ ảnh hưởng trải nghiệm:
 |---|---|---|
 | ~~Bảo mật, redaction, chữ ký số PAdES (Phase 5)~~ ✅ ĐÃ LÀM | AES-256+quyền, redaction thật (tỉa ký tự), **chữ ký số PKCS#7/CMS + xác thực + phát hiện giả mạo** (`sign.rs`), lưu tối ưu — 62/62 test | Đã giải; còn lại timestamp/LTV/PFX/multi-sig (docs/15 mục 6.6) |
 | ~~Form AcroForm (Phase 6)~~ ✅ ĐÃ LÀM | Liệt kê/điền/tạo field (lopdf) + flatten (PDFium) + FDF/CSV — 67/67 test (`form.rs`) | Đã giải; còn XFDF, radio-group/list/pushbutton khi tạo (docs/17 mục 6) |
-| OCR (Phase 7) | Tesseract (tiếng Việt có traineddata chuẩn) + lớp text ẩn — kỹ thuật giống watermark.rs đã làm | Thấp, chủ yếu là chất lượng tiền xử lý ảnh |
-| Convert Office↔PDF (Phase 7) | LibreOffice headless; PDF→Word "đủ dùng" trước | PDF→Word giữ layout hoàn hảo là bài khó với CẢ Foxit — đặt kỳ vọng "tương đương Foxit" chứ không hơn |
+| ~~OCR (Phase 7)~~ ✅ ĐÃ LÀM | Tesseract sidecar → lớp text ẩn khớp toạ độ, Việt+Anh có test đúng dấu (`ocr.rs`) | Đã giải; còn tiền xử lý deskew/denoise, OCR theo vùng |
+| ~~Convert Office↔PDF (Phase 7)~~ ✅ ĐÃ LÀM | LibreOffice headless 2 chiều + PDF→DOCX/TXT/PNG tự viết fallback (`convert.rs`) | Đã giải mức "đủ dùng"; PDF→Excel + layout hoàn hảo là follow-up |
 | So sánh PDF, in ấn, installer (Phase 8) | render diff đã có nền; Tauri bundler | Thấp |
 
 ## 4. Đánh giá định hướng công nghệ (giữ hay đổi?)
@@ -136,16 +136,17 @@ redaction thật kiểm chứng được, xoá metadata — docs/15)**.
 **Phase 5 đã HOÀN TẤT** (iter 1+2): mã hoá+quyền, gỡ mật khẩu, redaction thật
 + tỉa ký tự, xoá metadata, **chữ ký số PKCS#7/PAdES + xác thực**, lưu tối ưu.
 
-**Phase 6 đã HOÀN TẤT lõi**: liệt kê/điền/tạo field, flatten, FDF/CSV.
+**Phase 6 + 7 đã HOÀN TẤT lõi**: form đầy đủ; OCR Việt+Anh; convert
+PNG/TXT/DOCX + Office↔PDF.
 
 Thứ tự đề xuất tiếp theo, bám giá trị người dùng:
-1. **Phase 7 — OCR & Convert**: OCR Tesseract (Việt+Anh) tạo lớp text ẩn;
-   convert Office↔PDF qua LibreOffice headless; PDF→Word/Excel "đủ dùng".
-2. Phase 8 — phát hành (installer, so sánh PDF, in ấn, đa ngôn ngữ UI).
-3. Song song, rải theo từng phase: mở rộng font matching (3.4), nấc 1 của
-   hiệu năng phiên sửa (3.2) khi chạm file lớn thực tế, v2 của reflow
-   (justify/xoay — mục 3.1), nâng chữ ký (timestamp/LTV/PFX/multi-sig), và
-   nâng form (XFDF, radio-group/list/pushbutton, appearance riêng).
+1. **Phase 8 — Hoàn thiện & Phát hành**: installer Windows (MSI/winget qua
+   Tauri bundler), in ấn, so sánh 2 PDF, preferences, đa ngôn ngữ UI (Việt/
+   Anh), tối ưu hiệu năng + bộ test hồi quy đầy đủ.
+2. Song song, rải dần: mở rộng font matching (3.4), nấc 1 hiệu năng phiên
+   sửa (3.2), reflow v2 (justify/xoay — 3.1), nâng chữ ký (timestamp/LTV/
+   PFX/multi-sig), nâng form (XFDF, radio-group), OCR tiền xử lý ảnh,
+   PDF→Excel.
 
 ## 6. Checklist FINAL TARGET & RULE cho chính tài liệu này
 - [x] Đối chiếu từng tính năng với hành vi Foxit làm chuẩn nghiệm thu.
