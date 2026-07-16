@@ -60,10 +60,40 @@ per-char xen run rỗng, cỡ 22.5pt + 20pt, bbox chữ có dấu tụt thấp):
   chữ cũ; **phát hiện khối căn giữa** (tâm các dòng trùng tâm khối) → dòng mới
   giữ căn giữa. 2 test hồi quy mới (nở indices, giữ căn giữa) — 19 test edit.
 
+### Vá vòng 2 theo phản hồi file thật (□ thay dấu cách, vỡ dòng, ô sửa lệch)
+Ba lỗi user báo sau khi thử bản build 6 trên chính file Word-export:
+- **Dấu cách thành ô vuông □ sau khi lưu**: PDFium `FPDFText_LoadFont` nạp
+  LẠI font subset (Word xuất) rồi `SetText` sẽ map U+0020 ra `.notdef` (glyph
+  hộp) dù cmap của font CÓ space — lỗi nằm ở PDFium, không phải font. Fix:
+  **tầng 0 mới của thang font reflow — dùng LẠI chính font object gốc trong
+  PDF** (lấy `PdfFontToken` từ run neo, không nạp lại): glyph + charcode map
+  gốc xử lý dấu cách chuẩn, file không phình thêm bản font nữa. Chỉ chọn sau
+  khi **probe ghi/đọc-lại toàn bộ text mới** thành công (tạo object nháp →
+  so text → gỡ). Khi ghi từng dòng cũng **đọc lại ngay để tự kiểm** — nếu
+  PDFium vẫn âm thầm vứt ký tự thì gỡ và **ghi lại theo TỪNG TỪ tự đặt vị trí
+  bằng advance hmtx** (không bao giờ ghi glyph dấu cách) — lưới an toàn cuối.
+- **Thêm 1 ký tự làm vỡ dòng** ("HỢP"→"HỢPP" đẩy "LOG" rơi xuống dòng mới):
+  dòng cứng (`\n` từ ô sửa) giờ được **NỞ tới +35% bề rộng khối** (chặn mép
+  trang) trước khi phải bẻ lại — hành vi hộp text tự nở của Foxit; khối căn
+  giữa nở đều 2 phía quanh tâm.
+- **Mỗi dòng giữ đúng CỠ CHỮ GỐC của dòng đó** (tiêu đề 22.5/20pt không còn
+  bị ép cả khối về cỡ run neo): kế hoạch reflow ghi `line_styles` theo từng
+  baseline gốc, dòng cứng thứ i ăn cỡ dòng gốc thứ i.
+- **Ô sửa WYSIWYG**: thay textarea bằng `contenteditable` — mỗi dòng gốc là
+  1 div với đúng **font/cỡ/màu/đậm-nghiêng CỦA DÒNG ĐÓ**, khối căn giữa hiện
+  căn giữa, khung đặt trùng bbox khối (bù lệch dọc line-box) → chữ trong ô
+  nằm NGUYÊN vị trí chữ gốc khi bắt đầu sửa; con trỏ đặt đúng chỗ vừa đúp
+  (`caretRangeFromPoint`).
+- Kiểm chứng trên file thật: sửa "HỢP"→"HỢPP" giữ đúng 2 dòng căn giữa cỡ
+  22.5/20pt, font `BAAAAA+TimesNewRomanPS-BoldMT` gốc, dấu cách nguyên vẹn,
+  render so khớp bản gốc. 2 test hồi quy mới (`reflow_keeps_per_line_font_sizes`,
+  `reflow_hard_line_grows_without_rewrap`) — 21 test edit.
+
 ### Giới hạn ghi nhận (v1, sẽ nâng ở vòng sau)
 - Đoạn justify (giãn đều 2 lề) reflow về căn trái; chưa kerning; khối text
   XOAY chưa reflow theo hướng xoay (dòng mới đặt theo trục ngang).
-- Khối lẫn NHIỀU font/cỡ trong 1 đoạn: dòng mới thống nhất theo run neo.
+- Khối lẫn NHIỀU font/cỡ trong 1 ĐOẠN: cỡ giữ theo TỪNG DÒNG; font/màu theo
+  run neo (dòng lẫn nhiều font sẽ thống nhất font).
 
 > Iteration 1: 43/43 test, đã chạy app thật + chụp ảnh xác minh.
 

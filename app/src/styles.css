@@ -445,6 +445,20 @@ body.tool-active .annotlayer * { pointer-events: none; }
   overflow: hidden;
 }
 
+/* Ô sửa WYSIWYG cả đoạn: mỗi dòng gốc = 1 div giữ đúng font/cỡ/màu dòng đó,
+   chữ nằm trùng vị trí chữ gốc (che kín bên dưới), con trỏ đặt theo điểm đúp */
+.edit-inline-wys {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: visible;
+  padding: 0;
+  border-width: 1px;
+  cursor: text;
+}
+.edit-inline-wys .edit-line {
+  min-height: 1em;
+}
+
 /* Nút Đậm/Nghiêng trong thanh Sửa nội dung */
 .ed-style {
   min-width: 28px;

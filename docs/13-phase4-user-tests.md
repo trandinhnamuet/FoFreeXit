@@ -49,6 +49,10 @@ cargo run
 | E36 | Trong ô sửa: click chuột chỗ khác của đoạn để đổi vị trí con trỏ | Con trỏ di chuyển bình thường, **KHÔNG thoát edit** | |
 | E37 | Sửa vài chữ rồi Ctrl+Enter | Chữ mới thay SẠCH chữ cũ (không chồng chữ), tiêu đề căn giữa **vẫn căn giữa** | |
 | E38 | Khi ô sửa đang mở | Ô che kín chữ cũ bên dưới (không thấy 2 lớp chữ) | |
+| E39 | Mở ô sửa trên tiêu đề 2 dòng 2 cỡ chữ (22.5/20pt) | Chữ trong ô hiện **đúng cỡ TỪNG DÒNG + căn giữa + đậm/màu như bản gốc**, vị trí chữ TRÙNG chữ gốc (không xê dịch khi bắt đầu sửa) | |
+| E40 | Thêm 1–2 ký tự vào dòng dài nhất (vd "HỢP"→"HỢPP") rồi áp dụng | Dòng **NỞ ra, KHÔNG bị bẻ** thành dòng mới; số dòng giữ nguyên | |
+| E41 | Sau khi áp dụng, nhìn khoảng trắng giữa các từ | Dấu cách bình thường — **KHÔNG có ô vuông □**; mở lại ở Foxit/Adobe font vẫn là font gốc của file | |
+| E42 | Sửa tiêu đề rồi đo bằng mắt cỡ 2 dòng | Dòng 1 vẫn to hơn dòng 2 đúng như gốc (cỡ chữ giữ THEO DÒNG) | |
 
 ## Bổ sung — Đúp chuột vào chữ từ viewer thường (chuẩn Foxit Editor)
 | # | Thao tác | Kỳ vọng | KQ |

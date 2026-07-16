@@ -872,6 +872,113 @@ fn reflow_preserves_centered_alignment() {
     assert_eq!(checked, 2, "phải kiểm được 2 dòng mới");
 }
 
+/// Mỗi DÒNG CỨNG (theo `\n` từ ô sửa) giữ đúng CỠ CHỮ của dòng gốc cùng thứ
+/// tự — tiêu đề 22/16pt không bị ép cả khối về 1 cỡ.
+#[test]
+fn reflow_keeps_per_line_font_sizes() {
+    let pdf = pdfium();
+    let fx = tmp("ff_reflow_sz_fx.pdf");
+    let out = tmp("ff_reflow_sz_out.pdf");
+    let mk = |y: f32, s: &str, size: f32| EditOp::AddText {
+        x: 80.0,
+        y,
+        text: s.into(),
+        font_size: size,
+        color: [0, 0, 0, 255],
+        font_family: None,
+        bold: false,
+        italic: false,
+    };
+    ff_engine::apply_edits(
+        &pdf,
+        &sample(),
+        0,
+        &[mk(500.0, "TIÊU ĐỀ CHÍNH CỠ LỚN", 22.0), mk(474.0, "phụ đề bên dưới cỡ nhỏ", 16.0)],
+        &fx,
+        None,
+    )
+    .expect("fixture 2 cỡ chữ");
+    let idxs: Vec<u16> = ff_engine::list_objects(&pdf, &fx, 0, None)
+        .expect("list fx")
+        .into_iter()
+        .filter(|o| o.text.as_deref().map(|t| t.contains("CỠ LỚN") || t.contains("cỡ nhỏ")).unwrap_or(false))
+        .map(|o| o.index)
+        .collect();
+    assert_eq!(idxs.len(), 2);
+
+    ff_engine::apply_edits(
+        &pdf,
+        &fx,
+        0,
+        &[EditOp::ReflowText { indices: idxs, text: "TIÊU ĐỀ MỚI\nphụ đề mới".into() }],
+        &out,
+        None,
+    )
+    .expect("reflow 2 cỡ");
+
+    let after = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
+    let size_of = |needle: &str| {
+        after
+            .iter()
+            .find(|o| o.text.as_deref().map(|t| t.contains(needle)).unwrap_or(false))
+            .unwrap_or_else(|| panic!("thiếu dòng {needle:?}"))
+            .font_size
+            .expect("font_size")
+    };
+    let s1 = size_of("TIÊU ĐỀ MỚI");
+    let s2 = size_of("phụ đề mới");
+    assert!((s1 - 22.0).abs() < 0.6, "dòng 1 phải giữ ~22pt, được {s1}");
+    assert!((s2 - 16.0).abs() < 0.6, "dòng 2 phải giữ ~16pt, được {s2}");
+}
+
+/// Dòng cứng chỉ DÀI THÊM CHÚT (≤35% bề rộng khối) thì NỞ ra chứ không bị bẻ
+/// lại thành 2 dòng (hộp text tự nở như Foxit) — sửa "HỢP"→"HỢPP" phải giữ
+/// nguyên số dòng. Dấu cách cũng phải sống sót qua đường ghi.
+#[test]
+fn reflow_hard_line_grows_without_rewrap() {
+    let pdf = pdfium();
+    let fx = tmp("ff_reflow_grow_fx.pdf");
+    let out = tmp("ff_reflow_grow_out.pdf");
+    ff_engine::apply_edits(
+        &pdf,
+        &sample(),
+        0,
+        &[EditOp::AddText {
+            x: 90.0,
+            y: 520.0,
+            text: "Dòng tiêu đề dài vừa khít khung gốc".into(),
+            font_size: 18.0,
+            color: [0, 0, 0, 255],
+            font_family: None,
+            bold: false,
+            italic: false,
+        }],
+        &fx,
+        None,
+    )
+    .expect("fixture 1 dòng");
+    let idx = find_text_index(&pdf, &fx, "vừa khít");
+
+    let new_text = "Dòng tiêu đề dài vừa khít khung gốc nở";
+    ff_engine::apply_edits(
+        &pdf,
+        &fx,
+        0,
+        &[EditOp::ReflowText { indices: vec![idx], text: new_text.into() }],
+        &out,
+        None,
+    )
+    .expect("reflow nở dòng");
+
+    let new_runs: Vec<_> = ff_engine::list_objects(&pdf, &out, 0, None)
+        .expect("list out")
+        .into_iter()
+        .filter(|o| o.text.as_deref().map(|t| t.contains("tiêu đề") || t.contains("nở thêm")).unwrap_or(false))
+        .collect();
+    assert_eq!(new_runs.len(), 1, "dòng chỉ dài thêm ~20% phải GIỮ 1 dòng: {new_runs:?}");
+    assert_eq!(new_runs[0].text.as_deref(), Some(new_text), "nội dung (gồm dấu cách) phải tròn trịa");
+}
+
 #[test]
 fn add_image_adds_image_object() {
     let pdf = pdfium();
