@@ -38,6 +38,7 @@
       <button id="editModeBtn" title="Sửa nội dung trang">✏️ Sửa nội dung</button>
       <button id="formModeBtn" title="Form: điền, tạo field, flatten, FDF/CSV">📝 Form</button>
       <button id="secModeBtn" title="Bảo mật: redact, mật khẩu, metadata">🔒 Bảo mật</button>
+      <button id="convModeBtn" title="OCR & Chuyển đổi: OCR, PNG, TXT, Word, Office→PDF">🔁 Chuyển đổi</button>
       <div class="spacer"></div>
       <span id="status" class="status"></span>
     </header>
@@ -115,6 +116,23 @@
       <button id="fmImportFdf" title="Nhập dữ liệu form từ FDF">⬇ Nhập FDF</button>
       <span class="spacer"></span>
       <span id="formHint" class="status"></span>
+    </div>
+
+    <div id="convBar" class="editbar hidden">
+      <span class="annolabel">Chuyển đổi:</span>
+      <label class="ed-prop">OCR ngôn ngữ <select id="cvLang">
+        <option value="vie+eng">Việt + Anh</option>
+        <option value="vie">Tiếng Việt</option>
+        <option value="eng">English</option>
+      </select></label>
+      <button id="cvOcr" title="Nhận dạng chữ (Tesseract) → thêm lớp text ẩn, file tìm kiếm/copy được">🔍 OCR tài liệu</button>
+      <span class="sep"></span>
+      <button id="cvPng" title="Xuất mỗi trang thành 1 ảnh PNG">🖼 Xuất PNG</button>
+      <button id="cvTxt" title="Xuất toàn bộ text ra file .txt">📄 Xuất TXT</button>
+      <button id="cvDocx" title="Xuất Word (.docx) — dùng LibreOffice nếu máy có, không thì bộ chuyển cơ bản">📘 Xuất Word</button>
+      <button id="cvOffice" title="Chuyển file Office (docx/xlsx/pptx...) sang PDF — cần LibreOffice">📥 Office → PDF</button>
+      <span class="spacer"></span>
+      <span id="convHint" class="status"></span>
     </div>
 
     <div id="secBar" class="editbar hidden">

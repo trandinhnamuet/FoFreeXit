@@ -5,10 +5,12 @@
 //! ocr... sẽ thêm dần ở các phase sau (xem docs/03-roadmap.md, 04-architecture.md).
 
 pub mod annot;
+pub mod convert;
 pub mod edit;
 pub(crate) mod fontmatch;
 pub mod form;
 pub mod meta;
+pub mod ocr;
 pub mod organize;
 pub mod qpdf;
 pub mod redact;
@@ -30,10 +32,14 @@ pub use qpdf::{
     decrypt_remove_password, encrypt_with_password, encrypt_with_password_perms, ensure_openable,
     find_qpdf, optimize_save, repair, Permissions,
 };
+pub use convert::{
+    export_docx, export_images, export_text, find_soffice, office_to_pdf, pdf_to_docx_via_soffice,
+};
 pub use form::{
     create_form_fields, export_csv, export_fdf, fill_form_fields, flatten_form, import_fdf,
     list_form_fields, parse_fdf, FieldKind, FieldValue, FormField, NewField,
 };
+pub use ocr::{find_tesseract, ocr_add_text_layer, ocr_page_words, OcrWord};
 pub use redact::redact_areas;
 pub use sign::{generate_self_signed_id, sign_pdf, verify_signatures, SignatureCheck};
 pub use render::{bind_pdfium, page_count, render_page_png, PageImage};
