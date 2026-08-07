@@ -149,6 +149,39 @@ công. Sửa tương ứng:
   đúp trúng marker, phân biệt "-" gạch đầu dòng vs "-5°C") — tất cả PASS.
   Phần render nền ẩn cần app thật → kiểm trên build CI.
 
+### Vá vòng 5 — TÌM RA GỐC RỄ: field IPC lệch tên; kiểm chứng E2E trên app thật
+User test build 12 với file thật (LibreOffice export, NotoSans): vẫn mất in
+đậm. Lần này debug TRÊN CHÍNH APP đang chạy (WebView2 remote debugging qua
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port` + CDP) và
+phát hiện **nguyên nhân gốc của cả chuỗi lỗi font**: DTO Tauri serialize
+`rename_all = "camelCase"` (`fontBold`, `fontFamily`, `fontSize`…) nhưng toàn
+bộ code edit-mode trong main.js đọc snake_case (`font_bold`…) → **mọi thuộc
+tính font trong UI luôn undefined từ đầu**: không đậm, sai family, cỡ mặc
+định 12 (giải thích luôn ảnh lỗi "chữ nhỏ đều nhau" ban đầu — vòng 3 đã chữa
+TRIỆU CHỨNG cỡ chữ bằng đo mực, vòng này chữa đúng BỆNH). Fix: đổi hết sang
+camelCase (nhất quán với phần còn lại của app: `widthPt`, `pageIndex`…).
+- **Engine đọc kiểu chữ từ bytes font — vá tiếp cho LibreOffice**: subset của
+  LibreOffice VỨT bảng OS/2 (kiểm bằng qpdf trích FontFile2: chỉ còn cmap/
+  glyf/head/hhea/…) nên ttf-parser `weight()` trả 400 mặc định. Thêm
+  `fontmatch::style_from_font_bytes` parse sfnt thủ công: OS/2 usWeightClass/
+  fsSelection nếu còn, fallback **`head.macStyle`** (bảng bắt buộc, bit0=bold
+  bit1=italic — file thật: 0x1 cho NotoSans-Bold, 0x0 cho Regular). 2 unit
+  test sfnt tự dựng. (File này BaseFont có "-Bold" nên tên đã bắt được; vá để
+  chống file tên không nói gì.)
+- **Kéo-thả mở file**: nghe `tauri://drag-drop` (Tauri v2, dragDropEnabled mặc
+  định) → thả .pdf từ Explorer vào cửa sổ là mở (thoát edit/organize mode
+  trước); thả file khác báo "Chỉ mở được file .pdf".
+- **Ẩn khung dòng overlay khi ô sửa đang mở** (nền trong suốt làm khung chấm
+  lộ qua gây nhiễu) — khôi phục khi đóng.
+- **Kiểm chứng E2E trên app thật + file thật** (không cần rebuild): inject
+  hàm đã sửa vào app build-12 đang chạy qua CDP `Runtime.evaluate` (main.js
+  là classic script nên function declaration đè được binding global), gọi
+  `edit_list_objects` lấy run thật, điều khiển mở ô sửa và chụp màn hình:
+  tiêu đề 2 dòng bold 25.48px (=18.5pt đúng engine) 1 khối nền trong suốt;
+  khối bullet 8 dòng không PUA, bullet gốc còn nguyên trên trang. Test Node
+  (hàm thật + dữ liệu run thật từ engine): tiêu đề gom [27,28], khối bullet
+  loại sạch OpenSymbol, nhãn đậm màu tách riêng — tất cả PASS.
+
 ### Giới hạn ghi nhận (v1, sẽ nâng ở vòng sau)
 - Đoạn justify (giãn đều 2 lề) reflow về căn trái; chưa kerning; khối text
   XOAY chưa reflow theo hướng xoay (dòng mới đặt theo trục ngang).

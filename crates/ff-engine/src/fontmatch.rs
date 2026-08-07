@@ -51,6 +51,60 @@ pub(crate) fn clean_font_name(raw: &str) -> (String, bool, bool) {
     (family.trim().to_string(), bold, italic)
 }
 
+/// Đọc đậm/nghiêng TRỰC TIẾP từ bytes font sfnt/TTC, không qua ttf-parser:
+/// ưu tiên OS/2 (usWeightClass ≥600, fsSelection bit BOLD/ITALIC), fallback
+/// `head.macStyle` (bit0 bold, bit1 italic). Lý do: LibreOffice subset font
+/// khi xuất PDF thường VỨT bảng OS/2 (ttf-parser weight() trả 400 mặc định)
+/// nhưng `head` là bảng bắt buộc luôn còn — macStyle vẫn khai đúng kiểu chữ.
+pub(crate) fn style_from_font_bytes(bytes: &[u8]) -> (bool, bool) {
+    fn u16_at(b: &[u8], o: usize) -> Option<u16> {
+        Some(u16::from_be_bytes([*b.get(o)?, *b.get(o + 1)?]))
+    }
+    fn u32_at(b: &[u8], o: usize) -> Option<u32> {
+        Some(u32::from_be_bytes([*b.get(o)?, *b.get(o + 1)?, *b.get(o + 2)?, *b.get(o + 3)?]))
+    }
+    // TTC: nhảy tới face đầu tiên; sfnt thường: bảng directory ở offset 0.
+    let base = if bytes.get(0..4) == Some(b"ttcf") {
+        match u32_at(bytes, 12) {
+            Some(v) => v as usize,
+            None => return (false, false),
+        }
+    } else {
+        0
+    };
+    let num = match u16_at(bytes, base + 4) {
+        Some(n) => n as usize,
+        None => return (false, false),
+    };
+    let (mut bold, mut italic) = (false, false);
+    for i in 0..num.min(64) {
+        let e = base + 12 + i * 16;
+        let tag = match bytes.get(e..e + 4) {
+            Some(t) => t,
+            None => break,
+        };
+        let off = match u32_at(bytes, e + 8) {
+            Some(v) => v as usize,
+            None => break,
+        };
+        if tag == b"OS/2" {
+            if let Some(w) = u16_at(bytes, off + 4) {
+                bold |= (600..=1000).contains(&w);
+            }
+            if let Some(fs) = u16_at(bytes, off + 62) {
+                bold |= fs & 0x20 != 0;
+                italic |= fs & 0x01 != 0;
+            }
+        } else if tag == b"head" {
+            if let Some(mac) = u16_at(bytes, off + 44) {
+                bold |= mac & 0x01 != 0;
+                italic |= mac & 0x02 != 0;
+            }
+        }
+    }
+    (bold, italic)
+}
+
 /// Font bytes (TTF/OTF/TTC) có glyph cho MỌI ký tự của `text` không?
 /// Parse hỏng (Type1 thuần...) → false (caller sẽ thử đường khác).
 pub(crate) fn coverage_ok(font_bytes: &[u8], text: &str) -> bool {
@@ -277,6 +331,38 @@ mod tests {
         assert_eq!(clean_font_name("Helvetica"), ("Helvetica".into(), false, false));
         assert_eq!(clean_font_name("Arial-Bold"), ("Arial".into(), true, false));
         assert_eq!(clean_font_name("CalibriItalic"), ("Calibri".into(), false, true));
+    }
+
+    // sfnt tối thiểu: header + 1 entry bảng + payload bảng tại offset 28.
+    fn sfnt_one_table(tag: &[u8; 4], table: &[u8]) -> Vec<u8> {
+        let mut f = vec![0u8; 28 + table.len()];
+        f[0..4].copy_from_slice(&0x00010000u32.to_be_bytes());
+        f[4..6].copy_from_slice(&1u16.to_be_bytes());
+        f[12..16].copy_from_slice(tag);
+        f[20..24].copy_from_slice(&28u32.to_be_bytes());
+        f[24..28].copy_from_slice(&(table.len() as u32).to_be_bytes());
+        f[28..].copy_from_slice(table);
+        f
+    }
+
+    #[test]
+    fn style_from_bytes_macstyle_when_os2_stripped() {
+        // Như font LibreOffice subset: KHÔNG có OS/2, chỉ còn head.
+        let mut head = [0u8; 54];
+        head[44..46].copy_from_slice(&0x0003u16.to_be_bytes()); // Bold|Italic
+        assert_eq!(style_from_font_bytes(&sfnt_one_table(b"head", &head)), (true, true));
+        head[44..46].copy_from_slice(&0x0000u16.to_be_bytes());
+        assert_eq!(style_from_font_bytes(&sfnt_one_table(b"head", &head)), (false, false));
+    }
+
+    #[test]
+    fn style_from_bytes_os2_weight() {
+        let mut os2 = [0u8; 96];
+        os2[4..6].copy_from_slice(&700u16.to_be_bytes()); // usWeightClass
+        assert_eq!(style_from_font_bytes(&sfnt_one_table(b"OS/2", &os2)), (true, false));
+        os2[4..6].copy_from_slice(&400u16.to_be_bytes());
+        os2[62..64].copy_from_slice(&0x0001u16.to_be_bytes()); // fsSelection ITALIC
+        assert_eq!(style_from_font_bytes(&sfnt_one_table(b"OS/2", &os2)), (false, true));
     }
 
     #[test]
