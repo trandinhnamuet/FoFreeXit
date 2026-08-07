@@ -13,13 +13,24 @@ fn workspace_root() -> PathBuf {
         .expect("workspace root")
 }
 
+// KHÔNG đè biến môi trường nếu đã có (CI set sẵn); mặc định thử qpdf/ ở root
+// workspace (fetch-qpdf.ps1 đặt ở đó), fallback /usr/bin cho máy Linux.
+fn ensure_qpdf_path() {
+    if std::env::var("FOFREEXIT_QPDF_PATH").is_err() {
+        let ws = workspace_root().join("qpdf").join("bin");
+        if ws.exists() {
+            std::env::set_var("FOFREEXIT_QPDF_PATH", ws);
+        } else {
+            std::env::set_var("FOFREEXIT_QPDF_PATH", "/usr/bin");
+        }
+    }
+}
+
 fn pdfium() -> pdfium_render::prelude::Pdfium {
     if std::env::var("FOFREEXIT_PDFIUM_PATH").is_err() {
         std::env::set_var("FOFREEXIT_PDFIUM_PATH", workspace_root());
     }
-    if std::env::var("FOFREEXIT_QPDF_PATH").is_err() {
-        std::env::set_var("FOFREEXIT_QPDF_PATH", "/usr/bin");
-    }
+    ensure_qpdf_path();
     ff_engine::bind_pdfium().expect("nạp PDFium")
 }
 
@@ -31,7 +42,7 @@ fn tmp(name: &str) -> PathBuf {
 
 /// Dựng fixture form: chuẩn hoá sample rồi thêm 1 text + 1 checkbox + 1 combo.
 fn make_form_fixture(out: &std::path::Path) {
-    std::env::set_var("FOFREEXIT_QPDF_PATH", "/usr/bin");
+    ensure_qpdf_path();
     let norm = tmp("ff_form_norm.pdf");
     ff_engine::repair(&workspace_root().join("corpus").join("sample-multipage.pdf"), &norm)
         .expect("normalize");
