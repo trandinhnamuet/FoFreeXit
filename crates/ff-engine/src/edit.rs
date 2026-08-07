@@ -754,12 +754,18 @@ pub fn apply_edits(
                             SetTextMode::InPlace
                         } else if non_embedded && ascii_only {
                             SetTextMode::InPlace
-                        } else if t
-                            .font()
-                            .data()
-                            .ok()
-                            .map_or(false, |bytes| fontmatch::coverage_ok(&bytes, text))
+                        } else if !non_embedded
+                            && t
+                                .font()
+                                .data()
+                                .ok()
+                                .map_or(false, |bytes| fontmatch::coverage_ok(&bytes, text))
                         {
+                            // Tầng coverage CHỈ cho font NHÚNG: với font không
+                            // nhúng, PDFium (bản mới) trả bytes của font HỆ THỐNG
+                            // thay thế — phủ đủ glyph không có nghĩa font object
+                            // trong PDF (simple font WinAnsi) mã hoá được text
+                            // mới; set_text khi đó ra charcode rác (ÿ).
                             SetTextMode::InPlace
                         } else {
                             let (key, bytes) = resolve_substitute_font(
