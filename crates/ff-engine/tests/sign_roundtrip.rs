@@ -12,9 +12,16 @@ fn workspace_root() -> PathBuf {
         .expect("workspace root")
 }
 
+// KHÔNG đè biến môi trường nếu đã có (CI set sẵn); mặc định thử qpdf/ ở root
+// workspace (fetch-qpdf.ps1 đặt ở đó), fallback /usr/bin cho máy Linux.
 fn ensure_qpdf() {
     if std::env::var("FOFREEXIT_QPDF_PATH").is_err() {
-        std::env::set_var("FOFREEXIT_QPDF_PATH", "/usr/bin");
+        let ws = workspace_root().join("qpdf").join("bin");
+        if ws.exists() {
+            std::env::set_var("FOFREEXIT_QPDF_PATH", ws);
+        } else {
+            std::env::set_var("FOFREEXIT_QPDF_PATH", "/usr/bin");
+        }
     }
 }
 
