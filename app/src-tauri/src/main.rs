@@ -663,6 +663,10 @@ struct ObjectInfoDto {
     index: u16,
     kind: String,
     rect: RectDto,
+    /// Object nằm trong Form XObject (sửa text OK, kéo/resize chưa hỗ trợ).
+    nested: bool,
+    /// Form đã liệt kê con riêng — UI bỏ khung của form này.
+    expanded: bool,
     text: Option<String>,
     font_name: Option<String>,
     font_family: Option<String>,
@@ -685,6 +689,8 @@ fn edit_list_objects(path: String, page: u16, password: Option<String>) -> Resul
             index: o.index,
             kind: o.kind.as_str().to_string(),
             rect: RectDto { left: o.rect.left, bottom: o.rect.bottom, right: o.rect.right, top: o.rect.top },
+            nested: o.nested,
+            expanded: o.expanded,
             text: o.text,
             font_name: o.font_name,
             font_family: o.font_family,

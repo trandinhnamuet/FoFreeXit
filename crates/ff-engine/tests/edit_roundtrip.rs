@@ -1015,3 +1015,157 @@ fn add_image_adds_image_object() {
     assert_eq!(after.len(), before + 1, "thêm ảnh phải tăng 1 object");
     assert!(after.iter().any(|o| o.kind == ObjectKind::Image), "phải có object kind Image");
 }
+
+
+// ---- Phase 4 iteration 4: sửa text NẰM TRONG Form XObject (file Canva/
+// Illustrator gói cả trang vào form — trước đây không thấy gì để sửa) ----
+
+/// Dựng PDF 1 trang mà TOÀN BỘ chữ nằm trong 1 Form XObject (như Canva xuất):
+/// trang chỉ có 1 object "form", bên trong có 1 text run Helvetica 24pt.
+fn build_form_xobject_pdf(path: &std::path::Path) {
+    use lopdf::{dictionary, Document, Object, Stream};
+    let mut doc = Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+    let font_id = doc.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Helvetica",
+    });
+    let form_id = doc.add_object(Stream::new(
+        dictionary! {
+            "Type" => "XObject",
+            "Subtype" => "Form",
+            "BBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+            "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
+        },
+        b"BT /F1 24 Tf 72 700 Td (Hello inside form) Tj ET".to_vec(),
+    ));
+    let content_id = doc.add_object(Stream::new(dictionary! {}, b"q /Fx1 Do Q".to_vec()));
+    let page_id = doc.add_object(dictionary! {
+        "Type" => "Page",
+        "Parent" => pages_id,
+        "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        "Resources" => dictionary! { "XObject" => dictionary! { "Fx1" => form_id } },
+        "Contents" => content_id,
+    });
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Kids" => vec![page_id.into()],
+            "Count" => 1,
+        }),
+    );
+    let catalog_id = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    doc.trailer.set("Root", catalog_id);
+    doc.save(path).expect("lưu fixture form xobject");
+}
+
+fn form_fixture(name: &str) -> PathBuf {
+    let p = tmp(name);
+    build_form_xobject_pdf(&p);
+    p
+}
+
+#[test]
+fn form_xobject_children_are_listed() {
+    let pdf = pdfium();
+    let input = form_fixture("ff_edit_formx_list.pdf");
+    let objs = ff_engine::list_objects(&pdf, &input, 0, None).expect("list");
+    // Form cấp trang phải được đánh dấu expanded, con text phải lộ ra.
+    let form = objs.iter().find(|o| o.kind == ObjectKind::XObjectForm).expect("phải thấy form");
+    assert!(form.expanded, "form có con phải expanded: {form:?}");
+    let text = objs
+        .iter()
+        .find(|o| o.kind == ObjectKind::Text && o.text.as_deref().map(|t| t.contains("Hello inside form")).unwrap_or(false))
+        .unwrap_or_else(|| panic!("phải thấy text trong form: {objs:?}"));
+    assert!(text.nested, "text trong form phải nested: {text:?}");
+    // Toạ độ đã quy về trang: baseline 700, cỡ 24 → bbox quanh (72, ~694..~724).
+    assert!(text.rect.left > 60.0 && text.rect.left < 84.0, "left ~72: {:?}", text.rect);
+    assert!(text.rect.bottom > 680.0 && text.rect.top < 740.0, "bbox quanh y=700: {:?}", text.rect);
+    assert!((text.font_size.unwrap_or(0.0) - 24.0).abs() < 2.0, "cỡ hiển thị ~24: {:?}", text.font_size);
+}
+
+// Canary quan trọng nhất: sửa IN-PLACE con trong form rồi lưu — PDFium phải
+// regenerate content stream của form (ProcessForm → HasDirtyStreams).
+#[test]
+fn form_xobject_settext_inplace_roundtrip() {
+    let pdf = pdfium();
+    let input = form_fixture("ff_edit_formx_settext.pdf");
+    let out = tmp("ff_edit_formx_settext_out.pdf");
+    let idx = find_text_index(&pdf, &input, "Hello inside form");
+
+    ff_engine::apply_edits(
+        &pdf,
+        &input,
+        0,
+        &[EditOp::SetText {
+            index: idx,
+            text: "Edited in form!".into(),
+            font_size: None,
+            color: None,
+            font_family: None,
+            bold: None,
+            italic: None,
+        }],
+        &out,
+        None,
+    )
+    .expect("apply_edits SetText trong form");
+
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    assert!(text.contains("Edited in form!"), "text mới phải có mặt: {text:?}");
+    assert!(!text.contains("Hello inside form"), "text cũ trong form phải biến mất: {text:?}");
+}
+
+// Reflow đoạn trong form: run cũ bị làm rỗng (không rút được object khỏi
+// form), dòng mới vẽ ở cấp trang với toạ độ đã compose ma trận form.
+#[test]
+fn form_xobject_reflow_roundtrip() {
+    let pdf = pdfium();
+    let input = form_fixture("ff_edit_formx_reflow.pdf");
+    let out = tmp("ff_edit_formx_reflow_out.pdf");
+    let idx = find_text_index(&pdf, &input, "Hello inside form");
+
+    ff_engine::apply_edits(
+        &pdf,
+        &input,
+        0,
+        &[EditOp::ReflowText {
+            indices: vec![idx],
+            text: "Đoạn văn tiếng Việt thay thế trong form, đủ dài để chắc chắn phải bẻ xuống dòng mới".into(),
+        }],
+        &out,
+        None,
+    )
+    .expect("apply_edits ReflowText trong form");
+
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    assert!(text.contains("Đoạn văn tiếng Việt thay thế"), "text mới phải có mặt: {text:?}");
+    assert!(!text.contains("Hello inside form"), "text cũ phải biến mất: {text:?}");
+    // Dòng mới phải nằm quanh vị trí khối cũ (không rơi về góc trang).
+    let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
+    let new_runs: Vec<_> = objs
+        .iter()
+        .filter(|o| o.kind == ObjectKind::Text && o.text.as_deref().map(|t| t.contains("Đoạn")).unwrap_or(false))
+        .collect();
+    assert!(!new_runs.is_empty(), "phải có run mới: {objs:?}");
+    for r in &new_runs {
+        assert!(r.rect.left > 50.0 && r.rect.top < 740.0 && r.rect.bottom > 500.0,
+            "dòng mới phải quanh khối cũ: {:?}", r.rect);
+    }
+}
+
+#[test]
+fn form_xobject_delete_clears_text() {
+    let pdf = pdfium();
+    let input = form_fixture("ff_edit_formx_delete.pdf");
+    let out = tmp("ff_edit_formx_delete_out.pdf");
+    let idx = find_text_index(&pdf, &input, "Hello inside form");
+
+    ff_engine::apply_edits(&pdf, &input, 0, &[EditOp::Delete { index: idx }], &out, None)
+        .expect("apply_edits Delete trong form");
+
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    assert!(!text.contains("Hello inside form"), "text trong form phải biến mất sau xoá: {text:?}");
+}

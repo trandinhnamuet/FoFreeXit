@@ -2226,6 +2226,10 @@ function buildEditOverlay() {
   // Ảnh/form: khung theo từng object như cũ (có resize).
   state.editObjects.forEach((o) => {
     if (o.kind !== "image" && o.kind !== "form") return;
+    // Form đã liệt kê con riêng (file Canva gói cả trang vào form): khung của
+    // form phủ kín trang sẽ che hết con → bỏ. Ảnh/form TRONG form: chưa sửa
+    // được (di chuyển/thay cần địa chỉ lồng) → cũng bỏ khung.
+    if (o.expanded || o.nested) return;
     const box = document.createElement("div");
     box.className = "edit-box kind-" + o.kind;
     box.dataset.index = String(o.index);
@@ -2979,8 +2983,12 @@ function promptAddText(pdfX, pdfY) {
 function onEditBoxMouseDown(e, o, runs) {
   if (state.editArm) return;
   if (e.target.classList.contains("ed-handle")) return;
-  const runIndices = (runs && runs.length ? runs : [o]).map((r) => (typeof r === "number" ? r : r.index));
+  const runObjs = runs && runs.length ? runs : [o];
+  const runIndices = runObjs.map((r) => (typeof r === "number" ? r : r.index));
   selectEditObject(o.index, runIndices);
+  // Run TRONG Form XObject (file Canva...): sửa text được nhưng chưa hỗ trợ
+  // kéo di chuyển/resize — chọn thôi, không bắt đầu drag.
+  if (runObjs.some((r) => r && typeof r === "object" && r.nested)) return;
   const box = e.currentTarget;
   const startX = e.clientX, startY = e.clientY;
   const left0 = parseFloat(box.style.left), top0 = parseFloat(box.style.top);

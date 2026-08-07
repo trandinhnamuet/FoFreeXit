@@ -72,11 +72,19 @@ impl ObjectKind {
 /// Thông tin 1 page object trả về cho UI (để vẽ overlay & sửa).
 #[derive(Clone, Debug)]
 pub struct ObjectInfo {
-    /// Index trong danh sách object của trang (0-based, theo thứ tự vẽ/z-order).
+    /// Vị trí trong DANH SÁCH PHẲNG object của trang (0-based, thứ tự vẽ,
+    /// gồm cả object nằm trong Form XObject). Trang không có form → trùng
+    /// index trang như cũ. EditOp cũng đánh địa chỉ theo index này.
     pub index: u16,
     pub kind: ObjectKind,
-    /// Khung bao (AABB) theo điểm PDF.
+    /// Khung bao (AABB) theo điểm PDF — object trong form đã quy về TRANG.
     pub rect: Rect,
+    /// Object nằm BÊN TRONG một Form XObject (file Canva/Illustrator...).
+    /// Sửa text được (in-place / reflow); di chuyển/resize chưa hỗ trợ.
+    pub nested: bool,
+    /// Chỉ với kind = XObjectForm: các object con đã được liệt kê riêng
+    /// (UI bỏ khung của form để khỏi che con).
+    pub expanded: bool,
     /// Chỉ với text: nội dung hiện tại.
     pub text: Option<String>,
     /// Chỉ với text: tên font gốc trong PDF (có thể kèm prefix subset).
@@ -146,6 +154,150 @@ fn quad_to_rect(q: &PdfQuadPoints) -> Rect {
     }
 }
 
+// ---- Object trong Form XObject (Phase 4 iteration 4) ----
+//
+// File Canva/Illustrator/InDesign hay GÓI toàn bộ nội dung trang vào 1 Form
+// XObject — trang chỉ có 1 object "form", chữ nằm bên trong. Để sửa được:
+// duyệt PHẲNG đệ quy vào form (FPDFFormObj_CountObjects/GetObject qua
+// pdfium-render), mỗi mục có "path" ([i] = cấp trang, [i,j,...] = con trong
+// form) + tích ma trận form tổ tiên để quy toạ độ về trang. `index` trong
+// ObjectInfo/EditOp = vị trí trong danh sách phẳng này — trang không có form
+// thì trùng index trang như cũ (tương thích ngược).
+
+/// Ma trận PDF (a,b,c,d,e,f) dạng giá trị thuần — quy ước hàng: p' = p·M.
+type Mat6 = (f32, f32, f32, f32, f32, f32);
+
+const MAT_ID: Mat6 = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+
+fn mat_of(m: &PdfMatrix) -> Mat6 {
+    (m.a(), m.b(), m.c(), m.d(), m.e(), m.f())
+}
+
+/// K = M rồi N (p·K = (p·M)·N).
+fn mat_mul(m: Mat6, n: Mat6) -> Mat6 {
+    (
+        m.0 * n.0 + m.1 * n.2,
+        m.0 * n.1 + m.1 * n.3,
+        m.2 * n.0 + m.3 * n.2,
+        m.2 * n.1 + m.3 * n.3,
+        m.4 * n.0 + m.5 * n.2 + n.4,
+        m.4 * n.1 + m.5 * n.3 + n.5,
+    )
+}
+
+fn mat_apply(m: Mat6, x: f32, y: f32) -> (f32, f32) {
+    (m.0 * x + m.2 * y + m.4, m.1 * x + m.3 * y + m.5)
+}
+
+/// AABB của rect sau biến đổi (4 góc → bao).
+fn mat_rect(m: Mat6, r: &Rect) -> Rect {
+    let pts = [
+        mat_apply(m, r.left, r.bottom),
+        mat_apply(m, r.right, r.bottom),
+        mat_apply(m, r.left, r.top),
+        mat_apply(m, r.right, r.top),
+    ];
+    Rect {
+        left: pts.iter().map(|p| p.0).fold(f32::INFINITY, f32::min),
+        bottom: pts.iter().map(|p| p.1).fold(f32::INFINITY, f32::min),
+        right: pts.iter().map(|p| p.0).fold(f32::NEG_INFINITY, f32::max),
+        top: pts.iter().map(|p| p.1).fold(f32::NEG_INFINITY, f32::max),
+    }
+}
+
+/// Hệ số scale DỌC của ma trận (độ dài ảnh của vector đơn vị Y) — dùng quy
+/// đổi cỡ chữ hiển thị của object trong form về không gian trang.
+fn mat_vscale(m: Mat6) -> f32 {
+    (m.2 * m.2 + m.3 * m.3).sqrt().max(0.01)
+}
+
+/// 1 mục trong danh sách phẳng object của trang (gồm cả con trong form).
+struct FlatEntry {
+    /// Địa chỉ: [i] = object cấp trang; [i, j, ...] = con lồng trong form.
+    path: Vec<u16>,
+    /// Tích ma trận các form tổ tiên (đưa toạ độ trong form về trang).
+    acc: Mat6,
+    kind: ObjectKind,
+}
+
+/// Chặn duyệt form quá sâu/quá nhiều (file lỗi/đệ quy).
+const FORM_WALK_MAX_DEPTH: usize = 3;
+const FORM_WALK_MAX_ENTRIES: usize = 4000;
+
+/// Danh sách phẳng object của trang theo thứ tự vẽ, đi sâu vào Form XObject.
+/// Thứ tự này là HỢP ĐỒNG giữa `list_objects` và `apply_edits` — index trong
+/// EditOp tra vào đúng danh sách này.
+fn collect_flat(page: &PdfPage<'_>) -> Vec<FlatEntry> {
+    fn walk_form(
+        form: &PdfPageXObjectFormObject<'_>,
+        base: &[u16],
+        acc: Mat6,
+        depth: usize,
+        out: &mut Vec<FlatEntry>,
+    ) {
+        for j in 0..form.len() {
+            if out.len() >= FORM_WALK_MAX_ENTRIES {
+                return;
+            }
+            let Ok(child) = form.get(j) else { continue };
+            let mut path = base.to_vec();
+            path.push(j as u16);
+            out.push(FlatEntry {
+                path: path.clone(),
+                acc,
+                kind: ObjectKind::from_pdfium(child.object_type()),
+            });
+            if depth < FORM_WALK_MAX_DEPTH {
+                if let PdfPageObject::XObjectForm(f2) = &child {
+                    let m = child.matrix().map(|m| mat_of(&m)).unwrap_or(MAT_ID);
+                    walk_form(f2, &path, mat_mul(m, acc), depth + 1, out);
+                }
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    let n = page.objects().len();
+    for i in 0..n {
+        if out.len() >= FORM_WALK_MAX_ENTRIES {
+            break;
+        }
+        let Ok(obj) = page.objects().get(i) else { continue };
+        let path = vec![i as u16];
+        out.push(FlatEntry {
+            path: path.clone(),
+            acc: MAT_ID,
+            kind: ObjectKind::from_pdfium(obj.object_type()),
+        });
+        if let PdfPageObject::XObjectForm(f) = &obj {
+            let m = obj.matrix().map(|m| mat_of(&m)).unwrap_or(MAT_ID);
+            walk_form(f, &path, m, 1, &mut out);
+        }
+    }
+    out
+}
+
+/// Lấy object theo path (đi sâu vào form theo từng nấc).
+fn object_at_path<'a>(page: &PdfPage<'a>, path: &[u16]) -> Result<PdfPageObject<'a>, EngineError> {
+    let err = |e: PdfiumError| EngineError::Pdfium(format!("lấy object theo path: {e}"));
+    let mut obj = page
+        .objects()
+        .get(path[0] as usize)
+        .map_err(err)?;
+    for &j in &path[1..] {
+        let child = match &obj {
+            PdfPageObject::XObjectForm(f) => f.get(j as usize).map_err(err)?,
+            _ => {
+                return Err(EngineError::Pdfium(
+                    "path object lồng không trỏ vào form".into(),
+                ))
+            }
+        };
+        obj = child;
+    }
+    Ok(obj)
+}
+
 /// Kiểu chữ (đậm/nghiêng) của 1 text object, tổng hợp từ weight, italic-angle
 /// và tên font. Family lấy từ `name()` (BaseFont khai báo trong PDF) — với
 /// font KHÔNG nhúng, `family()` trả tên font stub nội bộ của PDFium ("Chrom
@@ -197,21 +349,27 @@ pub fn list_objects(
         .get(page_index)
         .map_err(|e| EngineError::Pdfium(format!("không lấy được trang {page_index}: {e}")))?;
 
+    // Danh sách PHẲNG (đi sâu vào Form XObject) — index = vị trí trong list.
+    let entries = collect_flat(&page);
+    // Form nào có con được liệt kê → expanded (UI bỏ khung của form đó).
+    let mut parents_with_children: HashSet<Vec<u16>> = HashSet::new();
+    for e in &entries {
+        if e.path.len() > 1 {
+            parents_with_children.insert(e.path[..e.path.len() - 1].to_vec());
+        }
+    }
+
     let mut out = Vec::new();
     // Cache kiểu chữ theo tên font: fallback đậm/nghiêng phải đọc bytes font
     // nhúng — file Word xuất hay có 200+ run chung vài font, không đọc lại.
     let mut style_cache: HashMap<String, (String, bool, bool)> = HashMap::new();
-    for (i, object) in page.objects().iter().enumerate() {
-        let kind = ObjectKind::from_pdfium(object.object_type());
-        let rect = object
-            .bounds()
-            .map(|q| quad_to_rect(&q))
-            .unwrap_or(Rect { left: 0.0, bottom: 0.0, right: 0.0, top: 0.0 });
-
+    for (flat, entry) in entries.iter().enumerate() {
         let mut info = ObjectInfo {
-            index: i as u16,
-            kind,
-            rect,
+            index: flat as u16,
+            kind: entry.kind,
+            rect: Rect { left: 0.0, bottom: 0.0, right: 0.0, top: 0.0 },
+            nested: entry.path.len() > 1,
+            expanded: parents_with_children.contains(&entry.path),
             text: None,
             font_name: None,
             font_family: None,
@@ -221,6 +379,14 @@ pub fn list_objects(
             font_size: None,
             color: None,
         };
+        // Không resolve được vẫn giữ 1 chỗ trong list — index phải khớp vị trí.
+        let Ok(object) = object_at_path(&page, &entry.path) else {
+            out.push(info);
+            continue;
+        };
+        if let Ok(q) = object.bounds() {
+            info.rect = mat_rect(entry.acc, &quad_to_rect(&q));
+        }
         if let Some(t) = object.as_text_object() {
             let raw_name = t.font().name();
             // Tên rỗng không cache được (nhiều font khác nhau cùng key "").
@@ -242,7 +408,8 @@ pub fn list_objects(
             info.font_bold = Some(bold);
             info.font_italic = Some(italic);
             info.font_embedded = t.font().is_embedded().ok();
-            info.font_size = Some(t.scaled_font_size().value);
+            // Cỡ hiển thị = cỡ đã scale của run × scale dọc của form chứa nó.
+            info.font_size = Some(t.scaled_font_size().value * mat_vscale(entry.acc));
             info.color = t
                 .fill_color()
                 .ok()
@@ -433,6 +600,10 @@ pub fn apply_edits(
     let mut add_text_keys: HashMap<usize, FontKey> = HashMap::new();
     let mut reflow_plans: HashMap<usize, ReflowPlan> = HashMap::new();
     let mut font_needed: HashMap<FontKey, FontLoad> = HashMap::new();
+    // Danh sách PHẲNG object (gồm cả con trong Form XObject) — index của mọi
+    // op tra vào đây; dùng chung cho cả pha (A) lẫn (C). Probe font ở pha A
+    // chỉ thêm+xoá object nháp ở CUỐI trang nên không làm lệch index.
+    let entries: Vec<FlatEntry>;
     {
         let mut page = document
             .pages()
@@ -440,8 +611,8 @@ pub fn apply_edits(
             .map_err(|e| EngineError::Pdfium(format!("không lấy được trang {page_index}: {e}")))?;
         // Pha A chỉ đọc + probe font (tạo/xoá object nháp) — không đụng content.
         page.set_content_regeneration_strategy(PdfPageContentRegenerationStrategy::Manual);
-        let obj_count = page.objects().len();
-        let valid = |i: u16| (i as usize) < obj_count;
+        entries = collect_flat(&page);
+        let valid = |i: u16| (i as usize) < entries.len();
 
         for (opi, op) in ops.iter().enumerate() {
             match op {
@@ -449,7 +620,7 @@ pub fn apply_edits(
                     if !valid(*index) {
                         continue;
                     }
-                    let obj = page.objects().get(*index as usize).map_err(err)?;
+                    let obj = object_at_path(&page, &entries[*index as usize].path)?;
                     let t = match obj.as_text_object() {
                         Some(t) => t,
                         None => continue, // không phải text → bỏ qua op
@@ -530,21 +701,27 @@ pub fn apply_edits(
                         tf: f32,
                         scaled: f32,
                     }
+                    // Mọi toạ độ/cỡ quy về KHÔNG GIAN TRANG (run trong form
+                    // nhân thêm ma trận form) — layout khối tính đúng chỗ.
                     let geo_of = |page: &PdfPage<'_>, i: u16| -> Result<Option<RunGeo>, EngineError> {
-                        let obj = page.objects().get(i as usize).map_err(err)?;
+                        let entry = &entries[i as usize];
+                        let obj = object_at_path(page, &entry.path)?;
                         let Some(t) = obj.as_text_object() else {
                             return Ok(None);
                         };
+                        let vs = mat_vscale(entry.acc);
                         let (tf, scaled) =
-                            (t.unscaled_font_size().value, t.scaled_font_size().value);
+                            (t.unscaled_font_size().value, t.scaled_font_size().value * vs);
                         let m = obj.matrix().map_err(err)?;
-                        let b = obj.bounds().map(|q| quad_to_rect(&q)).unwrap_or(Rect {
+                        let (_, fy) = mat_apply(entry.acc, m.e(), m.f());
+                        let b_raw = obj.bounds().map(|q| quad_to_rect(&q)).unwrap_or(Rect {
                             left: m.e(),
                             bottom: m.f(),
                             right: m.e(),
                             top: m.f(),
                         });
-                        Ok(Some(RunGeo { idx: i, f: m.f(), left: b.left, right: b.right, tf, scaled }))
+                        let b = mat_rect(entry.acc, &b_raw);
+                        Ok(Some(RunGeo { idx: i, f: fy, left: b.left, right: b.right, tf, scaled }))
                     };
                     let mut geos: Vec<RunGeo> = Vec::new();
                     for &i in &idxs {
@@ -562,6 +739,15 @@ pub fn apply_edits(
                     // object có TÂM nằm trong bbox khối (nới 2pt) đều thuộc khối →
                     // đưa hết vào để xoá sạch, không còn chữ cũ đè dưới chữ mới.
                     {
+                        // Rect trang của 1 entry text (None nếu không phải text).
+                        let text_rect = |i: u16| -> Option<Rect> {
+                            let entry = &entries[i as usize];
+                            if entry.kind != ObjectKind::Text {
+                                return None;
+                            }
+                            let obj = object_at_path(&page, &entry.path).ok()?;
+                            obj.bounds().ok().map(|q| mat_rect(entry.acc, &quad_to_rect(&q)))
+                        };
                         let mut bb = Rect {
                             left: f32::INFINITY,
                             bottom: f32::INFINITY,
@@ -569,12 +755,7 @@ pub fn apply_edits(
                             top: f32::NEG_INFINITY,
                         };
                         for &i in &idxs {
-                            let obj = page.objects().get(i as usize).map_err(err)?;
-                            if obj.as_text_object().is_none() {
-                                continue;
-                            }
-                            if let Ok(q) = obj.bounds() {
-                                let r = quad_to_rect(&q);
+                            if let Some(r) = text_rect(i) {
                                 bb.left = bb.left.min(r.left);
                                 bb.bottom = bb.bottom.min(r.bottom);
                                 bb.right = bb.right.max(r.right);
@@ -582,21 +763,12 @@ pub fn apply_edits(
                             }
                         }
                         let pad = 2.0;
-                        for i in 0..obj_count as u16 {
+                        for i in 0..entries.len() as u16 {
                             if idxs.contains(&i) {
                                 continue;
                             }
-                            let obj = page.objects().get(i as usize).map_err(err)?;
-                            if obj.as_text_object().is_none() {
-                                continue;
-                            }
-                            let (cx, cy) = match obj.bounds() {
-                                Ok(q) => {
-                                    let r = quad_to_rect(&q);
-                                    ((r.left + r.right) / 2.0, (r.bottom + r.top) / 2.0)
-                                }
-                                Err(_) => continue,
-                            };
+                            let Some(r) = text_rect(i) else { continue };
+                            let (cx, cy) = ((r.left + r.right) / 2.0, (r.bottom + r.top) / 2.0);
                             if cx >= bb.left - pad
                                 && cx <= bb.right + pad
                                 && cy >= bb.bottom - pad
@@ -621,19 +793,24 @@ pub fn apply_edits(
                         .map(|g| g.idx)
                         .unwrap_or(idxs[0]);
                     // Chụp mọi thuộc tính của run neo trong 1 block để nhả mượn
-                    // trang (probe font phía dưới cần &mut page).
-                    let (family, bold, italic, m, unscaled, scaled, color, font_embedded, orig_token, font_data) = {
-                        let anchor = page.objects().get(anchor_idx as usize).map_err(err)?;
+                    // trang (probe font phía dưới cần &mut page). Ma trận/cỡ
+                    // COMPOSE với ma trận form (run neo có thể nằm trong form;
+                    // dòng mới vẽ ở CẤP TRANG nên cần toạ độ trang).
+                    let (family, bold, italic, mc, unscaled, scaled, color, font_embedded, orig_token, font_data) = {
+                        let entry = &entries[anchor_idx as usize];
+                        let anchor = object_at_path(&page, &entry.path)?;
                         let t = anchor.as_text_object().expect("anchor là text");
                         let (family, bold, italic) = text_object_style(t);
                         let m = anchor.matrix().map_err(err)?;
+                        let mc = mat_mul(mat_of(&m), entry.acc);
                         let tok = t.font().token();
                         let unscaled = t.unscaled_font_size().value;
-                        let scaled = t.scaled_font_size().value.max(1.0);
+                        let scaled =
+                            (t.scaled_font_size().value * mat_vscale(entry.acc)).max(1.0);
                         let color = t.fill_color().unwrap_or(PdfColor::new(0, 0, 0, 255));
                         let embedded = t.font().is_embedded().unwrap_or(false);
                         let data = t.font().data().ok();
-                        (family, bold, italic, m, unscaled, scaled, color, embedded, tok, data)
+                        (family, bold, italic, mc, unscaled, scaled, color, embedded, tok, data)
                     };
 
                     // Baseline: gom cụm giá trị f (dung sai 1pt) → dòng; advance =
@@ -756,7 +933,7 @@ pub fn apply_edits(
                             centered,
                             first_baseline,
                             line_advance,
-                            linear: (m.a(), m.b(), m.c(), m.d()),
+                            linear: (mc.0, mc.1, mc.2, mc.3),
                             tf: unscaled.max(1.0),
                             scaled,
                             line_styles,
@@ -790,16 +967,18 @@ pub fn apply_edits(
             .map_err(|e| EngineError::Pdfium(format!("không lấy được trang {page_index}: {e}")))?;
         page.set_content_regeneration_strategy(PdfPageContentRegenerationStrategy::Manual);
 
-        let obj_count = page.objects().len();
-        let valid = |i: u16| (i as usize) < obj_count;
+        let valid = |i: u16| (i as usize) < entries.len();
+        let is_nested = |i: u16| entries[i as usize].path.len() > 1;
 
-        // (1) Transform in-place (không đổi cấu trúc/index).
+        // (1) Transform in-place (không đổi cấu trúc/index). Object TRONG form
+        // chưa hỗ trợ di chuyển/resize (dx/dy tính theo trang còn matrix con
+        // theo không gian form) — bỏ qua, UI cũng đã chặn kéo.
         for op in ops {
             if let EditOp::Transform { index, dx, dy, sx, sy } = op {
-                if !valid(*index) {
+                if !valid(*index) || is_nested(*index) {
                     continue;
                 }
-                let mut obj = page.objects().get(*index as usize).map_err(err)?;
+                let mut obj = object_at_path(&page, &entries[*index as usize].path)?;
                 if (*sx - 1.0).abs() > f32::EPSILON || (*sy - 1.0).abs() > f32::EPSILON {
                     let b = obj.bounds().map_err(err)?;
                     let (x0, y0) = (b.left().value, b.bottom().value);
@@ -823,9 +1002,12 @@ pub fn apply_edits(
             if !matches!(set_text_modes.get(&opi), Some(SetTextMode::InPlace)) {
                 continue;
             }
-            let mut obj = page.objects().get(*index as usize).map_err(err)?;
+            let entry = &entries[*index as usize];
+            let mut obj = object_at_path(&page, &entry.path)?;
+            // Cỡ hiển thị so theo KHÔNG GIAN TRANG (nhân scale form) — target
+            // từ UI cũng theo trang; hệ số k không đổi khi áp trong form.
             let (old_text, scaled) = match obj.as_text_object() {
-                Some(t) => (t.text(), t.scaled_font_size().value),
+                Some(t) => (t.text(), t.scaled_font_size().value * mat_vscale(entry.acc)),
                 None => continue,
             };
             if *text != old_text {
@@ -873,20 +1055,25 @@ pub fn apply_edits(
             if !valid(idx) || captured.contains_key(&idx) {
                 continue;
             }
-            let obj = page.objects().get(idx as usize).map_err(err)?;
+            let entry = &entries[idx as usize];
+            let obj = object_at_path(&page, &entry.path)?;
+            // Rect + matrix COMPOSE về trang: bản thay thế được tạo ở cấp
+            // trang nên phải mang sẵn toạ độ trang (kể cả khi bản gốc trong form).
             let rect = obj
                 .bounds()
-                .map(|q| quad_to_rect(&q))
+                .map(|q| mat_rect(entry.acc, &quad_to_rect(&q)))
                 .unwrap_or(Rect { left: 0.0, bottom: 0.0, right: 0.0, top: 0.0 });
-            let (matrix, unscaled, scaled, color) = if let Some(t) = obj.as_text_object() {
+            let mc = mat_mul(mat_of(&obj.matrix().map_err(err)?), entry.acc);
+            let matrix = PdfMatrix::new(mc.0, mc.1, mc.2, mc.3, mc.4, mc.5);
+            let vs = mat_vscale(entry.acc);
+            let (unscaled, scaled, color) = if let Some(t) = obj.as_text_object() {
                 (
-                    obj.matrix().map_err(err)?,
                     t.unscaled_font_size().value,
-                    t.scaled_font_size().value,
+                    t.scaled_font_size().value * vs,
                     t.fill_color().unwrap_or(PdfColor::new(0, 0, 0, 255)),
                 )
             } else {
-                (obj.matrix().map_err(err)?, 0.0, 0.0, PdfColor::new(0, 0, 0, 255))
+                (0.0, 0.0, PdfColor::new(0, 0, 0, 255))
             };
             captured.insert(
                 idx,
@@ -917,7 +1104,32 @@ pub fn apply_edits(
         to_remove.retain(|i| valid(*i));
         to_remove.sort_unstable();
         to_remove.dedup();
-        for idx in to_remove.into_iter().rev() {
+        // Con TRONG form: chưa rút object ra được (FPDFFormObj_RemoveObject
+        // chưa mở ở wrapper) → "xoá" = set text RỖNG — glyph biến mất, PDFium
+        // regenerate stream form khi lưu (ProcessForm → HasDirtyStreams).
+        // Làm TRƯỚC khi xoá object cấp trang để path (nấc đầu = index trang)
+        // còn đúng. Con không phải text (ảnh/path trong form): v1 bỏ qua.
+        for &i in to_remove.iter().filter(|&&i| is_nested(i)) {
+            let entry = &entries[i as usize];
+            if entry.kind != ObjectKind::Text {
+                continue;
+            }
+            let mut obj = object_at_path(&page, &entry.path)?;
+            if let Some(t) = obj.as_text_object_mut() {
+                if t.set_text("").is_err() {
+                    let _ = t.set_text(" ");
+                }
+            }
+        }
+        // Cấp trang: xoá thật theo index trang GIẢM DẦN.
+        let mut page_idxs: Vec<u16> = to_remove
+            .iter()
+            .filter(|&&i| !is_nested(i))
+            .map(|&i| entries[i as usize].path[0])
+            .collect();
+        page_idxs.sort_unstable();
+        page_idxs.dedup();
+        for idx in page_idxs.into_iter().rev() {
             let removed = page.objects_mut().remove_object_at_index(idx as usize).map_err(err)?;
             // BẪY PDFium: object vừa tách khỏi trang bị đánh dấu "unowned" → Drop
             // gọi FPDFPageObj_Destroy, mà destroy object vốn thuộc document gây
