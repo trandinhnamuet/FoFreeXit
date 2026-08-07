@@ -1200,8 +1200,21 @@ pub fn apply_edits(
             .map(|&i| &entries[i as usize].path)
             .collect();
         nested_paths.sort_by(|a, b| b.len().cmp(&a.len()).then(b.cmp(a)));
+        let mut touched_roots: Vec<u16> = nested_paths.iter().map(|p| p[0]).collect();
         for path in nested_paths {
             remove_form_child(&page, path)?;
+        }
+        // ĐÁNH THỨC trang: GenerateContent chỉ ghi lại stream trang khi có
+        // object CẤP TRANG dirty; rút con mới làm FORM dirty thôi — op thuần
+        // trong form (Delete...) không đụng cấp trang → trang không regenerate
+        // → ProcessForm (nơi ghi lại form) không bao giờ chạy. Nhân identity
+        // vào form tổ tiên cấp trang: Transform luôn SetDirty, giá trị không
+        // đổi → trang được ghi lại → form được ghi lại theo.
+        touched_roots.sort_unstable();
+        touched_roots.dedup();
+        for r in touched_roots {
+            let mut root = object_at_path(&page, &[r])?;
+            root.apply_matrix(PdfMatrix::IDENTITY).map_err(err)?;
         }
         // Cấp trang: xoá thật theo index trang GIẢM DẦN.
         let mut page_idxs: Vec<u16> = to_remove
