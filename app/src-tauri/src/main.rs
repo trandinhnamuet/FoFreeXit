@@ -1302,6 +1302,28 @@ fn pick_save_pem(app: tauri::AppHandle) -> Option<String> {
         .map(|fp| fp.to_string())
 }
 
+/// "Mở gói" mọi Form XObject của trang ra cấp trang (file Canva/Illustrator
+/// gói cả trang vào form — PDFium không ghi lại được stream form nên phải
+/// flatten trước khi sửa). Trả None nếu trang không có form (không tạo file).
+#[tauri::command]
+fn edit_flatten_to_temp(input: String, page: u16, password: Option<String>) -> Result<Option<String>, String> {
+    let pdfium = pdfium()?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let out = std::env::temp_dir().join(format!("ff_edit_flat_{}_{}.pdf", std::process::id(), nanos));
+    let n = ff_engine::flatten_form_xobjects(
+        &pdfium,
+        std::path::Path::new(&input),
+        page,
+        &out,
+        password.as_deref(),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(if n > 0 { Some(out.to_string_lossy().into_owned()) } else { None })
+}
+
 /// Dọn các file làm việc tạm của chế độ sửa (undo stack). Chỉ xoá file có tên
 /// `ff_edit_*` nằm đúng trong thư mục temp — không bao giờ đụng file người dùng.
 #[tauri::command]
@@ -1362,6 +1384,7 @@ fn main() {
             edit_apply_to_temp,
             edit_preview,
             edit_cleanup,
+            edit_flatten_to_temp,
             redact_apply,
             security_encrypt,
             security_decrypt,

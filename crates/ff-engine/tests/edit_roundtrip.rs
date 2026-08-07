@@ -1086,18 +1086,47 @@ fn form_xobject_children_are_listed() {
     assert!((text.font_size.unwrap_or(0.0) - 24.0).abs() < 2.0, "cỡ hiển thị ~24: {:?}", text.font_size);
 }
 
-// Canary quan trọng nhất: sửa IN-PLACE con trong form rồi lưu — PDFium phải
-// regenerate content stream của form (ProcessForm → HasDirtyStreams).
+// PDFium KHÔNG ghi lại được stream của Form XObject (CPDF_PageContentManager
+// chỉ biết /Contents của trang) → muốn sửa phải MỞ GÓI form ra cấp trang.
 #[test]
-fn form_xobject_settext_inplace_roundtrip() {
+fn flatten_form_xobjects_unwraps_page() {
+    let pdf = pdfium();
+    let input = form_fixture("ff_edit_formx_flatten.pdf");
+    let out = tmp("ff_edit_formx_flatten_out.pdf");
+
+    let n = ff_engine::flatten_form_xobjects(&pdf, &input, 0, &out, None).expect("flatten");
+    assert_eq!(n, 1, "phải mở đúng 1 form");
+
+    let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
+    assert!(
+        objs.iter().all(|o| o.kind != ObjectKind::XObjectForm),
+        "không còn form nào: {objs:?}"
+    );
+    let t = objs
+        .iter()
+        .find(|o| o.kind == ObjectKind::Text && o.text.as_deref().map(|s| s.contains("Hello inside form")).unwrap_or(false))
+        .unwrap_or_else(|| panic!("text phải thành cấp trang: {objs:?}"));
+    assert!(!t.nested, "text sau flatten phải hết nested: {t:?}");
+    // Vị trí giữ nguyên (baseline 700, lề 72) và render vẫn ra chữ.
+    assert!(t.rect.left > 60.0 && t.rect.left < 84.0, "left ~72: {:?}", t.rect);
+    assert!(t.rect.bottom > 680.0 && t.rect.top < 740.0, "bbox quanh y=700: {:?}", t.rect);
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    assert!(text.contains("Hello inside form"), "nội dung không đổi: {text:?}");
+}
+
+// Sau flatten, sửa text (giữ font base-14) round-trip như trang thường.
+#[test]
+fn form_xobject_settext_after_flatten_roundtrip() {
     let pdf = pdfium();
     let input = form_fixture("ff_edit_formx_settext.pdf");
+    let flat = tmp("ff_edit_formx_settext_flat.pdf");
     let out = tmp("ff_edit_formx_settext_out.pdf");
-    let idx = find_text_index(&pdf, &input, "Hello inside form");
+    ff_engine::flatten_form_xobjects(&pdf, &input, 0, &flat, None).expect("flatten");
+    let idx = find_text_index(&pdf, &flat, "Hello inside form");
 
     ff_engine::apply_edits(
         &pdf,
-        &input,
+        &flat,
         0,
         &[EditOp::SetText {
             index: idx,
@@ -1111,25 +1140,26 @@ fn form_xobject_settext_inplace_roundtrip() {
         &out,
         None,
     )
-    .expect("apply_edits SetText trong form");
+    .expect("apply_edits SetText sau flatten");
 
     let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
     assert!(text.contains("Edited in form!"), "text mới phải có mặt: {text:?}");
-    assert!(!text.contains("Hello inside form"), "text cũ trong form phải biến mất: {text:?}");
+    assert!(!text.contains("Hello inside form"), "text cũ phải biến mất: {text:?}");
 }
 
-// Reflow đoạn trong form: run cũ bị làm rỗng (không rút được object khỏi
-// form), dòng mới vẽ ở cấp trang với toạ độ đã compose ma trận form.
+// Reflow tiếng Việt sau flatten: bẻ dòng quanh vị trí khối cũ.
 #[test]
-fn form_xobject_reflow_roundtrip() {
+fn form_xobject_reflow_after_flatten_roundtrip() {
     let pdf = pdfium();
     let input = form_fixture("ff_edit_formx_reflow.pdf");
+    let flat = tmp("ff_edit_formx_reflow_flat.pdf");
     let out = tmp("ff_edit_formx_reflow_out.pdf");
-    let idx = find_text_index(&pdf, &input, "Hello inside form");
+    ff_engine::flatten_form_xobjects(&pdf, &input, 0, &flat, None).expect("flatten");
+    let idx = find_text_index(&pdf, &flat, "Hello inside form");
 
     ff_engine::apply_edits(
         &pdf,
-        &input,
+        &flat,
         0,
         &[EditOp::ReflowText {
             indices: vec![idx],
@@ -1138,12 +1168,11 @@ fn form_xobject_reflow_roundtrip() {
         &out,
         None,
     )
-    .expect("apply_edits ReflowText trong form");
+    .expect("apply_edits ReflowText sau flatten");
 
     let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
     assert!(text.contains("Đoạn văn tiếng Việt thay thế"), "text mới phải có mặt: {text:?}");
     assert!(!text.contains("Hello inside form"), "text cũ phải biến mất: {text:?}");
-    // Dòng mới phải nằm quanh vị trí khối cũ (không rơi về góc trang).
     let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
     let new_runs: Vec<_> = objs
         .iter()
@@ -1151,21 +1180,41 @@ fn form_xobject_reflow_roundtrip() {
         .collect();
     assert!(!new_runs.is_empty(), "phải có run mới: {objs:?}");
     for r in &new_runs {
-        assert!(r.rect.left > 50.0 && r.rect.top < 740.0 && r.rect.bottom > 500.0,
-            "dòng mới phải quanh khối cũ: {:?}", r.rect);
+        assert!(
+            r.rect.left > 50.0 && r.rect.top < 740.0 && r.rect.bottom > 500.0,
+            "dòng mới phải quanh khối cũ: {:?}",
+            r.rect
+        );
     }
 }
 
+// Xoá sau flatten: text biến mất thật khỏi file lưu ra.
 #[test]
-fn form_xobject_delete_clears_text() {
+fn form_xobject_delete_after_flatten_clears_text() {
     let pdf = pdfium();
     let input = form_fixture("ff_edit_formx_delete.pdf");
+    let flat = tmp("ff_edit_formx_delete_flat.pdf");
     let out = tmp("ff_edit_formx_delete_out.pdf");
-    let idx = find_text_index(&pdf, &input, "Hello inside form");
+    ff_engine::flatten_form_xobjects(&pdf, &input, 0, &flat, None).expect("flatten");
+    let idx = find_text_index(&pdf, &flat, "Hello inside form");
 
-    ff_engine::apply_edits(&pdf, &input, 0, &[EditOp::Delete { index: idx }], &out, None)
-        .expect("apply_edits Delete trong form");
+    ff_engine::apply_edits(&pdf, &flat, 0, &[EditOp::Delete { index: idx }], &out, None)
+        .expect("apply_edits Delete sau flatten");
 
     let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
-    assert!(!text.contains("Hello inside form"), "text trong form phải biến mất sau xoá: {text:?}");
+    assert!(!text.contains("Hello inside form"), "text phải biến mất sau xoá: {text:?}");
+}
+
+// Op nhắm thẳng vào object trong form (chưa flatten) phải bị TỪ CHỐI rõ ràng
+// (không âm thầm ghi ra bản không đổi).
+#[test]
+fn nested_target_without_flatten_is_rejected() {
+    let pdf = pdfium();
+    let input = form_fixture("ff_edit_formx_reject.pdf");
+    let out = tmp("ff_edit_formx_reject_out.pdf");
+    let idx = find_text_index(&pdf, &input, "Hello inside form");
+
+    let err = ff_engine::apply_edits(&pdf, &input, 0, &[EditOp::Delete { index: idx }], &out, None)
+        .expect_err("op vào object trong form phải bị từ chối");
+    assert!(format!("{err}").contains("mở gói"), "thông điệp phải nhắc flatten: {err}");
 }

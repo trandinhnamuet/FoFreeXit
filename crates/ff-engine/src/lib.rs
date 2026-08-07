@@ -22,7 +22,7 @@ pub mod watermark;
 pub use annot::{
     apply_annotations, count_annotations, list_annotations, AnnotInfo, AnnotKind, AnnotSpec,
 };
-pub use edit::{apply_edits, list_objects, EditOp, ObjectInfo, ObjectKind};
+pub use edit::{apply_edits, flatten_form_xobjects, list_objects, EditOp, ObjectInfo, ObjectKind};
 pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};
 pub use organize::{
     build_document, delete_pages, extract_pages, identity_plan, merge_files, rotate_pages,

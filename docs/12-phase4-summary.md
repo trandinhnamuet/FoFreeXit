@@ -23,28 +23,28 @@ Type0/CID nhúng), trong khi `list_objects` chỉ duyệt object cấp trang.
   thị nhân `mat_vscale(acc)` (độ dài ảnh vector đơn vị Y).
 - **ObjectInfo thêm `nested`** (con trong form — sửa text OK, kéo/resize chưa)
   **+ `expanded`** (form đã liệt kê con — UI bỏ khung form để khỏi che con).
-- **Áp op cho con trong form — bài học đắt giá từ CI vòng 1**: `dirty_streams_`
-  của form CHỈ được đánh dấu bởi `RemovePageObject`/`InsertPageObjectAtIndex`
-  trên CHÍNH form (xem cpdf_pageobjectholder.cpp) — **`FPDFText_SetText` trên
-  con KHÔNG làm form dirty → sửa in-place trong form không bao giờ được ghi
-  ra file** (test canary bắt được đúng lỗi này: extract sau lưu vẫn thấy text
-  cũ). Cách làm đúng: mọi sửa/xoá con trong form = **RÚT THẬT khỏi form qua
-  `FPDFFormObj_RemoveObject`** (đánh dấu dirty → `ProcessForm` regenerate
-  stream form khi lưu) **+ với SetText thì tạo lại ở CẤP TRANG** giữ font gốc
-  qua token (probe như tầng 0 reflow; thiếu glyph → nhúng lại bytes/cùng họ)
-  với matrix đã compose (`SetTextMode::NestedRecreate`). Thứ tự rút: path sâu
-  trước, cùng cha con lớn trước (rút làm tụt index các em). Transform
-  (kéo/resize) con trong form: bỏ qua, UI chặn kéo.
-- **Đổi feature pdfium-render `pdfium_latest`(7543) → `pdfium_7350`** (cả
-  ff-engine lẫn app): wrapper 0.8.37 gate `remove_object` của form chỉ mở cho
-  7350/future dù binding có đủ cho 7543 (sót gate upstream); API 7350 là
-  subset của DLL bblanchon mới → không mất gì (đã quét: 0 hàm 7543-only).
-- **Bài học CI vòng 2 — "đánh thức" trang**: `GenerateContent` chỉ ghi lại
-  stream trang khi có object CẤP TRANG dirty; rút con chỉ làm FORM dirty →
-  op thuần trong form (Delete) không kích hoạt gì → `ProcessForm` không chạy.
-  Fix: sau khi rút con, nhân identity matrix vào form tổ tiên cấp trang
-  (Transform luôn SetDirty, giá trị không đổi) → trang regenerate → form
-  regenerate theo.
+- **KẾT LUẬN QUAN TRỌNG NHẤT (3 vòng CI + đọc source PDFium): PDFium hiện
+  KHÔNG ghi lại được stream của Form XObject.** Chuỗi chứng cứ:
+  1. `FPDFText_SetText` trên con không làm form dirty (`dirty_streams_` chỉ
+     được đánh dấu bởi Remove/Insert trên chính form — cpdf_pageobjectholder.cpp);
+  2. rút con bằng `FPDFFormObj_RemoveObject` + làm trang dirty → `ProcessForm`
+     CÓ chạy generator cho form, NHƯNG `CPDF_PageContentManager` (nơi ghi kết
+     quả) chỉ biết key `/Contents` — form là stream TỰ THÂN, không có
+     /Contents → content mới rơi vào key /Contents vô nghĩa trên dict form,
+     stream thật giữ nguyên (cpdf_pagecontentmanager.cpp, constructor +
+     AddStream). Test round-trip bắt đúng triệu chứng: extract sau lưu vẫn
+     thấy text cũ.
+- **Giải pháp cuối: MỞ GÓI (flatten) form ra cấp trang** —
+  `flatten_form_xobjects`: rút từng con khỏi form (`FPDFFormObj_RemoveObject`
+  — cần đổi feature pdfium-render `pdfium_latest`→`pdfium_7350` vì wrapper
+  0.8.37 sót gate; đã quét 0 hàm 7543-only bị mất), nhân ma trận form vào
+  con, chèn lại vào TRANG, xoá form rỗng; lặp ≤4 vòng cho form lồng form.
+  Hiển thị y hệt (đã kiểm vị trí/nội dung), mọi object thành cấp trang → sửa
+  bằng đường page-level đã được test kỹ từ iteration 1-3. UI: `loadEditPage`
+  thấy object `nested` → gọi `edit_flatten_to_temp` một lần rồi nạp lại
+  (bản mở gói không tính là "có thay đổi" cho tới khi sửa thật).
+- Op nhắm vào object trong form khi CHƯA flatten → engine trả lỗi rõ ràng
+  ("trang chưa được mở gói") thay vì âm thầm ghi bản không đổi — có test.
 - CI test chạy `--test-threads=1`: PDFium serialize qua 1 mutex toàn cục —
   1 test panic (kể cả panic Ở ASSERT khi instance Pdfium còn sống — unwind
   drop guard giữa panic) sẽ poison mutex, mọi test SAU đó trong cùng process
@@ -60,17 +60,17 @@ Type0/CID nhúng), trong khi `list_objects` chỉ duyệt object cấp trang.
 - Chặn kéo di chuyển dòng chứa run `nested` (engine chưa hỗ trợ Transform
   trong form) — vẫn chọn/sửa text/xoá bình thường.
 
-### Test (4 mới — `edit_roundtrip.rs`, fixture tự dựng bằng lopdf)
+### Test (6 — `edit_roundtrip.rs`, fixture tự dựng bằng lopdf)
 - Fixture: PDF 1 trang, chữ "Hello inside form" Helvetica 24pt nằm TRONG
   Form XObject (trang chỉ có 1 object form) — đúng cấu trúc Canva.
 - `form_xobject_children_are_listed` — thấy text nested, form expanded, rect
   quy về trang đúng chỗ (72, ~700), cỡ ~24.
-- `form_xobject_settext_inplace_roundtrip` — **canary quan trọng nhất**: sửa
-  in-place con trong form → lưu → text mới có mặt, text cũ biến mất (chứng
-  minh PDFium regenerate stream form).
-- `form_xobject_reflow_roundtrip` — reflow tiếng Việt trong form: run cũ làm
-  rỗng, dòng mới ở cấp trang quanh khối cũ.
-- `form_xobject_delete_clears_text` — xoá = text biến mất khỏi extract.
+- `flatten_form_xobjects_unwraps_page` — mở gói: hết form, text thành cấp
+  trang, vị trí giữ nguyên, nội dung không đổi.
+- `form_xobject_settext_after_flatten_roundtrip` / `..._reflow_...` /
+  `..._delete_...` — sửa/reflow tiếng Việt/xoá SAU flatten round-trip chuẩn.
+- `nested_target_without_flatten_is_rejected` — op vào object trong form khi
+  chưa flatten bị từ chối với thông điệp rõ.
 
 ### CI chạy test engine
 Máy dev không có Rust nên **CI là nơi duy nhất chạy test**: workflow thêm
@@ -78,12 +78,12 @@ bước `cargo test -p ff-engine` TRƯỚC khi build release (fail test = fail
 build, không publish bản hỏng); cache thêm `target/` gốc workspace.
 
 ### Giới hạn ghi nhận (iteration 4 v1)
-- Chưa di chuyển/resize object trong form (Transform bị bỏ qua, UI chặn kéo).
-- Chưa sửa/thay ẢNH trong form (khung overlay ẩn).
-- "Xoá" text trong form để lại text object rỗng trong form (vô hại, không
-  render); khi wrapper mở `FPDFFormObj_RemoveObject` cho pdfium_7543 sẽ xoá
-  thật.
-- Form lồng sâu >3 cấp hoặc >4000 object con: phần vượt không liệt kê.
+- Flatten làm MẤT clip path/ExtGState/transparency group đặt Ở MỨC FORM
+  (file Canva wrapper toàn trang thường không có — hiển thị y hệt; file có
+  clip ở form sẽ khác biệt, sẽ xử lý khi gặp thật).
+- Cấu trúc file sau khi SỬA thay đổi (form được mở ra trang) — nội dung và
+  hiển thị giữ nguyên; chỉ xảy ra khi người dùng thật sự lưu thay đổi.
+- Form lồng sâu >4 vòng mở hoặc >4000 object: phần vượt giữ nguyên trong form.
 
 > Các iteration trước: 52/52 test engine xanh ngoài qpdf (17 test edit + 6
 > unit fontmatch + 29 test cũ) — nay thêm 4 test form + 2 unit sfnt style.

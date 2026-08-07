@@ -39,6 +39,7 @@ const state = {
   editArm: null,          // 'text' | 'image' khi đang chờ click đặt; null = không
   editPendingImage: null, // đường dẫn ảnh chờ đặt (Thêm ảnh)
   editPendingPoint: null, // điểm PDF chờ mở ô sửa (đúp chuột từ viewer thường)
+  editFlatBase: null,     // bản "mở gói" Form XObject — không tính là thay đổi
   editColor: [0, 0, 0],   // màu chữ áp khi sửa/thêm text
   editTemps: [],          // mọi file tạm đã materialize trong phiên sửa (để dọn)
   secMode: false,         // thanh Bảo mật (Phase 5) đang mở
@@ -2054,6 +2055,7 @@ function enterEditMode(pageIndex) {
   state.editSel = null;
   state.editArm = null;
   state.editPendingImage = null;
+  state.editFlatBase = null;
   $("annobar").classList.add("hidden");
   $("editBar").classList.remove("hidden");
   $("viewport").classList.add("hidden");
@@ -2125,6 +2127,25 @@ async function loadEditPage() {
       invoke("render_page", { path: state.editBase, page: state.editPage, width: EDIT_STAGE_W }),
       invoke("edit_list_objects", { path: state.editBase, page: state.editPage, password: null }),
     ]);
+    // Trang có object nằm TRONG Form XObject (file Canva/Illustrator gói cả
+    // trang vào form): PDFium không ghi lại được stream form → "mở gói" form
+    // ra cấp trang MỘT LẦN (hiển thị y hệt) rồi nạp lại — từ đó sửa như
+    // trang thường. Bản mở gói không tính là "có thay đổi" cho tới khi sửa.
+    if (objs.some((o) => o.nested)) {
+      try {
+        const flat = await invoke("edit_flatten_to_temp", {
+          input: state.editBase, page: state.editPage, password: null,
+        });
+        if (flat) {
+          state.editTemps.push(flat);
+          state.editBase = flat;
+          state.editFlatBase = flat;
+          return loadEditPage();
+        }
+      } catch (e) {
+        $("editHint").textContent = "Không mở gói được form: " + e;
+      }
+    }
     $("editImg").src = url;
     state.editObjects = objs;
     buildEditOverlay();
@@ -2132,7 +2153,8 @@ async function loadEditPage() {
   } catch (e) {
     $("editHint").textContent = "Lỗi nạp trang sửa: " + e;
   }
-  $("edSave").disabled = state.editBase === state.path; // chưa có thay đổi nào
+  // Chưa có thay đổi nào (bản mở gói form không tính).
+  $("edSave").disabled = state.editBase === state.path || state.editBase === state.editFlatBase;
   updateEditUndoButtons();
 
   // Đúp chuột từ viewer thường (kiểu Foxit): vào thẳng ô sửa tại điểm đã đúp.
