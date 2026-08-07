@@ -93,6 +93,40 @@ pub fn render_page(
     })
 }
 
+/// Tỉ lệ pixel KHÁC NHAU (0.0–1.0) giữa cùng 1 trang của 2 file, render cùng
+/// bề rộng. Dùng làm CỔNG AN TOÀN cho các phép biến đổi phải giữ nguyên hiển
+/// thị (mở gói Form XObject…): lệch quá ngưỡng → từ chối biến đổi thay vì âm
+/// thầm làm hỏng file. Sai khác ≤12/255 mỗi kênh bỏ qua (nhiễu anti-alias).
+pub fn page_render_mismatch(
+    pdfium: &Pdfium,
+    a: &Path,
+    b: &Path,
+    page_index: u16,
+    target_width: u32,
+) -> Result<f32, EngineError> {
+    let ia = render_page(pdfium, a, page_index, target_width, None)?.image.to_rgba8();
+    let ib = render_page(pdfium, b, page_index, target_width, None)?.image.to_rgba8();
+    if ia.dimensions() != ib.dimensions() {
+        return Ok(1.0);
+    }
+    let (w, h) = ia.dimensions();
+    let total = (w as u64 * h as u64).max(1);
+    let mut diff = 0u64;
+    for (pa, pb) in ia.pixels().zip(ib.pixels()) {
+        let d = pa
+            .0
+            .iter()
+            .zip(pb.0.iter())
+            .map(|(x, y)| (*x as i16 - *y as i16).unsigned_abs())
+            .max()
+            .unwrap_or(0);
+        if d > 12 {
+            diff += 1;
+        }
+    }
+    Ok(diff as f32 / total as f32)
+}
+
 /// Render một trang và ghi ra file PNG.
 pub fn render_page_png(
     pdfium: &Pdfium,

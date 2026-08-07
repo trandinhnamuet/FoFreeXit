@@ -40,6 +40,7 @@ const state = {
   editPendingImage: null, // đường dẫn ảnh chờ đặt (Thêm ảnh)
   editPendingPoint: null, // điểm PDF chờ mở ô sửa (đúp chuột từ viewer thường)
   editFlatBase: null,     // bản "mở gói" Form XObject — không tính là thay đổi
+  editFlattenFailed: null, // cổng an toàn từ chối mở gói — thông điệp chặn sửa
   editColor: [0, 0, 0],   // màu chữ áp khi sửa/thêm text
   editTemps: [],          // mọi file tạm đã materialize trong phiên sửa (để dọn)
   secMode: false,         // thanh Bảo mật (Phase 5) đang mở
@@ -2056,6 +2057,7 @@ function enterEditMode(pageIndex) {
   state.editArm = null;
   state.editPendingImage = null;
   state.editFlatBase = null;
+  state.editFlattenFailed = null;
   $("annobar").classList.add("hidden");
   $("editBar").classList.remove("hidden");
   $("viewport").classList.add("hidden");
@@ -2140,10 +2142,14 @@ async function loadEditPage() {
           state.editTemps.push(flat);
           state.editBase = flat;
           state.editFlatBase = flat;
+          state.editFlattenFailed = null;
           return loadEditPage();
         }
       } catch (e) {
-        $("editHint").textContent = "Không mở gói được form: " + e;
+        // Cổng an toàn từ chối (mở gói làm lệch hiển thị) → vẫn xem được,
+        // nhưng chặn sửa các phần nằm trong form với thông điệp rõ.
+        state.editFlattenFailed = String(e);
+        $("editHint").textContent = String(e);
       }
     }
     $("editImg").src = url;
@@ -2610,7 +2616,15 @@ function paragraphLines(o) {
 // đường code duy nhất, giữ nguyên cấu trúc xuống dòng, commit qua reflow.
 // `ev` (nếu có) = sự kiện chuột để đặt con trỏ đúng chỗ vừa đúp.
 function startTextEdit(o, ev) {
-  startBlockTextEdit(o, paragraphLines(o), ev);
+  const lines = paragraphLines(o);
+  // Trang gói form phức tạp không mở gói được an toàn → text vẫn nằm TRONG
+  // form, engine không lưu sửa đổi được — báo rõ thay vì mở ô sửa vô dụng.
+  if (lines.some((l) => l.runs.some((r) => r.nested))) {
+    $("editHint").textContent =
+      state.editFlattenFailed || "Phần này nằm trong Form XObject — chưa sửa được trên file này.";
+    return;
+  }
+  startBlockTextEdit(o, lines, ev);
 }
 
 // Sửa cả đoạn WYSIWYG (chuẩn Foxit Edit Text): contenteditable phủ kín khối,

@@ -77,12 +77,34 @@ Máy dev không có Rust nên **CI là nơi duy nhất chạy test**: workflow t
 bước `cargo test -p ff-engine` TRƯỚC khi build release (fail test = fail
 build, không publish bản hỏng); cache thêm `target/` gốc workspace.
 
-### Giới hạn ghi nhận (iteration 4 v1)
-- Flatten làm MẤT clip path/ExtGState/transparency group đặt Ở MỨC FORM
-  (file Canva wrapper toàn trang thường không có — hiển thị y hệt; file có
-  clip ở form sẽ khác biệt, sẽ xử lý khi gặp thật).
-- Cấu trúc file sau khi SỬA thay đổi (form được mở ra trang) — nội dung và
-  hiển thị giữ nguyên; chỉ xảy ra khi người dùng thật sự lưu thay đổi.
+### CỔNG AN TOÀN + giới hạn ghi nhận (iteration 4 v1)
+Kiểm chứng E2E trên file Canva THẬT (CV, 1149 object sau mở gói) phát hiện:
+**generator của PDFium ghi lại cả trang là LOSSY với file phức tạp**:
+- Map font theo (type, BaseFont) — Canva nhúng 2+ subset TRÙNG TÊN
+  ("AAAAAA+Now-Bold" ×2): run của subset 2 bị ép qua subset 1 → mất glyph
+  rải rác (PROFILE → "O ILE").
+- `ProcessImage` BỎ ảnh inline (`IsInline() → return`) — mất ảnh chân dung.
+- Mở form theo vòng append cuối trang → z-order xáo trộn (panel đè lên chữ).
+
+→ **`edit_flatten_to_temp` có CỔNG AN TOÀN `page_render_mismatch`**: render
+trang trước/sau mở gói (500px, dung sai 12/255/kênh), lệch >0.5% điểm ảnh →
+HUỶ file tạm + trả lỗi rõ; UI hiển thị thông điệp và CHẶN mở ô sửa phần nằm
+trong form (xem/chú thích/tổ chức trang vẫn bình thường). File gói form đơn
+giản (đa số file xuất máy in ảo, fixture test) qua cổng → sửa thoải mái.
+
+**Kế hoạch iteration sau cho file Canva-phức-tạp** (đã chốt kiến trúc):
+KHÔNG regenerate qua PDFium — phẫu thuật content stream bằng lopdf:
+(1) xoá đúng các op vẽ chữ (Tj/TJ/'/") của run bị sửa trong stream form
+(map: text-child thứ k của form ↔ show-op thứ k, thứ tự parse tuần tự);
+(2) chữ mới vẽ ở CẤP TRANG bằng PDFium như hiện tại (trang chỉ có Do +
+path — regenerate trang không đụng nội dung form, không dính lỗi trùng tên
+font). Mọi byte khác của form giữ NGUYÊN — lossless by construction.
+
+Giới hạn khác:
+- Flatten làm mất clip/ExtGState/transparency group đặt Ở MỨC FORM — các
+  trường hợp này thường cũng làm lệch render → cổng an toàn tự chặn.
+- Cấu trúc file sau khi SỬA thay đổi (form mở ra trang) — hiển thị giữ
+  nguyên (đã có cổng kiểm); chỉ xảy ra khi người dùng thật sự lưu.
 - Form lồng sâu >4 vòng mở hoặc >4000 object: phần vượt giữ nguyên trong form.
 
 > Các iteration trước: 52/52 test engine xanh ngoài qpdf (17 test edit + 6

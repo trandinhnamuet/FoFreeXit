@@ -42,7 +42,7 @@ pub use form::{
 pub use ocr::{find_tesseract, ocr_add_text_layer, ocr_page_words, OcrWord};
 pub use redact::redact_areas;
 pub use sign::{generate_self_signed_id, sign_pdf, verify_signatures, SignatureCheck};
-pub use render::{bind_pdfium, page_count, render_page_png, PageImage};
+pub use render::{bind_pdfium, page_count, page_render_mismatch, render_page_png, PageImage};
 pub use text::{extract_text, page_char_boxes, search, CharBox, Rect, SearchHit};
 pub use watermark::{add_header_footer, add_watermark, Anchor, HeaderFooterSpec, WatermarkSpec};
 
