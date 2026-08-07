@@ -1220,3 +1220,14 @@ fn nested_target_without_flatten_is_rejected() {
         .expect_err("op vào object trong form phải bị từ chối");
     assert!(format!("{err}").contains("mở gói"), "thông điệp phải nhắc flatten: {err}");
 }
+
+// Cổng an toàn: mở gói fixture đơn giản phải giữ nguyên hiển thị (lệch ~0%).
+#[test]
+fn flatten_is_visually_lossless_on_simple_form() {
+    let pdf = pdfium();
+    let input = form_fixture("ff_edit_formx_gate.pdf");
+    let out = tmp("ff_edit_formx_gate_out.pdf");
+    ff_engine::flatten_form_xobjects(&pdf, &input, 0, &out, None).expect("flatten");
+    let mm = ff_engine::page_render_mismatch(&pdf, &input, &out, 0, 500).expect("mismatch");
+    assert!(mm < 0.005, "mở gói phải giữ nguyên hiển thị, lệch {:.3}%", mm * 100.0);
+}

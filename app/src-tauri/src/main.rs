@@ -1321,7 +1321,26 @@ fn edit_flatten_to_temp(input: String, page: u16, password: Option<String>) -> R
         password.as_deref(),
     )
     .map_err(|e| e.to_string())?;
-    Ok(if n > 0 { Some(out.to_string_lossy().into_owned()) } else { None })
+    if n == 0 {
+        return Ok(None);
+    }
+    // CỔNG AN TOÀN: mở gói phải giữ nguyên hiển thị. Generator của PDFium
+    // lossy với file phức tạp (font subset TRÙNG TÊN bị gộp làm mất glyph,
+    // ảnh inline bị bỏ, z-order form lồng nhau xáo trộn) — so render 2 bản,
+    // lệch quá 0.5% điểm ảnh → HUỶ, giữ nguyên file gốc.
+    let mismatch =
+        ff_engine::page_render_mismatch(&pdfium, std::path::Path::new(&input), &out, page, 500)
+            .map_err(|e| e.to_string())?;
+    if mismatch > 0.005 {
+        let _ = std::fs::remove_file(&out);
+        return Err(format!(
+            "Trang gói nội dung trong Form XObject quá phức tạp — mở gói làm lệch hiển thị \
+             {:.1}% điểm ảnh nên đã huỷ để bảo toàn file. Xem/chú thích vẫn bình thường; \
+             SỬA NỘI DUNG file dạng này sẽ hỗ trợ ở bản sau.",
+            mismatch * 100.0
+        ));
+    }
+    Ok(Some(out.to_string_lossy().into_owned()))
 }
 
 /// Dọn các file làm việc tạm của chế độ sửa (undo stack). Chỉ xoá file có tên
