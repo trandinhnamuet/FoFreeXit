@@ -89,6 +89,35 @@ Ba lỗi user báo sau khi thử bản build 6 trên chính file Word-export:
   render so khớp bản gốc. 2 test hồi quy mới (`reflow_keeps_per_line_font_sizes`,
   `reflow_hard_line_grows_without_rewrap`) — 21 test edit.
 
+### Vá vòng 3 — ô sửa trùng khít chữ gốc bằng ĐO–HIỆU CHỈNH (fix hồi quy vòng 2)
+User báo (kèm ảnh): ô sửa hiện chữ SAI font + SAI cỡ + SAI vị trí. Ba nguyên nhân:
+- **Hồi quy vòng 2**: `perLineAdvances` tính line-height mỗi dòng bằng KHOẢNG HỞ
+  giữa 2 bbox (`bottom trên − top dưới` ≈ 0/âm → kẹp 8px) thay vì khoảng cách
+  baseline → các dòng dồn cục. Fix: advance = hiệu mép DƯỚI 2 bbox liền kề
+  (bbox PDFium ôm sát glyph nên bottom bám baseline).
+- **Sai font**: engine trả family PostScript CamelCase ("TimesNewRoman",
+  "SegoeUI") không khớp tên font cài trên Windows → CSS rơi về serif/sans mặc
+  định. Fix: `cssFontStack` tách CamelCase thành tên có dấu cách + bảng alias
+  (Helvetica→Arial, TimesNewRomanPS→Times New Roman…).
+- **Sai cỡ với file lạ**: cỡ px suy mở từ `font_size` engine, không tự kiểm.
+  Fix: **`fitEditLinesToPdf` — vòng đo–hiệu chỉnh sau khi mount ô sửa**:
+  (1) CỠ: chiều cao MỰC của đúng chuỗi đó (canvas `measureText` actualBoundingBox,
+  đo ở cỡ tham chiếu 100px để né sai số hinting ~5% ở cỡ nhỏ) phải bằng chiều
+  cao bbox dòng PDF (cùng là ink-bbox, PDFium bounds = union glyph box) — engine
+  báo cỡ lệch bao nhiêu cũng tự sửa về đúng, lệch <12% coi là khác metric font
+  → giữ cỡ engine (ổn định file chuẩn); (2) VỊ TRÍ: quy 2 phía về MÉP MỰC TRÊN
+  (DOM: Range rect + (fontAscent − inkAscent) từ canvas; PDF: rect.top) rồi bù
+  `margin-top`/`text-indent` từng dòng (dòng đầu bù vào khung để nền trắng che
+  kín); khối căn giữa cũng bù ngang qua text-indent. Thêm: giữ thụt lề từng
+  dòng; đúp từ viewer thường nay đặt con trỏ đúng điểm đúp (toạ độ giả lập từ
+  điểm PDF, chờ `img.decode()` trước khi đo).
+- **Kiểm chứng**: harness HTML mô phỏng trang bằng canvas (chữ gốc đỏ, bbox mực
+  thật làm ground truth) + Edge headless chụp 3 kịch bản: (A) engine báo cỡ sai
+  MỘT NỬA + family CamelCase → tự sửa về đúng, lệch ≤0.4px dọc / 0px ngang;
+  (B) engine báo đúng → dead-band giữ nguyên, trùng khít 100%; (C) khối căn
+  giữa Times → lệch ngang ≤1.3px. (Không unit-test tự động được vì cần layout
+  engine thật; harness lưu ở scratchpad phiên làm việc.)
+
 ### Giới hạn ghi nhận (v1, sẽ nâng ở vòng sau)
 - Đoạn justify (giãn đều 2 lề) reflow về căn trái; chưa kerning; khối text
   XOAY chưa reflow theo hướng xoay (dòng mới đặt theo trục ngang).
