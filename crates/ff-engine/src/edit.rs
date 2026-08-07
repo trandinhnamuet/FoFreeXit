@@ -298,27 +298,94 @@ fn object_at_path<'a>(page: &PdfPage<'a>, path: &[u16]) -> Result<PdfPageObject<
     Ok(obj)
 }
 
-/// RÚT object con ra khỏi form chứa nó (path đầy đủ của CON). Đây là cách
-/// DUY NHẤT làm thay đổi trong form được lưu ra file: chỉ RemovePageObject
-/// mới đánh dấu `dirty_streams_` của form để PDFium ghi lại stream khi
-/// GenerateContent (SetText trên con KHÔNG làm form dirty — xem
-/// cpdf_pageobjectholder.cpp). Cần feature pdfium_7350 của pdfium-render.
-fn remove_form_child(page: &PdfPage<'_>, child_path: &[u16]) -> Result<(), EngineError> {
-    let err = |e: PdfiumError| EngineError::Pdfium(format!("rút object khỏi form: {e}"));
-    debug_assert!(child_path.len() >= 2);
-    let parent_path = &child_path[..child_path.len() - 1];
-    let child_idx = *child_path.last().unwrap() as usize;
-    let mut parent = object_at_path(page, parent_path)?;
-    let form = match &mut parent {
-        PdfPageObject::XObjectForm(f) => f,
-        _ => return Err(EngineError::Pdfium("path cha không phải form".into())),
-    };
-    let child = form.get(child_idx).map_err(err)?;
-    let removed = form.remove_object(child).map_err(err)?;
-    // Cùng bẫy Drop như remove ở cấp trang: object đã tách, forget để khỏi
-    // destroy nhầm (rò rỉ nhỏ, giải phóng khi đóng document).
-    std::mem::forget(removed);
-    Ok(())
+/// "MỞ GÓI" mọi Form XObject cấp trang thành object cấp trang: rút từng con
+/// khỏi form (`FPDFFormObj_RemoveObject` — cần feature pdfium_7350), nhân ma
+/// trận form vào con, chèn lại vào TRANG, xoá form rỗng. Hiển thị y hệt,
+/// nhưng mọi object thành cấp trang — điều kiện để SỬA được.
+///
+/// Vì sao bắt buộc: PDFium hiện KHÔNG ghi lại được stream của form —
+/// `CPDF_PageContentManager` chỉ biết key /Contents (trang), còn form là
+/// stream tự thân → mọi "regenerate" nội dung form rơi vào key /Contents vô
+/// nghĩa trên dict form, stream thật giữ nguyên. Đã kiểm chứng bằng test
+/// round-trip 3 vòng CI + đọc source cpdf_pagecontentmanager.cpp.
+///
+/// Form lồng form: lặp tối đa 4 vòng (con là form sẽ thành cấp trang rồi
+/// được mở tiếp). Trả về số form đã mở; 0 = trang không có form (KHÔNG ghi
+/// `output`).
+pub fn flatten_form_xobjects(
+    pdfium: &Pdfium,
+    input: &Path,
+    page_index: u16,
+    output: &Path,
+    password: Option<&str>,
+) -> Result<usize, EngineError> {
+    let mut document = pdfium
+        .load_pdf_from_file(input, password)
+        .map_err(|e| EngineError::Pdfium(e.to_string()))?;
+    let err = |e: PdfiumError| EngineError::Pdfium(format!("mở gói form: {e}"));
+
+    let mut flattened = 0usize;
+    {
+        let mut page = document
+            .pages()
+            .get(page_index)
+            .map_err(|e| EngineError::Pdfium(format!("không lấy được trang {page_index}: {e}")))?;
+        page.set_content_regeneration_strategy(PdfPageContentRegenerationStrategy::Manual);
+
+        for _round in 0..4 {
+            let n = page.objects().len();
+            let mut form_idxs: Vec<usize> = Vec::new();
+            for i in 0..n {
+                if let Ok(o) = page.objects().get(i) {
+                    if matches!(o, PdfPageObject::XObjectForm(_)) {
+                        form_idxs.push(i);
+                    }
+                }
+            }
+            if form_idxs.is_empty() {
+                break;
+            }
+            // Duyệt NGƯỢC: xoá form không làm lệch index các form đứng trước.
+            for &fi in form_idxs.iter().rev() {
+                let fm = {
+                    let o = page.objects().get(fi).map_err(err)?;
+                    o.matrix().map_err(err)?
+                };
+                // Rút từng con (luôn con 0) → nhân ma trận form → chèn vào trang
+                // (chèn ở CUỐI nên không lệch index form đang xử lý).
+                loop {
+                    let mut child = {
+                        let mut parent = page.objects().get(fi).map_err(err)?;
+                        let form = match &mut parent {
+                            PdfPageObject::XObjectForm(f) => f,
+                            _ => break,
+                        };
+                        if form.is_empty() {
+                            break;
+                        }
+                        let c = form.get(0).map_err(err)?;
+                        form.remove_object(c).map_err(err)?
+                    };
+                    child.apply_matrix(fm).map_err(err)?;
+                    page.objects_mut().add_object(child).map_err(err)?;
+                }
+                let removed =
+                    page.objects_mut().remove_object_at_index(fi).map_err(err)?;
+                // Bẫy Drop quen thuộc: object đã tách khỏi trang → forget.
+                std::mem::forget(removed);
+                flattened += 1;
+            }
+        }
+        if flattened > 0 {
+            page.regenerate_content().map_err(err)?;
+        }
+    }
+    if flattened > 0 {
+        document
+            .save_to_file(output)
+            .map_err(|e| EngineError::Pdfium(format!("lưu file: {e}")))?;
+    }
+    Ok(flattened)
 }
 
 /// Kiểu chữ (đậm/nghiêng) của 1 text object, tổng hợp từ weight, italic-angle
@@ -564,10 +631,15 @@ enum SetTextMode {
     /// Phải thay font (glyph thiếu hoặc người dùng đổi family/kiểu) — xoá và
     /// tạo lại object với font `key`.
     Substitute(FontKey),
-    /// Con TRONG Form XObject: sửa in-place không được LƯU (SetText trên con
-    /// không làm form dirty) → rút khỏi form + tạo lại ở CẤP TRANG, ưu tiên
-    /// giữ chính font object gốc (token) như tầng 0 của reflow.
-    NestedRecreate(ReflowFont),
+}
+
+/// Op sửa nhắm vào object TRONG Form XObject → lỗi rõ ràng: PDFium không ghi
+/// lại được stream form, mọi sửa trong form là vô nghĩa. UI phải "mở gói"
+/// trang bằng `flatten_form_xobjects` trước khi sửa (loadEditPage tự làm).
+fn nested_target_err() -> EngineError {
+    EngineError::Pdfium(
+        "object nằm trong Form XObject — trang chưa được mở gói (flatten) trước khi sửa".into(),
+    )
 }
 
 /// Dữ liệu chụp lại từ 1 object trước khi xoá để tạo lại bản thay thế.
@@ -647,114 +719,67 @@ pub fn apply_edits(
                     if !valid(*index) {
                         continue;
                     }
-                    let nested_obj = entries[*index as usize].path.len() > 1;
-                    // Chụp mọi thứ cần thiết trong 1 block để NHẢ mượn trang
-                    // trước khi probe font (probe cần &mut page).
-                    struct SetTextInfo {
-                        family: String,
-                        bold: bool,
-                        italic: bool,
-                        old_text: String,
-                        non_embedded: bool,
-                        data_covers: bool,
-                        token: PdfFontToken,
-                        embedded_cover_bytes: Option<Vec<u8>>,
+                    if entries[*index as usize].path.len() > 1 {
+                        return Err(nested_target_err());
                     }
-                    let info = {
-                        let obj = object_at_path(&page, &entries[*index as usize].path)?;
-                        match obj.as_text_object() {
-                            Some(t) => {
-                                let (family, bold, italic) = text_object_style(t);
-                                let embedded = t.font().is_embedded().unwrap_or(false);
-                                let data = t.font().data().ok();
-                                let data_covers = data
-                                    .as_deref()
-                                    .map_or(false, |b| fontmatch::coverage_ok(b, text));
-                                SetTextInfo {
-                                    family,
-                                    bold,
-                                    italic,
-                                    old_text: t.text(),
-                                    non_embedded: !embedded,
-                                    data_covers,
-                                    token: t.font().token(),
-                                    embedded_cover_bytes: if embedded && data_covers {
-                                        data
-                                    } else {
-                                        None
-                                    },
-                                }
-                            }
-                            None => continue, // không phải text → bỏ qua op
-                        }
+                    let obj = object_at_path(&page, &entries[*index as usize].path)?;
+                    let t = match obj.as_text_object() {
+                        Some(t) => t,
+                        None => continue, // không phải text → bỏ qua op
                     };
-                    let target_bold = bold.unwrap_or(info.bold);
-                    let target_italic = italic.unwrap_or(info.italic);
-                    let style_change = target_bold != info.bold || target_italic != info.italic;
+                    let (cur_family, cur_bold, cur_italic) = text_object_style(t);
+                    let target_bold = bold.unwrap_or(cur_bold);
+                    let target_italic = italic.unwrap_or(cur_italic);
+                    let style_change = target_bold != cur_bold || target_italic != cur_italic;
                     let family_change = font_family.as_deref().map_or(false, |f| {
                         !f.trim().is_empty()
-                            && fontmatch::normalize_key(f) != fontmatch::normalize_key(&info.family)
+                            && fontmatch::normalize_key(f) != fontmatch::normalize_key(&cur_family)
                     });
 
-                    // Font gốc có giữ được không (không xét in-place hay recreate)?
-                    let old_chars: HashSet<char> = info.old_text.chars().collect();
-                    let new_covered_by_old = text
-                        .chars()
-                        .all(|c| c.is_control() || old_chars.contains(&c));
-                    // Font KHÔNG nhúng (base-14 Helvetica/Times...): viewer nào
-                    // cũng tự thay bằng font hệ thống đủ Latin → re-encode text
-                    // ASCII tại chỗ chắc chắn an toàn, BaseFont khai báo giữ
-                    // nguyên trong file (đúng hành vi Foxit với base-14).
-                    let ascii_only = text
-                        .chars()
-                        .all(|c| c.is_control() || (' '..='~').contains(&c));
-                    let keep_font_ok = !style_change
-                        && !family_change
-                        && (*text == info.old_text
-                            || new_covered_by_old
-                            || (info.non_embedded && ascii_only)
-                            || info.data_covers);
-
-                    let mode = if keep_font_ok && !nested_obj {
-                        SetTextMode::InPlace
-                    } else if keep_font_ok && nested_obj {
-                        // Giữ font gốc nhưng phải TẠO LẠI ở cấp trang: dùng lại
-                        // chính font object (token) nếu probe ghi/đọc tròn trịa;
-                        // hỏng thì nhúng lại bytes font; cuối cùng mới thay họ.
-                        if probe_font_roundtrip(&mut page, info.token, text) {
-                            SetTextMode::NestedRecreate(ReflowFont::Original(info.token))
-                        } else if let Some(bytes) = info.embedded_cover_bytes {
-                            let key = (
-                                format!("emb:{}:{}", fontmatch::normalize_key(&info.family), index),
-                                info.bold,
-                                info.italic,
-                            );
-                            font_needed.entry(key.clone()).or_insert(FontLoad::Bytes(bytes));
-                            SetTextMode::NestedRecreate(ReflowFont::Loaded(key))
+                    let mode = if !style_change && !family_change {
+                        let old_text = t.text();
+                        let old_chars: HashSet<char> = old_text.chars().collect();
+                        let new_covered_by_old = text
+                            .chars()
+                            .all(|c| c.is_control() || old_chars.contains(&c));
+                        // Font KHÔNG nhúng (base-14 Helvetica/Times...): viewer nào
+                        // cũng tự thay bằng font hệ thống đủ Latin → re-encode text
+                        // ASCII tại chỗ chắc chắn an toàn, BaseFont khai báo giữ
+                        // nguyên trong file (đúng hành vi Foxit với base-14).
+                        let non_embedded = !t.font().is_embedded().unwrap_or(true);
+                        let ascii_only = text
+                            .chars()
+                            .all(|c| c.is_control() || (' '..='~').contains(&c));
+                        if *text == old_text || new_covered_by_old {
+                            SetTextMode::InPlace
+                        } else if non_embedded && ascii_only {
+                            SetTextMode::InPlace
+                        } else if t
+                            .font()
+                            .data()
+                            .ok()
+                            .map_or(false, |bytes| fontmatch::coverage_ok(&bytes, text))
+                        {
+                            SetTextMode::InPlace
                         } else {
                             let (key, bytes) = resolve_substitute_font(
-                                &info.family,
+                                &cur_family,
                                 target_bold,
                                 target_italic,
                                 text,
                             )?;
                             font_needed.entry(key.clone()).or_insert(FontLoad::Bytes(bytes));
-                            SetTextMode::NestedRecreate(ReflowFont::Loaded(key))
+                            SetTextMode::Substitute(key)
                         }
                     } else {
-                        // Thiếu glyph hoặc chủ động đổi family/kiểu → font thay thế.
                         let family = font_family
                             .clone()
                             .filter(|f| !f.trim().is_empty())
-                            .unwrap_or(info.family);
+                            .unwrap_or(cur_family);
                         let (key, bytes) =
                             resolve_substitute_font(&family, target_bold, target_italic, text)?;
                         font_needed.entry(key.clone()).or_insert(FontLoad::Bytes(bytes));
-                        if nested_obj {
-                            SetTextMode::NestedRecreate(ReflowFont::Loaded(key))
-                        } else {
-                            SetTextMode::Substitute(key)
-                        }
+                        SetTextMode::Substitute(key)
                     };
                     set_text_modes.insert(opi, mode);
                 }
@@ -769,6 +794,9 @@ pub fn apply_edits(
                     let mut idxs: Vec<u16> = indices.iter().copied().filter(|i| valid(*i)).collect();
                     idxs.sort_unstable();
                     idxs.dedup();
+                    if idxs.iter().any(|&i| entries[i as usize].path.len() > 1) {
+                        return Err(nested_target_err());
+                    }
                     // Hình học từng run: gốc text (e,f của matrix) + bounds.
                     struct RunGeo {
                         idx: u16,
@@ -816,10 +844,11 @@ pub fn apply_edits(
                     // object có TÂM nằm trong bbox khối (nới 2pt) đều thuộc khối →
                     // đưa hết vào để xoá sạch, không còn chữ cũ đè dưới chữ mới.
                     {
-                        // Rect trang của 1 entry text (None nếu không phải text).
+                        // Rect trang của 1 entry text (None nếu không phải text
+                        // hoặc nằm trong form — sau flatten không còn, guard).
                         let text_rect = |i: u16| -> Option<Rect> {
                             let entry = &entries[i as usize];
-                            if entry.kind != ObjectKind::Text {
+                            if entry.kind != ObjectKind::Text || entry.path.len() > 1 {
                                 return None;
                             }
                             let obj = object_at_path(&page, &entry.path).ok()?;
@@ -1122,10 +1151,7 @@ pub fn apply_edits(
         for (opi, op) in ops.iter().enumerate() {
             let idx = match op {
                 EditOp::SetText { index, .. }
-                    if matches!(
-                        set_text_modes.get(&opi),
-                        Some(SetTextMode::Substitute(_)) | Some(SetTextMode::NestedRecreate(_))
-                    ) =>
+                    if matches!(set_text_modes.get(&opi), Some(SetTextMode::Substitute(_))) =>
                 {
                     *index
                 }
@@ -1166,10 +1192,7 @@ pub fn apply_edits(
         for (opi, op) in ops.iter().enumerate() {
             match op {
                 EditOp::SetText { index, .. }
-                    if matches!(
-                        set_text_modes.get(&opi),
-                        Some(SetTextMode::Substitute(_)) | Some(SetTextMode::NestedRecreate(_))
-                    ) =>
+                    if matches!(set_text_modes.get(&opi), Some(SetTextMode::Substitute(_))) =>
                 {
                     to_remove.push(*index)
                 }
@@ -1187,39 +1210,14 @@ pub fn apply_edits(
         to_remove.retain(|i| valid(*i));
         to_remove.sort_unstable();
         to_remove.dedup();
-        // Con TRONG form: RÚT THẬT khỏi form (FPDFFormObj_RemoveObject) — cách
-        // DUY NHẤT đánh dấu dirty_streams để stream form được ghi lại khi lưu
-        // (SetText/Transform trên con không làm form dirty). Thứ tự: path SÂU
-        // trước, cùng cha thì con GIẢM DẦN — rút 1 con làm các em sau nó trong
-        // cùng form tụt index, và rút ở nấc nông làm lệch path xuyên qua form.
-        // Làm TRƯỚC khi xoá cấp trang để nấc đầu path (index trang) còn đúng.
-        // Con không phải text (ảnh/path trong form): v1 bỏ qua.
-        let mut nested_paths: Vec<&Vec<u16>> = to_remove
-            .iter()
-            .filter(|&&i| is_nested(i) && entries[i as usize].kind == ObjectKind::Text)
-            .map(|&i| &entries[i as usize].path)
-            .collect();
-        nested_paths.sort_by(|a, b| b.len().cmp(&a.len()).then(b.cmp(a)));
-        let mut touched_roots: Vec<u16> = nested_paths.iter().map(|p| p[0]).collect();
-        for path in nested_paths {
-            remove_form_child(&page, path)?;
-        }
-        // ĐÁNH THỨC trang: GenerateContent chỉ ghi lại stream trang khi có
-        // object CẤP TRANG dirty; rút con mới làm FORM dirty thôi — op thuần
-        // trong form (Delete...) không đụng cấp trang → trang không regenerate
-        // → ProcessForm (nơi ghi lại form) không bao giờ chạy. Nhân identity
-        // vào form tổ tiên cấp trang: Transform luôn SetDirty, giá trị không
-        // đổi → trang được ghi lại → form được ghi lại theo.
-        touched_roots.sort_unstable();
-        touched_roots.dedup();
-        for r in touched_roots {
-            let mut root = object_at_path(&page, &[r])?;
-            root.apply_matrix(PdfMatrix::IDENTITY).map_err(err)?;
+        // Op xoá nhắm vào object TRONG form: không xử lý được (PDFium không
+        // ghi lại stream form) — trang phải được flatten trước, lỗi rõ ràng.
+        if to_remove.iter().any(|&i| is_nested(i)) {
+            return Err(nested_target_err());
         }
         // Cấp trang: xoá thật theo index trang GIẢM DẦN.
         let mut page_idxs: Vec<u16> = to_remove
             .iter()
-            .filter(|&&i| !is_nested(i))
             .map(|&i| entries[i as usize].path[0])
             .collect();
         page_idxs.sort_unstable();
@@ -1237,27 +1235,17 @@ pub fn apply_edits(
         for (opi, op) in ops.iter().enumerate() {
             match op {
                 EditOp::SetText { index, text, font_size, color, .. } => {
-                    // Substitute (đổi font) hoặc NestedRecreate (con trong form,
-                    // giữ font gốc qua token) — đều tạo lại object ở cấp trang
-                    // với matrix ĐÃ COMPOSE từ pha chụp.
-                    let token = match set_text_modes.get(&opi) {
-                        Some(SetTextMode::Substitute(key)) => {
-                            tokens.get(key).copied().ok_or_else(|| {
-                                EngineError::Pdfium("thiếu token font cho SetText".into())
-                            })?
-                        }
-                        Some(SetTextMode::NestedRecreate(ReflowFont::Original(tok))) => *tok,
-                        Some(SetTextMode::NestedRecreate(ReflowFont::Loaded(key))) => {
-                            tokens.get(key).copied().ok_or_else(|| {
-                                EngineError::Pdfium("thiếu token font cho SetText".into())
-                            })?
-                        }
+                    let key = match set_text_modes.get(&opi) {
+                        Some(SetTextMode::Substitute(key)) => key,
                         _ => continue,
                     };
                     let cap = match captured.get(index) {
                         Some(c) => c,
                         None => continue,
                     };
+                    let token = tokens.get(key).copied().ok_or_else(|| {
+                        EngineError::Pdfium("thiếu token font cho SetText".into())
+                    })?;
                     // Quy đổi cỡ hiển thị mong muốn → cỡ unscaled trước khi áp
                     // matrix gốc (matrix có thể chứa scale — tránh phóng đại kép).
                     let tf = match font_size {
