@@ -169,19 +169,14 @@ fn text_object_style(t: &PdfPageTextObject) -> (String, bool, bool) {
 
     let mut bold = weight_bold || name_bold;
     let mut italic = angle_italic || name_italic;
-    // Fallback: nhiều file (Word/Chrome xuất subset "ABCDEF+Xyz") không khai
-    // weight trong descriptor và tên không chứa "Bold"/"Italic" → đọc thẳng
-    // OS/2 usWeightClass + cờ italic từ bytes font nhúng.
+    // Fallback: nhiều file không khai weight trong descriptor và tên không
+    // chứa "Bold"/"Italic" → đọc thẳng từ bytes font nhúng (OS/2 usWeightClass
+    // / fsSelection, kể cả khi subset đã vứt OS/2 thì còn head.macStyle).
     if (!bold || !italic) && t.font().is_embedded().unwrap_or(false) {
         if let Ok(bytes) = t.font().data() {
-            let n = ttf_parser::fonts_in_collection(&bytes).unwrap_or(1).max(1);
-            for i in 0..n {
-                if let Ok(face) = ttf_parser::Face::parse(&bytes, i) {
-                    bold = bold || face.weight().to_number() >= 600;
-                    italic = italic || face.is_italic() || face.is_oblique();
-                    break;
-                }
-            }
+            let (data_bold, data_italic) = fontmatch::style_from_font_bytes(&bytes);
+            bold = bold || data_bold;
+            italic = italic || data_italic;
         }
     }
     (family, bold, italic)

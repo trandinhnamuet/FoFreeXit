@@ -2279,18 +2279,18 @@ function selectEditObject(index, runIndices) {
   $("edBold").disabled = !isText;
   $("edItalic").disabled = !isText;
   if (isText) {
-    $("edFontSize").value = Math.round(o.font_size || 12);
+    $("edFontSize").value = Math.round(o.fontSize || 12);
     if (o.color) { state.editColor = o.color.slice(0, 3); $("edSw").style.background = rgbCss(state.editColor); }
     // Ô font: mặc định "(giữ nguyên: <family gốc>)" — chỉ đổi khi người dùng chọn khác.
-    $("edFontFamily").options[0].textContent = o.font_family
-      ? `(giữ nguyên: ${o.font_family})`
+    $("edFontFamily").options[0].textContent = o.fontFamily
+      ? `(giữ nguyên: ${o.fontFamily})`
       : "(giữ nguyên)";
     $("edFontFamily").value = "";
-    $("edBold").classList.toggle("on", !!o.font_bold);
-    $("edItalic").classList.toggle("on", !!o.font_italic);
-    const emb = o.font_embedded == null ? "" : o.font_embedded ? " · font nhúng" : " · font hệ thống";
+    $("edBold").classList.toggle("on", !!o.fontBold);
+    $("edItalic").classList.toggle("on", !!o.fontItalic);
+    const emb = o.fontEmbedded == null ? "" : o.fontEmbedded ? " · font nhúng" : " · font hệ thống";
     $("editHint").textContent =
-      `${o.font_family || o.font_name || "?"} · ${Math.round(o.font_size || 0)}pt${emb}`;
+      `${o.fontFamily || o.fontName || "?"} · ${Math.round(o.fontSize || 0)}pt${emb}`;
   } else {
     $("edFontFamily").options[0].textContent = "(giữ nguyên)";
     $("edBold").classList.remove("on");
@@ -2387,7 +2387,7 @@ function composeLineText(runs) {
     const t = runs[i].text || "";
     if (i > 0) {
       const gap = runs[i].rect.left - runs[i - 1].rect.right;
-      const em = (runs[i].font_size || 12) * 0.28;
+      const em = (runs[i].fontSize || 12) * 0.28;
       if (gap > em && !s.endsWith(" ") && !t.startsWith(" ")) s += " ";
     }
     s += t;
@@ -2428,7 +2428,7 @@ function clusterTextLines(objs) {
     band.runs.sort((a, b) => a.rect.left - b.rect.left);
     let cur = null;
     for (const r of band.runs) {
-      const fs = r.font_size || 12;
+      const fs = r.fontSize || 12;
       const gapMax = Math.max(fs * 1.7, 10);
       if (cur && r.rect.left - cur.rect.right <= gapMax) {
         cur.runs.push(r);
@@ -2475,13 +2475,13 @@ function isMarkerRun(run, lineRuns) {
     return (c >= 0xe000 && c <= 0xf8ff) || BULLET_CHARS.has(ch);
   });
   if (puaOrBullet) return true;
-  if (/symbol|wingding|dingbat|marlett|webding/i.test(run.font_family || "")) return true;
+  if (/symbol|wingding|dingbat|marlett|webding/i.test(run.fontFamily || "")) return true;
   // Bullet ASCII mơ hồ ("-", "*", "o"): chỉ nhận khi có KHOẢNG HỞ rõ với chữ sau.
   if (chars.length === 1 && "-*o".includes(t)) {
     const next = lineRuns.find((r) => r !== run && (r.text || "").trim());
     if (next) {
       const gap = next.rect.left - run.rect.right;
-      return gap > (run.font_size || 12) * 0.4;
+      return gap > (run.fontSize || 12) * 0.4;
     }
   }
   return false;
@@ -2497,7 +2497,7 @@ function stripLineMarkers(line) {
   if (!real.length) return { runs, fs: line.fs, rect: { ...line.rect } };
   return {
     runs,
-    fs: real.reduce((m, r) => Math.max(m, r.font_size || 12), 0) || line.fs,
+    fs: real.reduce((m, r) => Math.max(m, r.fontSize || 12), 0) || line.fs,
     rect: {
       left: Math.min(...real.map((r) => r.rect.left)),
       right: Math.max(...real.map((r) => r.rect.right)),
@@ -2512,9 +2512,9 @@ function lineFormat(l) {
   const rep = l.runs.find((r) => (r.text || "").trim()) || l.runs[0];
   if (!rep) return null;
   return {
-    fam: (rep.font_family || "").toLowerCase(),
-    bold: !!rep.font_bold,
-    italic: !!rep.font_italic,
+    fam: (rep.fontFamily || "").toLowerCase(),
+    bold: !!rep.fontBold,
+    italic: !!rep.fontItalic,
     color: (rep.color || [0, 0, 0]).slice(0, 3).join(","),
   };
 }
@@ -2527,7 +2527,7 @@ function lineFormat(l) {
 function paragraphLines(o) {
   const raw = clusterTextLines(state.editObjects);
   const rawMine = raw.find((l) => l.runs.some((r) => r.index === o.index));
-  if (!rawMine) return [ { runs: [o], fs: o.font_size || 12, rect: { ...o.rect } } ];
+  if (!rawMine) return [ { runs: [o], fs: o.fontSize || 12, rect: { ...o.rect } } ];
 
   const pairs = raw
     .map((l) => ({ raw: l, s: stripLineMarkers(l) }))
@@ -2653,7 +2653,7 @@ function startBlockTextEdit(o, lines, ev) {
   const totalHeightPx = perLineAdvances.reduce((a, b) => a + b, 0);
   // Bù lệch dọc: line-box của trình duyệt căn giữa glyph trong line-height,
   // còn bbox PDF ôm sát glyph → đẩy khung lên (line-height − cỡ chữ)/2 cho trùng.
-  const fs0 = (lines[0].fs || o.font_size || 12) * s;
+  const fs0 = (lines[0].fs || o.fontSize || 12) * s;
   const topPx = Math.max(0, (p.heightPt - union.top) * s - Math.max(0, (perLineAdvances[0] - fs0) / 2));
 
   Object.assign(ce.style, {
@@ -2675,9 +2675,9 @@ function startBlockTextEdit(o, lines, ev) {
     const divFs = Math.max(6, (l.fs || 12) * s);
     div.style.fontSize = divFs + "px";
     div.style.lineHeight = perLineAdvances[i] + "px";
-    div.style.fontFamily = cssFontStack(rep.font_family || o.font_family);
-    div.style.fontWeight = (rep.font_bold != null ? rep.font_bold : o.font_bold) ? "bold" : "normal";
-    div.style.fontStyle = (rep.font_italic != null ? rep.font_italic : o.font_italic) ? "italic" : "normal";
+    div.style.fontFamily = cssFontStack(rep.fontFamily || o.fontFamily);
+    div.style.fontWeight = (rep.fontBold != null ? rep.fontBold : o.fontBold) ? "bold" : "normal";
+    div.style.fontStyle = (rep.fontItalic != null ? rep.fontItalic : o.fontItalic) ? "italic" : "normal";
     if (rep.color || o.color) div.style.color = rgbCss(rep.color || o.color);
     // Giữ thụt lề từng dòng so với mép khối (dòng đầu đoạn thụt vào…).
     if (!centered) {
@@ -2686,6 +2686,12 @@ function startBlockTextEdit(o, lines, ev) {
     }
     ce.appendChild(div);
   }
+  // Ẩn khung dòng overlay của các run đang sửa — nền ô trong suốt nên khung
+  // này lộ qua gây nhiễu; khôi phục khi đóng ô.
+  ov.querySelectorAll(".edit-box.kind-text").forEach((b) => {
+    const rIdxs = JSON.parse(b.dataset.runs || "[]");
+    if (rIdxs.some((i) => allRuns.some((r) => r.index === i))) b.style.display = "none";
+  });
   ov.appendChild(ce);
   // WebView không hỗ trợ plaintext-only (hiếm) → contenteditable thường.
   if (!ce.isContentEditable) ce.contentEditable = "true";
@@ -2755,6 +2761,7 @@ function startBlockTextEdit(o, lines, ev) {
     done = true;
     const text = readText();
     ce.remove();
+    ov.querySelectorAll(".edit-box").forEach((b) => { b.style.display = ""; });
     const changed = save && text.trim() && text !== original;
     // Huỷ/không đổi gì → trả lại ảnh trang gốc (đang hiện bản ẩn run sửa).
     if (!changed && bgSwapped) img.src = prevSrc;
@@ -3596,6 +3603,22 @@ async function verifySignaturesAction(pathOverride) {
 // ---------- Sự kiện ----------
 
 $("openBtn").addEventListener("click", openFile);
+
+// Kéo-thả file PDF từ File Explorer vào cửa sổ → mở luôn (chuẩn desktop app).
+// Tauri v2 bắn sự kiện drag-drop toàn cửa sổ với danh sách đường dẫn thật.
+if (window.__TAURI__.event) {
+  window.__TAURI__.event.listen("tauri://drag-drop", (e) => {
+    const paths = (e.payload && e.payload.paths) || [];
+    const pdf = paths.find((p) => /\.pdf$/i.test(p));
+    if (!pdf) {
+      if (paths.length) $("status").textContent = "Chỉ mở được file .pdf";
+      return;
+    }
+    if (state.editMode) exitEditMode();
+    if (state.organizeMode) exitOrganizeMode();
+    loadDocument(pdf);
+  });
+}
 $("zoomIn").addEventListener("click", () => setZoom(state.zoom * 1.25));
 $("zoomOut").addEventListener("click", () => setZoom(state.zoom / 1.25));
 $("zoomFit").addEventListener("click", fitWidth);
@@ -3761,11 +3784,11 @@ $("edFontFamily").addEventListener("change", () => {
 });
 $("edBold").addEventListener("click", () => {
   const o = state.editObjects.find((x) => x.index === state.editSel);
-  if (o) applyTextPropToSelected({ bold: !o.font_bold });
+  if (o) applyTextPropToSelected({ bold: !o.fontBold });
 });
 $("edItalic").addEventListener("click", () => {
   const o = state.editObjects.find((x) => x.index === state.editSel);
-  if (o) applyTextPropToSelected({ italic: !o.font_italic });
+  if (o) applyTextPropToSelected({ italic: !o.fontItalic });
 });
 $("edColorBtn").addEventListener("click", () => {
   openColorPopover($("edColorBtn"), state.editColor, (rgb) => {

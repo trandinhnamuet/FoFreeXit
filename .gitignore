@@ -23,5 +23,7 @@ Cargo.lock.bak
 *.tmp.png
 
 # File PDF thật của user (hồ sơ/kinh doanh cá nhân) — chỉ dùng test local,
-# không đẩy lên repo công khai.
+# không đẩy lên repo công khai. PDF thả ở root cũng là file test của user
+# (corpus/ đã track sẵn nên không ảnh hưởng).
 /pdf-file-to-test/
+/*.pdf
