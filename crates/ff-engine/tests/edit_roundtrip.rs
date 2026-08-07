@@ -1171,8 +1171,10 @@ fn form_xobject_reflow_after_flatten_roundtrip() {
     .expect("apply_edits ReflowText sau flatten");
 
     let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
-    assert!(text.contains("Đoạn văn tiếng Việt thay thế"), "text mới phải có mặt: {text:?}");
-    assert!(!text.contains("Hello inside form"), "text cũ phải biến mất: {text:?}");
+    // Reflow bẻ dòng ở giữa cụm từ → so khớp trên bản CHUẨN HOÁ khoảng trắng.
+    let norm = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(norm.contains("Đoạn văn tiếng Việt thay thế"), "text mới phải có mặt: {text:?}");
+    assert!(!norm.contains("Hello inside form"), "text cũ phải biến mất: {text:?}");
     let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
     let new_runs: Vec<_> = objs
         .iter()
