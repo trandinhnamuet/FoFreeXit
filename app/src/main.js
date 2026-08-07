@@ -2204,7 +2204,11 @@ function buildEditOverlay() {
   lines.forEach((line) => {
     const box = document.createElement("div");
     box.className = "edit-box kind-text";
-    const rep = line.runs.find((r) => (r.text || "").trim()) || line.runs[0];
+    // Đại diện dòng: ưu tiên run chữ thật (không phải bullet) để đúp mở đúng đoạn.
+    const rep =
+      line.runs.find((r) => (r.text || "").trim() && !isMarkerRun(r, line.runs)) ||
+      line.runs.find((r) => (r.text || "").trim()) ||
+      line.runs[0];
     box.dataset.index = String(rep.index);
     box.dataset.runs = JSON.stringify(line.runs.map((r) => r.index));
     Object.assign(box.style, editBoxStyle(line.rect));
@@ -2454,13 +2458,84 @@ function clusterTextLines(objs) {
   return lines;
 }
 
-// Gom ĐOẠN VĂN nhiều dòng quanh run `o`: các dòng kề nhau theo chiều dọc
-// (khoảng hở ≤ 1.3× chiều cao dòng), giao ngang ≥30%, cỡ chữ tương đồng
-// (≤1.8× — tiêu đề 2 dòng 22.5/20pt vẫn là 1 đoạn). Trả mảng dòng trên→dưới.
+// Run "marker" đầu dòng (bullet/dấu gạch danh sách): Word/LibreOffice xuất
+// bullet bằng font Symbol/Wingdings với mã PUA (U+F0B7…) — DOM không render
+// được (hiện ô vuông □) và Foxit cũng KHÔNG cho sửa bullet như chữ thường.
+// Nhận diện để LOẠI khỏi ô sửa + commit (bullet giữ nguyên trên trang).
+const BULLET_CHARS = new Set([..."•◦▪▫‣·∙●○■□◆♦►▶➢➤§–—"]);
+function isMarkerRun(run, lineRuns) {
+  const t = (run.text || "").trim();
+  if (!t || [...t].length > 2) return false;
+  // Phải là run có chữ TRÁI NHẤT của dòng.
+  const firstReal = lineRuns.find((r) => (r.text || "").trim());
+  if (firstReal !== run) return false;
+  const chars = [...t];
+  const puaOrBullet = chars.every((ch) => {
+    const c = ch.codePointAt(0);
+    return (c >= 0xe000 && c <= 0xf8ff) || BULLET_CHARS.has(ch);
+  });
+  if (puaOrBullet) return true;
+  if (/symbol|wingding|dingbat|marlett|webding/i.test(run.font_family || "")) return true;
+  // Bullet ASCII mơ hồ ("-", "*", "o"): chỉ nhận khi có KHOẢNG HỞ rõ với chữ sau.
+  if (chars.length === 1 && "-*o".includes(t)) {
+    const next = lineRuns.find((r) => r !== run && (r.text || "").trim());
+    if (next) {
+      const gap = next.rect.left - run.rect.right;
+      return gap > (run.font_size || 12) * 0.4;
+    }
+  }
+  return false;
+}
+
+// Bỏ marker khỏi 1 dòng cluster: runs còn lại + rect/fs tính lại từ phần chữ
+// thật (để ô sửa, thụt lề, so-format không dính bbox của bullet).
+function stripLineMarkers(line) {
+  const marker = line.runs.find((r) => isMarkerRun(r, line.runs));
+  if (!marker) return line;
+  const runs = line.runs.filter((r) => r !== marker);
+  const real = runs.filter((r) => (r.text || "").trim() && r.rect.top - r.rect.bottom > 0.5);
+  if (!real.length) return { runs, fs: line.fs, rect: { ...line.rect } };
+  return {
+    runs,
+    fs: real.reduce((m, r) => Math.max(m, r.font_size || 12), 0) || line.fs,
+    rect: {
+      left: Math.min(...real.map((r) => r.rect.left)),
+      right: Math.max(...real.map((r) => r.rect.right)),
+      top: Math.max(...real.map((r) => r.rect.top)),
+      bottom: Math.min(...real.map((r) => r.rect.bottom)),
+    },
+  };
+}
+
+// Format đại diện của 1 dòng (từ run có chữ đầu tiên) — để so "cùng đoạn".
+function lineFormat(l) {
+  const rep = l.runs.find((r) => (r.text || "").trim()) || l.runs[0];
+  if (!rep) return null;
+  return {
+    fam: (rep.font_family || "").toLowerCase(),
+    bold: !!rep.font_bold,
+    italic: !!rep.font_italic,
+    color: (rep.color || [0, 0, 0]).slice(0, 3).join(","),
+  };
+}
+
+// Gom ĐOẠN VĂN quanh run `o` — CHUẨN FOXIT: mỗi đoạn là 1 khối riêng, chỉ gom
+// các dòng kề nhau CÙNG FORMAT (font + đậm/nghiêng + màu, cỡ chênh ≤1.25× —
+// tiêu đề 22.5/20pt vẫn 1 đoạn nhưng tiêu đề ≠ thân bài ≠ dòng code), khoảng
+// hở ≤1.3× chiều cao dòng, giao ngang ≥30%, nhịp dòng đều ±35%. Bullet đầu
+// dòng bị loại khỏi khối (giữ nguyên trên trang). Trả mảng dòng trên→dưới.
 function paragraphLines(o) {
-  const all = clusterTextLines(state.editObjects);
-  const mine = all.find((l) => l.runs.some((r) => r.index === o.index));
-  if (!mine) return [ { runs: [o], fs: o.font_size || 12, rect: { ...o.rect } } ];
+  const raw = clusterTextLines(state.editObjects);
+  const rawMine = raw.find((l) => l.runs.some((r) => r.index === o.index));
+  if (!rawMine) return [ { runs: [o], fs: o.font_size || 12, rect: { ...o.rect } } ];
+
+  const pairs = raw
+    .map((l) => ({ raw: l, s: stripLineMarkers(l) }))
+    .filter((p) => p.s.runs.some((r) => (r.text || "").trim()));
+  const minePair = pairs.find((p) => p.raw === rawMine);
+  if (!minePair) return [rawMine]; // dòng chỉ có mỗi bullet (hiếm) → sửa mình nó
+  const all = pairs.map((p) => p.s);
+  const mine = minePair.s;
 
   const hOf = (l) => Math.max(1, l.rect.top - l.rect.bottom);
   const overlaps = (a, b) =>
@@ -2468,7 +2543,15 @@ function paragraphLines(o) {
     0.3 * Math.min(a.rect.right - a.rect.left, b.rect.right - b.rect.left);
   const sizeOk = (a, b) => {
     const r = a.fs / b.fs;
-    return r <= 1.8 && r >= 1 / 1.8;
+    return r <= 1.25 && r >= 1 / 1.25;
+  };
+  const myFmt = lineFormat(mine);
+  const fmtOk = (l) => {
+    const f = lineFormat(l);
+    return (
+      f && myFmt && f.fam === myFmt.fam && f.bold === myFmt.bold &&
+      f.italic === myFmt.italic && f.color === myFmt.color
+    );
   };
 
   const sorted = all.slice().sort((a, b) => b.rect.bottom - a.rect.bottom); // trên→dưới
@@ -2483,7 +2566,7 @@ function paragraphLines(o) {
       const gap = step > 0 ? edge.rect.bottom - cand.rect.top : cand.rect.bottom - edge.rect.top;
       const maxGap = 1.3 * Math.max(hOf(edge), hOf(cand));
       if (gap < -3 || gap > maxGap) break;
-      if (!overlaps(edge, cand) || !sizeOk(edge, cand)) break;
+      if (!overlaps(edge, cand) || !sizeOk(edge, cand) || !fmtOk(cand)) break;
       const adv = Math.abs(edge.rect.bottom - cand.rect.bottom);
       if (advance && (adv < advance * 0.65 || adv > advance * 1.35)) break;
       if (advance == null) advance = adv;
@@ -2611,6 +2694,31 @@ function startBlockTextEdit(o, lines, ev) {
   fitEditLinesToPdf(ce, lines, s, p);
   ce.focus();
 
+  // NỀN TRONG SUỐT chuẩn Foxit: render nền trang ĐÃ ẨN các run đang sửa (áp
+  // Delete ra file tạm chỉ để lấy ảnh — commit vẫn tính trên editBase gốc).
+  // Trong lúc chờ render giữ nền trắng che chữ cũ, xong mới chuyển trong suốt
+  // → thấy nguyên dải màu nền/bullet/kẻ bảng dưới ô sửa.
+  const img = $("editImg");
+  const prevSrc = img.src;
+  let bgSwapped = false;
+  (async () => {
+    try {
+      const tmp = await invoke("edit_apply_to_temp", {
+        input: state.editBase,
+        page: state.editPage,
+        ops: allRuns.map((r) => ({ op: "delete", index: r.index })),
+        password: null,
+      });
+      state.editTemps.push(tmp);
+      const url = await invoke("render_page", { path: tmp, page: state.editPage, width: EDIT_STAGE_W });
+      if (ce.isConnected) {
+        img.src = url;
+        bgSwapped = true;
+        ce.style.background = "transparent";
+      }
+    } catch (_) { /* không render được thì giữ nền trắng như cũ */ }
+  })();
+
   // Đặt con trỏ đúng chỗ vừa đúp (như Foxit); không có toạ độ → đầu đoạn.
   let placed = false;
   if (ev && document.caretRangeFromPoint) {
@@ -2647,7 +2755,10 @@ function startBlockTextEdit(o, lines, ev) {
     done = true;
     const text = readText();
     ce.remove();
-    if (save && text.trim() && text !== original) {
+    const changed = save && text.trim() && text !== original;
+    // Huỷ/không đổi gì → trả lại ảnh trang gốc (đang hiện bản ẩn run sửa).
+    if (!changed && bgSwapped) img.src = prevSrc;
+    if (changed) {
       stageEditOp({
         op: "reflowText",
         indices: allRuns.map((r) => r.index),

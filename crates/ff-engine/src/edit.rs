@@ -166,7 +166,25 @@ fn text_object_style(t: &PdfPageTextObject) -> (String, bool, bool) {
             | Ok(PdfFontWeight::Weight900)
     ) || matches!(t.font().weight(), Ok(PdfFontWeight::Custom(v)) if v >= 600);
     let angle_italic = t.font().italic_angle().map(|a| a != 0).unwrap_or(false);
-    (family, weight_bold || name_bold, angle_italic || name_italic)
+
+    let mut bold = weight_bold || name_bold;
+    let mut italic = angle_italic || name_italic;
+    // Fallback: nhiều file (Word/Chrome xuất subset "ABCDEF+Xyz") không khai
+    // weight trong descriptor và tên không chứa "Bold"/"Italic" → đọc thẳng
+    // OS/2 usWeightClass + cờ italic từ bytes font nhúng.
+    if (!bold || !italic) && t.font().is_embedded().unwrap_or(false) {
+        if let Ok(bytes) = t.font().data() {
+            let n = ttf_parser::fonts_in_collection(&bytes).unwrap_or(1).max(1);
+            for i in 0..n {
+                if let Ok(face) = ttf_parser::Face::parse(&bytes, i) {
+                    bold = bold || face.weight().to_number() >= 600;
+                    italic = italic || face.is_italic() || face.is_oblique();
+                    break;
+                }
+            }
+        }
+    }
+    (family, bold, italic)
 }
 
 /// Liệt kê các page object của 1 trang để UI vẽ overlay chỉnh sửa.
@@ -185,6 +203,9 @@ pub fn list_objects(
         .map_err(|e| EngineError::Pdfium(format!("không lấy được trang {page_index}: {e}")))?;
 
     let mut out = Vec::new();
+    // Cache kiểu chữ theo tên font: fallback đậm/nghiêng phải đọc bytes font
+    // nhúng — file Word xuất hay có 200+ run chung vài font, không đọc lại.
+    let mut style_cache: HashMap<String, (String, bool, bool)> = HashMap::new();
     for (i, object) in page.objects().iter().enumerate() {
         let kind = ObjectKind::from_pdfium(object.object_type());
         let rect = object
@@ -206,9 +227,22 @@ pub fn list_objects(
             color: None,
         };
         if let Some(t) = object.as_text_object() {
-            let (family, bold, italic) = text_object_style(t);
+            let raw_name = t.font().name();
+            // Tên rỗng không cache được (nhiều font khác nhau cùng key "").
+            let (family, bold, italic) = if raw_name.trim().is_empty() {
+                text_object_style(t)
+            } else {
+                match style_cache.get(&raw_name) {
+                    Some(s) => s.clone(),
+                    None => {
+                        let s = text_object_style(t);
+                        style_cache.insert(raw_name.clone(), s.clone());
+                        s
+                    }
+                }
+            };
             info.text = Some(t.text());
-            info.font_name = Some(t.font().name());
+            info.font_name = Some(raw_name);
             info.font_family = Some(family);
             info.font_bold = Some(bold);
             info.font_italic = Some(italic);
