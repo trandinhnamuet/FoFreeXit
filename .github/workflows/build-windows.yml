@@ -45,8 +45,12 @@ jobs:
       # Fail test = fail build, không publish bản hỏng.
       # --test-threads=1: PDFium serialize qua 1 mutex toàn cục; 1 test panic
       # khi đang giữ lock sẽ poison mutex làm mọi test song song chết oan.
+      # FOFREEXIT_QPDF_PATH: test chạy với cwd = thư mục crate nên không tự
+      # thấy qpdf/ ở root repo (test form/qpdf cần).
       - name: Run engine tests
         run: cargo test -p ff-engine -- --test-threads=1
+        env:
+          FOFREEXIT_QPDF_PATH: ${{ github.workspace }}\qpdf\bin\qpdf.exe
 
       - name: Build release
         working-directory: app/src-tauri
