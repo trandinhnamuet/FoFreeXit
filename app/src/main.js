@@ -2142,7 +2142,15 @@ async function loadEditPage() {
     const o = pickTextAt(state.editObjects, pending.x, pending.y);
     if (o) {
       selectEditObject(o.index);
-      startTextEdit(o);
+      // Chờ ảnh trang decode xong để mọi phép đo theo ảnh (ô sửa, con trỏ) đúng.
+      const img = $("editImg");
+      if (img.decode) { try { await img.decode(); } catch (_) {} }
+      // Toạ độ chuột giả lập từ điểm PDF đã đúp → con trỏ đặt đúng chỗ đó.
+      const ir = img.getBoundingClientRect();
+      startTextEdit(o, {
+        clientX: ir.left + pending.x * state.editScale,
+        clientY: ir.top + (p.heightPt - pending.y) * state.editScale,
+      });
     }
   }
 }
@@ -2333,15 +2341,39 @@ function editRedo() {
 }
 
 // CSS font-family xấp xỉ cho family PDF (để ô sửa hiển thị đúng dáng chữ).
+// Tên family từ engine là dạng PostScript CamelCase KHÔNG dấu cách
+// ("TimesNewRoman", "SegoeUI", "OpenSans") — không khớp tên font cài trên máy
+// nên CSS rơi về serif/sans-serif mặc định (ô sửa sai font). Map alias phổ biến
+// + tự tách CamelCase thành tên có dấu cách.
+const FONT_CSS_ALIASES = {
+  helvetica: "Arial",
+  helveticaneue: "Arial",
+  arial: "Arial",
+  arialmt: "Arial",
+  times: "Times New Roman",
+  timesroman: "Times New Roman",
+  timesnewroman: "Times New Roman",
+  timesnewromanps: "Times New Roman",
+  courier: "Courier New",
+  couriernew: "Courier New",
+  couriernewps: "Courier New",
+  segoeui: "Segoe UI",
+};
 function cssFontStack(family) {
   if (!family) return "sans-serif";
-  const k = family.toLowerCase();
+  const k = family.toLowerCase().replace(/[^a-z0-9]/g, "");
   const generic = /times|georgia|garamond|palatino|cambria|book|serif/.test(k)
     ? "serif"
     : /courier|consolas|mono/.test(k)
       ? "monospace"
       : "sans-serif";
-  return `"${family}", ${generic}`;
+  const parts = [`"${family}"`];
+  const spaced = family.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  if (spaced !== family) parts.push(`"${spaced}"`);
+  const alias = FONT_CSS_ALIASES[k];
+  if (alias && alias !== family && alias !== spaced) parts.push(`"${alias}"`);
+  parts.push(generic);
+  return parts.join(", ");
 }
 
 // Ghép nội dung 1 dòng từ các run: chèn khoảng trắng khi 2 run hở nhau rõ.
@@ -2502,12 +2534,6 @@ function startBlockTextEdit(o, lines, ev) {
     lines.every((l) => Math.abs((l.rect.left + l.rect.right) / 2 - bc) <= tol) &&
     lines.some((l) => l.rect.left - union.left > tol);
 
-  const advPt =
-    lines.length > 1
-      ? Math.abs(lines[0].rect.bottom - lines[1].rect.bottom)
-      : (o.font_size || 12) * 1.25;
-  const advPx = Math.max(8, advPt * s);
-
   const original = lines.map((l) => composeLineText(l.runs)).join("\n");
 
   const ce = document.createElement("div");
@@ -2528,25 +2554,24 @@ function startBlockTextEdit(o, lines, ev) {
     leftPt = union.left;
     widthPt = Math.min(bw * 1.35, p.widthPt - union.left - 8);
   }
-  // Bù lệch dọc: line-box của trình duyệt căn giữa glyph trong line-height,
-  // còn bbox PDF ôm sát glyph → đẩy khung lên (advPx − cỡ chữ)/2 cho trùng.
-  const fs0 = (lines[0].fs || o.font_size || 12) * s;
-  const topPx = Math.max(0, (p.heightPt - union.top) * s - Math.max(0, (advPx - fs0) / 2));
-  // Tính advance cho TỪNG DÒNG dựa trên vị trí gốc trong PDF để giữ layout.
+  // Advance TỪNG DÒNG = khoảng cách baseline dòng này → dòng dưới (xấp xỉ
+  // bằng hiệu mép DƯỚI 2 bbox — bbox PDF ôm sát glyph nên bottom bám baseline).
+  // KHÔNG dùng khoảng hở giữa 2 bbox (bottom trên − top dưới ≈ 0/âm) — chính
+  // là bug làm các dòng dồn cục 8px.
   const perLineAdvances = [];
   for (let i = 0; i < lines.length; i++) {
-    let linAdvPx;
+    let advPt;
     if (i < lines.length - 1) {
-      // Advance = khoảng cách giữa dòng này và dòng tiếp theo (giữ nguyên từ PDF).
-      const gap = lines[i].rect.bottom - lines[i + 1].rect.top;
-      linAdvPx = Math.max(8, gap * s);
-    } else {
-      // Dòng cuối: dùng cỡ chữ × 1.25.
-      linAdvPx = Math.max(8, (lines[i].fs || 12) * s * 1.25);
+      advPt = lines[i].rect.bottom - lines[i + 1].rect.bottom;
     }
-    perLineAdvances.push(linAdvPx);
+    if (!(advPt > 0)) advPt = (lines[i].fs || 12) * 1.25;
+    perLineAdvances.push(Math.max(8, advPt * s));
   }
   const totalHeightPx = perLineAdvances.reduce((a, b) => a + b, 0);
+  // Bù lệch dọc: line-box của trình duyệt căn giữa glyph trong line-height,
+  // còn bbox PDF ôm sát glyph → đẩy khung lên (line-height − cỡ chữ)/2 cho trùng.
+  const fs0 = (lines[0].fs || o.font_size || 12) * s;
+  const topPx = Math.max(0, (p.heightPt - union.top) * s - Math.max(0, (perLineAdvances[0] - fs0) / 2));
 
   Object.assign(ce.style, {
     left: leftPt * s + "px",
@@ -2571,11 +2596,19 @@ function startBlockTextEdit(o, lines, ev) {
     div.style.fontWeight = (rep.font_bold != null ? rep.font_bold : o.font_bold) ? "bold" : "normal";
     div.style.fontStyle = (rep.font_italic != null ? rep.font_italic : o.font_italic) ? "italic" : "normal";
     if (rep.color || o.color) div.style.color = rgbCss(rep.color || o.color);
+    // Giữ thụt lề từng dòng so với mép khối (dòng đầu đoạn thụt vào…).
+    if (!centered) {
+      const indent = (l.rect.left - leftPt) * s;
+      if (indent > 0.5) div.style.textIndent = indent + "px";
+    }
     ce.appendChild(div);
   }
   ov.appendChild(ce);
   // WebView không hỗ trợ plaintext-only (hiếm) → contenteditable thường.
   if (!ce.isContentEditable) ce.contentEditable = "true";
+  // ĐO chữ vừa render rồi HIỆU CHỈNH cỡ/vị trí từng dòng cho TRÙNG bbox gốc —
+  // phải chạy TRƯỚC focus/đặt con trỏ để caretRangeFromPoint trúng layout cuối.
+  fitEditLinesToPdf(ce, lines, s, p);
   ce.focus();
 
   // Đặt con trỏ đúng chỗ vừa đúp (như Foxit); không có toạ độ → đầu đoạn.
@@ -2641,6 +2674,91 @@ function startBlockTextEdit(o, lines, ev) {
   ce.addEventListener("click", (e) => e.stopPropagation());
   ce.addEventListener("dblclick", (e) => e.stopPropagation());
   ce.addEventListener("blur", () => commit(true));
+}
+
+// ĐO chữ đã render trong ô sửa rồi HIỆU CHỈNH cho trùng khít chữ gốc — vòng
+// đo-bù nên đúng với MỌI loại file, không phụ thuộc engine trả cỡ chuẩn hay
+// công thức line-height của trình duyệt:
+// (1) CỠ CHỮ: chiều cao MỰC của đúng chuỗi đó (canvas actualBoundingBox) phải
+//     bằng chiều cao bbox dòng trong PDF (cùng là ink-bbox, gồm cả dấu tiếng
+//     Việt) — engine trả cỡ lệch (matrix scale lạ) hay font thay thế lệch
+//     metric đều tự sửa; lệch <12% coi như khác biệt metric, giữ nguyên.
+// (2) VỊ TRÍ: quy cả 2 phía về MÉP MỰC TRÊN của dòng (DOM: đỉnh em-box của
+//     Range + (fontAscent − inkAscent); PDF: rect.top) rồi bù margin-top /
+//     text-indent từng dòng. Dòng đầu bù vào chính khung (giữ nền trắng che
+//     kín chữ cũ), các dòng sau bù margin (đo tuần tự nên tự cộng dồn đúng).
+function fitEditLinesToPdf(ce, lines, s, page) {
+  const img = $("editImg");
+  if (!img) return;
+  const canvas = (fitEditLinesToPdf._c = fitEditLinesToPdf._c || document.createElement("canvas"));
+  const ctx = canvas.getContext("2d");
+  const divs = Array.from(ce.children);
+  const centered = ce.style.textAlign === "center";
+
+  const fontOf = (div, fsOverride) => {
+    const fs = parseFloat(div.style.fontSize) || 12;
+    const style = div.style.fontStyle === "italic" ? "italic " : "";
+    const weight = div.style.fontWeight === "bold" ? "bold " : "";
+    return { fs, css: `${style}${weight}${fsOverride || fs}px ${div.style.fontFamily || "sans-serif"}` };
+  };
+
+  // (1) Cỡ chữ theo chiều cao mực thật. Đo ở cỡ THAM CHIẾU lớn (100px) rồi
+  // suy tuyến tính — đo trực tiếp ở cỡ nhỏ bị hinting làm tròn lệch tới ~5%.
+  const REF = 100;
+  for (let i = 0; i < divs.length && i < lines.length; i++) {
+    const text = (divs[i].textContent || "").trim();
+    if (!text) continue;
+    const f = fontOf(divs[i], REF);
+    ctx.font = f.css;
+    const m = ctx.measureText(text);
+    const inkPerPx = ((m.actualBoundingBoxAscent || 0) + (m.actualBoundingBoxDescent || 0)) / REF;
+    const targetPx = (lines[i].rect.top - lines[i].rect.bottom) * s;
+    if (inkPerPx > 0.01 && targetPx > 1) {
+      const wantFs = targetPx / inkPerPx;
+      const ratio = wantFs / f.fs;
+      if (ratio < 0.88 || ratio > 1.12) {
+        divs[i].style.fontSize = f.fs * Math.max(0.3, Math.min(3, ratio)) + "px";
+      }
+    }
+  }
+
+  // (2) Vị trí từng dòng (đo lại sau khi đã chỉnh cỡ).
+  const imgR = img.getBoundingClientRect();
+  for (let i = 0; i < divs.length && i < lines.length; i++) {
+    const r = firstTextRect(divs[i]);
+    if (!r) continue;
+    const text = (divs[i].textContent || "").trim();
+    const f = fontOf(divs[i]);
+    ctx.font = f.css;
+    const m = ctx.measureText(text);
+    const fontAscent = m.fontBoundingBoxAscent || f.fs * 0.8;
+    const inkAscent = m.actualBoundingBoxAscent || fontAscent;
+    const curInkTop = r.top + (fontAscent - inkAscent);
+    const dy = imgR.top + (page.heightPt - lines[i].rect.top) * s - curInkTop;
+    if (Math.abs(dy) > 0.5) {
+      if (i === 0) ce.style.top = parseFloat(ce.style.top) + dy + "px";
+      else divs[i].style.marginTop = (parseFloat(divs[i].style.marginTop) || 0) + dy + "px";
+    }
+    // Ngang: khối căn trái bù qua ce.left (dòng đầu) / text-indent (dòng sau);
+    // khối căn giữa bù mọi dòng qua text-indent (indent cộng thêm vào offset
+    // căn giữa nên vẫn dịch được từng dòng mà không phá cơ chế center).
+    const dx = imgR.left + lines[i].rect.left * s - r.left;
+    if (Math.abs(dx) > 0.5) {
+      if (!centered && i === 0) ce.style.left = parseFloat(ce.style.left) + dx + "px";
+      else divs[i].style.textIndent = (parseFloat(divs[i].style.textIndent) || 0) + dx + "px";
+    }
+  }
+}
+
+// Bbox render thật của text trong div — đo bằng Range (chỉ tính chữ, không
+// tính line-box nên không dính line-height); null nếu dòng rỗng.
+function firstTextRect(div) {
+  const tn = div.firstChild;
+  if (!tn || tn.nodeType !== Node.TEXT_NODE) return null;
+  const range = document.createRange();
+  range.selectNodeContents(tn);
+  const rects = range.getClientRects();
+  return rects.length ? rects[0] : null;
 }
 
 // Đổi thuộc tính chữ cho CẢ DÒNG đang chọn: setText từng run (giữ nội dung
