@@ -15,6 +15,9 @@ Cargo.lock.bak
 /app/dist
 /app/src-tauri/target
 
+# Bản build portable tải về từ GitHub Release
+/dist/
+
 # Ảnh tạm khi test render
 /tmp-out/
 *.tmp.png
