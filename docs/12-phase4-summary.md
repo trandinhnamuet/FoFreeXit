@@ -23,18 +23,25 @@ Type0/CID nhúng), trong khi `list_objects` chỉ duyệt object cấp trang.
   thị nhân `mat_vscale(acc)` (độ dài ảnh vector đơn vị Y).
 - **ObjectInfo thêm `nested`** (con trong form — sửa text OK, kéo/resize chưa)
   **+ `expanded`** (form đã liệt kê con — UI bỏ khung form để khỏi che con).
-- **Áp op cho con trong form**: SetText in-place resolve theo path (đổi cỡ:
-  so cỡ theo KHÔNG GIAN TRANG — target × vscale); SetText-substitute và
-  ReflowText tạo object mới ở CẤP TRANG với matrix/toạ độ đã compose;
-  **"xoá" con trong form = `set_text("")`** (glyph biến mất) vì
-  `FPDFFormObj_RemoveObject` chưa mở ở wrapper cho pdfium_7543 — làm TRƯỚC
-  khi xoá object cấp trang để path còn đúng. Transform (kéo/resize) con
-  trong form: bỏ qua, UI chặn kéo.
-- **Điểm sống còn đã xác minh trước khi code**: PDFium (bản mới, bblanchon
-  latest) REGENERATE content stream của form khi con bị sửa —
-  `CPDF_PageContentGenerator::ProcessForm` → `HasDirtyStreams` → chạy
-  generator đệ quy cho form. Không có cái này thì sửa xong lưu ra vẫn thấy
-  chữ cũ.
+- **Áp op cho con trong form — bài học đắt giá từ CI vòng 1**: `dirty_streams_`
+  của form CHỈ được đánh dấu bởi `RemovePageObject`/`InsertPageObjectAtIndex`
+  trên CHÍNH form (xem cpdf_pageobjectholder.cpp) — **`FPDFText_SetText` trên
+  con KHÔNG làm form dirty → sửa in-place trong form không bao giờ được ghi
+  ra file** (test canary bắt được đúng lỗi này: extract sau lưu vẫn thấy text
+  cũ). Cách làm đúng: mọi sửa/xoá con trong form = **RÚT THẬT khỏi form qua
+  `FPDFFormObj_RemoveObject`** (đánh dấu dirty → `ProcessForm` regenerate
+  stream form khi lưu) **+ với SetText thì tạo lại ở CẤP TRANG** giữ font gốc
+  qua token (probe như tầng 0 reflow; thiếu glyph → nhúng lại bytes/cùng họ)
+  với matrix đã compose (`SetTextMode::NestedRecreate`). Thứ tự rút: path sâu
+  trước, cùng cha con lớn trước (rút làm tụt index các em). Transform
+  (kéo/resize) con trong form: bỏ qua, UI chặn kéo.
+- **Đổi feature pdfium-render `pdfium_latest`(7543) → `pdfium_7350`** (cả
+  ff-engine lẫn app): wrapper 0.8.37 gate `remove_object` của form chỉ mở cho
+  7350/future dù binding có đủ cho 7543 (sót gate upstream); API 7350 là
+  subset của DLL bblanchon mới → không mất gì (đã quét: 0 hàm 7543-only).
+- CI test chạy `--test-threads=1`: PDFium serialize qua 1 mutex toàn cục —
+  1 test panic khi giữ lock sẽ poison mutex, 17 test song song chết oan
+  (đã dính ở CI vòng 1).
 - Vá kèm: đọc source crate pdfium-render tải từ crates.io để chốt API vì máy
   dev không compile được Rust (xem mục CI bên dưới).
 

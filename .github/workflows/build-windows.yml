@@ -43,8 +43,10 @@ jobs:
 
       # Máy dev không có Rust — CI là nơi duy nhất chạy test engine.
       # Fail test = fail build, không publish bản hỏng.
+      # --test-threads=1: PDFium serialize qua 1 mutex toàn cục; 1 test panic
+      # khi đang giữ lock sẽ poison mutex làm mọi test song song chết oan.
       - name: Run engine tests
-        run: cargo test -p ff-engine
+        run: cargo test -p ff-engine -- --test-threads=1
 
       - name: Build release
         working-directory: app/src-tauri

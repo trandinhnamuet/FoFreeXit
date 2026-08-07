@@ -10,7 +10,11 @@ ff-cos = { path = "../ff-cos" }
 ff-pdmodel = { path = "../ff-pdmodel" }
 anyhow.workspace = true
 thiserror.workspace = true
-pdfium-render = "0.8"
+# default-features tắt để chọn pdfium_7350 thay vì pdfium_latest(7543):
+# wrapper 0.8.37 chỉ mở FPDFFormObj_RemoveObject (rút object khỏi Form
+# XObject — cần cho sửa file Canva) với gate 7350/future dù binding có cả
+# 7543; DLL bblanchon mới hơn là superset của API 7350 nên tương thích.
+pdfium-render = { version = "0.8", default-features = false, features = ["pdfium_7350", "thread_safe", "image"] }
 image = "0.25"
 lopdf = "0.36"
 ttf-parser = "0.25"
