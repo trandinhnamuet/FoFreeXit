@@ -25,3 +25,7 @@ der = "0.7"
 spki = "0.7"
 signature = "2"
 const-oid = { version = "0.9", features = ["db"] }
+
+[dev-dependencies]
+# Dựng PDF fixture (Form XObject...) trong integration test.
+lopdf = "0.36"

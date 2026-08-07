@@ -29,6 +29,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            target
             app/src-tauri/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
@@ -39,6 +40,11 @@ jobs:
       - name: Fetch QPDF (Windows x64)
         shell: pwsh
         run: powershell -ExecutionPolicy Bypass -File scripts/fetch-qpdf.ps1
+
+      # Máy dev không có Rust — CI là nơi duy nhất chạy test engine.
+      # Fail test = fail build, không publish bản hỏng.
+      - name: Run engine tests
+        run: cargo test -p ff-engine
 
       - name: Build release
         working-directory: app/src-tauri

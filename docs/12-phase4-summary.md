@@ -1,7 +1,77 @@
-# 12 — Tổng kết Phase 4 (Chỉnh sửa nội dung — Edit) · Iteration 1 + 2 + 3
+# 12 — Tổng kết Phase 4 (Chỉnh sửa nội dung — Edit) · Iteration 1 + 2 + 3 + 4
 
-> Trạng thái sau Iteration 3: **sửa CẢ ĐOẠN với reflow "như Word" + GIỮ FONT**.
-> 52/52 test engine xanh ngoài qpdf (17 test edit + 6 unit fontmatch + 29 test cũ).
+> Trạng thái sau Iteration 4: sửa được cả text **NẰM TRONG Form XObject**
+> (file Canva/Illustrator/InDesign gói cả trang vào form).
+
+## Iteration 4 — Sửa text trong Form XObject (file Canva...)
+
+User mở CV xuất từ Canva: xem được nhưng **không sửa được gì** — trang chỉ có
+10 path + 1 Form XObject phủ toàn trang, TOÀN BỘ chữ nằm trong form (16 font
+Type0/CID nhúng), trong khi `list_objects` chỉ duyệt object cấp trang.
+
+### Engine (`edit.rs`)
+- **Danh sách PHẲNG đệ quy** (`collect_flat`): duyệt object trang theo thứ tự
+  vẽ, đi sâu vào Form XObject qua `FPDFFormObj_CountObjects/GetObject`
+  (pdfium-render 0.8.37: `PdfPageXObjectFormObject::len()/get()` public; match
+  thẳng variant `PdfPageObject::XObjectForm` để giữ lifetime trang — accessor
+  `as_x_object_form_object()` bị rút ngắn lifetime theo `&self`). Mỗi mục có
+  `path` ([i] cấp trang, [i,j,…] con trong form) + `acc` = tích ma trận form
+  tổ tiên. Chặn depth 3 / 4000 mục. **`index` của ObjectInfo/EditOp = vị trí
+  trong danh sách phẳng này** — trang không có form thì trùng index trang như
+  cũ (tương thích ngược 100%, UI không đổi cách gửi op).
+- **Toạ độ/cỡ quy về trang**: rect con = AABB của 4 góc qua `acc`; cỡ hiển
+  thị nhân `mat_vscale(acc)` (độ dài ảnh vector đơn vị Y).
+- **ObjectInfo thêm `nested`** (con trong form — sửa text OK, kéo/resize chưa)
+  **+ `expanded`** (form đã liệt kê con — UI bỏ khung form để khỏi che con).
+- **Áp op cho con trong form**: SetText in-place resolve theo path (đổi cỡ:
+  so cỡ theo KHÔNG GIAN TRANG — target × vscale); SetText-substitute và
+  ReflowText tạo object mới ở CẤP TRANG với matrix/toạ độ đã compose;
+  **"xoá" con trong form = `set_text("")`** (glyph biến mất) vì
+  `FPDFFormObj_RemoveObject` chưa mở ở wrapper cho pdfium_7543 — làm TRƯỚC
+  khi xoá object cấp trang để path còn đúng. Transform (kéo/resize) con
+  trong form: bỏ qua, UI chặn kéo.
+- **Điểm sống còn đã xác minh trước khi code**: PDFium (bản mới, bblanchon
+  latest) REGENERATE content stream của form khi con bị sửa —
+  `CPDF_PageContentGenerator::ProcessForm` → `HasDirtyStreams` → chạy
+  generator đệ quy cho form. Không có cái này thì sửa xong lưu ra vẫn thấy
+  chữ cũ.
+- Vá kèm: đọc source crate pdfium-render tải từ crates.io để chốt API vì máy
+  dev không compile được Rust (xem mục CI bên dưới).
+
+### UI (`main.js`)
+- Bỏ khung overlay cho form `expanded` (khung phủ kín trang chặn hết click)
+  và cho ảnh/form `nested`; run text trong form tự chảy qua clusterTextLines
+  như run thường (rect đã quy về trang).
+- Chặn kéo di chuyển dòng chứa run `nested` (engine chưa hỗ trợ Transform
+  trong form) — vẫn chọn/sửa text/xoá bình thường.
+
+### Test (4 mới — `edit_roundtrip.rs`, fixture tự dựng bằng lopdf)
+- Fixture: PDF 1 trang, chữ "Hello inside form" Helvetica 24pt nằm TRONG
+  Form XObject (trang chỉ có 1 object form) — đúng cấu trúc Canva.
+- `form_xobject_children_are_listed` — thấy text nested, form expanded, rect
+  quy về trang đúng chỗ (72, ~700), cỡ ~24.
+- `form_xobject_settext_inplace_roundtrip` — **canary quan trọng nhất**: sửa
+  in-place con trong form → lưu → text mới có mặt, text cũ biến mất (chứng
+  minh PDFium regenerate stream form).
+- `form_xobject_reflow_roundtrip` — reflow tiếng Việt trong form: run cũ làm
+  rỗng, dòng mới ở cấp trang quanh khối cũ.
+- `form_xobject_delete_clears_text` — xoá = text biến mất khỏi extract.
+
+### CI chạy test engine
+Máy dev không có Rust nên **CI là nơi duy nhất chạy test**: workflow thêm
+bước `cargo test -p ff-engine` TRƯỚC khi build release (fail test = fail
+build, không publish bản hỏng); cache thêm `target/` gốc workspace.
+
+### Giới hạn ghi nhận (iteration 4 v1)
+- Chưa di chuyển/resize object trong form (Transform bị bỏ qua, UI chặn kéo).
+- Chưa sửa/thay ẢNH trong form (khung overlay ẩn).
+- "Xoá" text trong form để lại text object rỗng trong form (vô hại, không
+  render); khi wrapper mở `FPDFFormObj_RemoveObject` cho pdfium_7543 sẽ xoá
+  thật.
+- Form lồng sâu >3 cấp hoặc >4000 object con: phần vượt không liệt kê.
+
+> Các iteration trước: 52/52 test engine xanh ngoài qpdf (17 test edit + 6
+> unit fontmatch + 29 test cũ) — nay thêm 4 test form + 2 unit sfnt style.
 
 ## Iteration 3 — Reflow đoạn văn "như Word" (mới nhất)
 
