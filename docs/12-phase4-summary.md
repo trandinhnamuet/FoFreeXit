@@ -118,6 +118,37 @@ User báo (kèm ảnh): ô sửa hiện chữ SAI font + SAI cỡ + SAI vị tr�
   giữa Times → lệch ngang ≤1.3px. (Không unit-test tự động được vì cần layout
   engine thật; harness lưu ở scratchpad phiên làm việc.)
 
+### Vá vòng 4 — khối sửa chuẩn Foxit: tách đoạn theo FORMAT, nền trong suốt, bullet, in đậm
+User test build 11 trên file thật, báo 4 lỗi (kèm ảnh). Đối chiếu hành vi
+Foxit (help.foxit.com — Edit Text): mỗi ĐOẠN là 1 text block riêng, click vào
+đâu chỉ sửa block đó, reflow trong block; muốn sửa nhiều block phải Link thủ
+công. Sửa tương ứng:
+- **Gom đoạn quá tham** (tiêu đề + dòng code + thân bài + nhãn đỏ dính 1 khối):
+  `paragraphLines` giờ chỉ gom dòng kề nhau **CÙNG FORMAT** — cùng font family
+  + đậm/nghiêng + màu (của run chữ đầu dòng), cỡ chênh ≤1.25× (tiêu đề 22.5/20
+  vẫn 1 đoạn, tiêu đề ≠ thân bài) — cộng điều kiện hình học cũ (hở ≤1.3× cao
+  dòng, giao ngang ≥30%, nhịp đều ±35%).
+- **Bullet thành ô vuông □ trong ô sửa**: bullet Word/LibreOffice là run font
+  Symbol/Wingdings mã PUA (U+F0B7…) DOM không render được. Thêm `isMarkerRun`
+  (run chữ trái nhất của dòng, ≤2 ký tự, PUA/ký tự bullet/font symbol; "-","*",
+  "o" chỉ nhận khi có khoảng hở rõ với chữ sau) + `stripLineMarkers`: marker bị
+  LOẠI khỏi ô sửa/commit/rect khối (thụt lề tính từ CHỮ) — bullet giữ nguyên
+  trên trang như Foxit. Đúp trúng chính bullet vẫn mở khối chữ của dòng đó.
+- **Ô sửa nền trắng che nền gốc**: giờ mở ô xong render NGẦM bản trang đã ẨN
+  các run đang sửa (`edit_apply_to_temp` với Delete — chỉ lấy ảnh, commit vẫn
+  tính trên editBase gốc) → đổi ảnh stage + nền ô chuyển TRONG SUỐT: thấy dải
+  màu nền/bullet/kẻ bảng dưới chữ đang gõ, đúng cảm giác Foxit. Chờ render thì
+  tạm nền trắng; huỷ/không đổi → trả ảnh gốc; file tạm vào editTemps để dọn.
+- **Mất in đậm dù gốc đậm**: file Word/Chrome xuất subset không khai
+  /FontWeight và tên không chứa "Bold" → engine `text_object_style` thêm
+  fallback đọc **OS/2 usWeightClass ≥600 + cờ italic từ bytes font nhúng**
+  (ttf-parser); `list_objects` cache theo tên font (file 200+ run chung vài
+  font, không đọc lại bytes).
+- **Kiểm chứng**: test Node trích HÀM THẬT từ main.js (11 case: tách khối theo
+  format/màu, tiêu đề 2 cỡ vẫn 1 đoạn, bullet loại khỏi khối + rect từ chữ,
+  đúp trúng marker, phân biệt "-" gạch đầu dòng vs "-5°C") — tất cả PASS.
+  Phần render nền ẩn cần app thật → kiểm trên build CI.
+
 ### Giới hạn ghi nhận (v1, sẽ nâng ở vòng sau)
 - Đoạn justify (giãn đều 2 lề) reflow về căn trái; chưa kerning; khối text
   XOAY chưa reflow theo hướng xoay (dòng mới đặt theo trục ngang).
