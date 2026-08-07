@@ -41,6 +41,15 @@ jobs:
         shell: pwsh
         run: powershell -ExecutionPolicy Bypass -File scripts/fetch-qpdf.ps1
 
+      # Test OCR cần tesseract thật (eng + vie). Chocolatey có sẵn trên runner.
+      - name: Install Tesseract OCR (eng + vie)
+        shell: pwsh
+        run: |
+          choco install tesseract -y --no-progress
+          $tessdata = "C:\Program Files\Tesseract-OCR\tessdata"
+          Invoke-WebRequest "https://github.com/tesseract-ocr/tessdata_fast/raw/main/vie.traineddata" -OutFile "$tessdata\vie.traineddata"
+          echo "FOFREEXIT_TESSERACT_PATH=C:\Program Files\Tesseract-OCR\tesseract.exe" >> $env:GITHUB_ENV
+
       # Máy dev không có Rust — CI là nơi duy nhất chạy test engine.
       # Fail test = fail build, không publish bản hỏng.
       # --test-threads=1: PDFium serialize qua 1 mutex toàn cục; 1 test panic
