@@ -39,9 +39,17 @@ Type0/CID nhúng), trong khi `list_objects` chỉ duyệt object cấp trang.
   ff-engine lẫn app): wrapper 0.8.37 gate `remove_object` của form chỉ mở cho
   7350/future dù binding có đủ cho 7543 (sót gate upstream); API 7350 là
   subset của DLL bblanchon mới → không mất gì (đã quét: 0 hàm 7543-only).
+- **Bài học CI vòng 2 — "đánh thức" trang**: `GenerateContent` chỉ ghi lại
+  stream trang khi có object CẤP TRANG dirty; rút con chỉ làm FORM dirty →
+  op thuần trong form (Delete) không kích hoạt gì → `ProcessForm` không chạy.
+  Fix: sau khi rút con, nhân identity matrix vào form tổ tiên cấp trang
+  (Transform luôn SetDirty, giá trị không đổi) → trang regenerate → form
+  regenerate theo.
 - CI test chạy `--test-threads=1`: PDFium serialize qua 1 mutex toàn cục —
-  1 test panic khi giữ lock sẽ poison mutex, 17 test song song chết oan
-  (đã dính ở CI vòng 1).
+  1 test panic (kể cả panic Ở ASSERT khi instance Pdfium còn sống — unwind
+  drop guard giữa panic) sẽ poison mutex, mọi test SAU đó trong cùng process
+  chết oan tại thread_safe.rs:76. Khi đọc log CI: chỉ failure ĐẦU TIÊN là
+  lỗi thật.
 - Vá kèm: đọc source crate pdfium-render tải từ crates.io để chốt API vì máy
   dev không compile được Rust (xem mục CI bên dưới).
 
