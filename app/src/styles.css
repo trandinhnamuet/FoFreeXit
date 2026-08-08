@@ -376,6 +376,15 @@ body.tool-active .annotlayer * { pointer-events: none; }
   user-select: none;
 }
 .edit-inline { user-select: text; }
+/* Hint trong thanh Sửa nội dung: 1 dòng cố định + cắt bớt — thông điệp dài
+   không được làm thanh công cụ co giãn (trang nhảy lên xuống khi thao tác). */
+#editHint {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .edit-page-wrap { position: relative; box-shadow: 0 2px 12px rgba(0,0,0,.5); background: #fff; }
 .edit-img { display: block; }
 .edit-overlay { position: absolute; inset: 0; }

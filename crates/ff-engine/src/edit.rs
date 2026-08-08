@@ -298,6 +298,57 @@ fn object_at_path<'a>(page: &PdfPage<'a>, path: &[u16]) -> Result<PdfPageObject<
     Ok(obj)
 }
 
+/// Dựng job phẫu thuật (formsurgery) từ path các text-child trong form, kèm
+/// BẤT BIẾN kiểm đếm ở từng mức: thứ tự form/text tính từ chính `entries`
+/// (thứ tự parse của PDFium) — bên lopdf đếm op trong stream phải khớp.
+fn surgery_jobs(
+    entries: &[FlatEntry],
+    paths: &[Vec<u16>],
+) -> Result<Vec<crate::formsurgery::SurgeryJob>, EngineError> {
+    let siblings = |prefix: &[u16]| -> Vec<&FlatEntry> {
+        entries
+            .iter()
+            .filter(|e| e.path.len() == prefix.len() + 1 && e.path[..prefix.len()] == *prefix)
+            .collect()
+    };
+    let mut jobs = Vec::new();
+    for path in paths {
+        let k = path.len() - 1;
+        let mut chain = Vec::new();
+        for level in 0..k {
+            let prefix = &path[..level];
+            let sib = siblings(prefix);
+            let forms: Vec<u16> = sib
+                .iter()
+                .filter(|e| e.kind == ObjectKind::XObjectForm)
+                .map(|e| e.path[level])
+                .collect();
+            if !forms.contains(&path[level]) {
+                return Err(EngineError::Pdfium("path phẫu thuật không đi qua form".into()));
+            }
+            let ord = forms.iter().filter(|&&c| c < path[level]).count();
+            chain.push((ord, forms.len()));
+        }
+        let prefix = &path[..k];
+        let sib = siblings(prefix);
+        let texts: Vec<u16> = sib
+            .iter()
+            .filter(|e| e.kind == ObjectKind::Text)
+            .map(|e| e.path[k])
+            .collect();
+        if !texts.contains(&path[k]) {
+            return Err(EngineError::Pdfium("path phẫu thuật không trỏ vào text".into()));
+        }
+        let ord = texts.iter().filter(|&&c| c < path[k]).count();
+        jobs.push(crate::formsurgery::SurgeryJob {
+            chain,
+            expected_texts: texts.len(),
+            delete_ordinals: vec![ord],
+        });
+    }
+    Ok(jobs)
+}
+
 /// "MỞ GÓI" mọi Form XObject cấp trang thành object cấp trang: rút từng con
 /// khỏi form (`FPDFFormObj_RemoveObject` — cần feature pdfium_7350), nhân ma
 /// trận form vào con, chèn lại vào TRANG, xoá form rỗng. Hiển thị y hệt,
@@ -703,6 +754,11 @@ pub fn apply_edits(
     // op tra vào đây; dùng chung cho cả pha (A) lẫn (C). Probe font ở pha A
     // chỉ thêm+xoá object nháp ở CUỐI trang nên không làm lệch index.
     let entries: Vec<FlatEntry>;
+    // Run TRONG form bị thay (path) + rect của chúng + kích thước trang —
+    // phục vụ pha phẫu thuật (A2) và cổng an toàn so render cuối hàm.
+    let nested_removals: Vec<Vec<u16>>;
+    let mut nested_excl: Vec<Rect> = Vec::new();
+    let page_dims: (f32, f32);
     {
         let mut page = document
             .pages()
@@ -800,9 +856,6 @@ pub fn apply_edits(
                     let mut idxs: Vec<u16> = indices.iter().copied().filter(|i| valid(*i)).collect();
                     idxs.sort_unstable();
                     idxs.dedup();
-                    if idxs.iter().any(|&i| entries[i as usize].path.len() > 1) {
-                        return Err(nested_target_err());
-                    }
                     // Hình học từng run: gốc text (e,f của matrix) + bounds.
                     struct RunGeo {
                         idx: u16,
@@ -850,11 +903,10 @@ pub fn apply_edits(
                     // object có TÂM nằm trong bbox khối (nới 2pt) đều thuộc khối →
                     // đưa hết vào để xoá sạch, không còn chữ cũ đè dưới chữ mới.
                     {
-                        // Rect trang của 1 entry text (None nếu không phải text
-                        // hoặc nằm trong form — sau flatten không còn, guard).
+                        // Rect trang của 1 entry text (None nếu không phải text).
                         let text_rect = |i: u16| -> Option<Rect> {
                             let entry = &entries[i as usize];
-                            if entry.kind != ObjectKind::Text || entry.path.len() > 1 {
+                            if entry.kind != ObjectKind::Text {
                                 return None;
                             }
                             let obj = object_at_path(&page, &entry.path).ok()?;
@@ -1003,8 +1055,13 @@ pub fn apply_edits(
                     let fam_key = fontmatch::normalize_key(&family);
                     let ascii_only =
                         text.chars().all(|c| c.is_control() || (' '..='~').contains(&c));
-                    let original_ok =
-                        font_embedded && probe_font_roundtrip(&mut page, orig_token, text);
+                    // Tầng 0 (dùng lại token font gốc) chỉ dùng được khi run neo
+                    // ở CẤP TRANG: run trong form sẽ bị phẫu thuật xoá + document
+                    // MỞ LẠI (token cũ vô hiệu) → đi tầng nhúng-lại-bytes/cùng-họ.
+                    let anchor_nested = entries[anchor_idx as usize].path.len() > 1;
+                    let original_ok = !anchor_nested
+                        && font_embedded
+                        && probe_font_roundtrip(&mut page, orig_token, text);
                     let embedded_bytes = if font_embedded {
                         font_data.clone().filter(|b| fontmatch::coverage_ok(b, text))
                     } else {
@@ -1056,6 +1113,62 @@ pub fn apply_edits(
                 _ => {}
             }
         }
+
+        // (cuối pha A) Run TRONG form bị thay bởi Delete/ReflowText → xử lý
+        // bằng PHẪU THUẬT stream ở (A2); ghi lại rect (đã quy về trang) làm
+        // vùng loại trừ cho cổng an toàn so render.
+        page_dims = (page.width().value, page.height().value);
+        let mut nr: Vec<Vec<u16>> = Vec::new();
+        for (opi, op) in ops.iter().enumerate() {
+            match op {
+                EditOp::Delete { index } if valid(*index) => {
+                    let e = &entries[*index as usize];
+                    if e.path.len() > 1 && e.kind == ObjectKind::Text {
+                        nr.push(e.path.clone());
+                    }
+                }
+                EditOp::ReflowText { .. } => {
+                    if let Some(plan) = reflow_plans.get(&opi) {
+                        for &i in &plan.indices {
+                            let e = &entries[i as usize];
+                            if e.path.len() > 1 && e.kind == ObjectKind::Text {
+                                nr.push(e.path.clone());
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        nr.sort();
+        nr.dedup();
+        for p in &nr {
+            if let Ok(obj) = object_at_path(&page, p) {
+                if let Ok(q) = obj.bounds() {
+                    if let Some(e) = entries.iter().find(|en| &en.path == p) {
+                        nested_excl.push(mat_rect(e.acc, &quad_to_rect(&q)));
+                    }
+                }
+            }
+        }
+        nested_removals = nr;
+    }
+
+    // ---- (A2) PHẪU THUẬT stream form cho run TRONG form bị thay ----
+    // PDFium không ghi lại được stream form (docs/12) → xoá op vẽ chữ của các
+    // run đó bằng lopdf (mọi byte khác giữ nguyên), rồi MỞ LẠI document từ
+    // file đã phẫu thuật; chữ mới sẽ vẽ ở CẤP TRANG trong pha (C). Chỉ số
+    // object CẤP TRANG không đổi (form vẫn đó, chỉ ít text con hơn).
+    let mut surgery_tmp: Option<std::path::PathBuf> = None;
+    if !nested_removals.is_empty() {
+        let jobs = surgery_jobs(&entries, &nested_removals)?;
+        let tmp = output.with_extension("surgery.tmp.pdf");
+        drop(document);
+        formsurgery::delete_form_text_ops(input, page_index, &jobs, &tmp)?;
+        document = pdfium
+            .load_pdf_from_file(&tmp, password)
+            .map_err(|e| EngineError::Pdfium(format!("mở lại sau phẫu thuật: {e}")))?;
+        surgery_tmp = Some(tmp);
     }
 
     // ---- (B) Nạp các font cần dùng (cần fonts_mut → ngoài mượn trang) ----
@@ -1072,6 +1185,8 @@ pub fn apply_edits(
     }
 
     // ---- (C) Áp thay đổi (mượn trang lần 2) ----
+    // Số dòng thật sự vẽ ra của từng op reflow (tính vùng loại trừ cho cổng).
+    let mut reflow_out_lines: HashMap<usize, usize> = HashMap::new();
     {
         let mut page = document
             .pages()
@@ -1216,12 +1331,9 @@ pub fn apply_edits(
         to_remove.retain(|i| valid(*i));
         to_remove.sort_unstable();
         to_remove.dedup();
-        // Op xoá nhắm vào object TRONG form: không xử lý được (PDFium không
-        // ghi lại stream form) — trang phải được flatten trước, lỗi rõ ràng.
-        if to_remove.iter().any(|&i| is_nested(i)) {
-            return Err(nested_target_err());
-        }
-        // Cấp trang: xoá thật theo index trang GIẢM DẦN.
+        // Run TRONG form đã bị xoá bằng PHẪU THUẬT ở (A2) — loại khỏi danh
+        // sách; chỉ còn xoá thật ở cấp trang theo index GIẢM DẦN.
+        to_remove.retain(|&i| !is_nested(i));
         let mut page_idxs: Vec<u16> = to_remove
             .iter()
             .map(|&i| entries[i as usize].path[0])
@@ -1391,6 +1503,7 @@ pub fn apply_edits(
                         }
                     }
 
+                    reflow_out_lines.insert(opi, out_lines.len());
                     let (a, b, c2, d) = plan.linear;
                     for (i, (line, style)) in out_lines.iter().enumerate() {
                         if line.is_empty() {
@@ -1471,5 +1584,52 @@ pub fn apply_edits(
     document
         .save_to_file(output)
         .map_err(|e| EngineError::Pdfium(format!("lưu file: {e}")))?;
+
+    // ---- CỔNG AN TOÀN cho sửa-trong-form: mọi thay đổi pixel phải nằm
+    // TRONG vùng khối sửa; phần còn lại của trang phải y nguyên. Lệch → huỷ
+    // output, giữ nguyên file gốc, lỗi rõ ràng.
+    if let Some(tmp) = &surgery_tmp {
+        let (page_w_pt, page_h_pt) = page_dims;
+        let s = 500.0 / page_w_pt.max(1.0);
+        let mut excl_px: Vec<(u32, u32, u32, u32)> = Vec::new();
+        {
+            let mut push_rect = |r: &Rect, pad: f32| {
+                let x0 = ((r.left - pad) * s).max(0.0) as u32;
+                let x1 = ((r.right + pad) * s).max(0.0) as u32;
+                let y0 = ((page_h_pt - r.top - pad) * s).max(0.0) as u32;
+                let y1 = ((page_h_pt - r.bottom + pad) * s).max(0.0) as u32;
+                excl_px.push((x0, y0, x1.max(x0 + 1), y1.max(y0 + 1)));
+            };
+            for r in &nested_excl {
+                push_rect(r, 4.0);
+            }
+            for (opi, plan) in &reflow_plans {
+                let n = reflow_out_lines
+                    .get(opi)
+                    .copied()
+                    .unwrap_or(plan.line_styles.len()) as f32;
+                push_rect(
+                    &Rect {
+                        left: plan.left,
+                        right: plan.left + plan.width * 1.4,
+                        top: plan.first_baseline + plan.line_advance,
+                        bottom: plan.first_baseline - plan.line_advance * (n + 1.0),
+                    },
+                    6.0,
+                );
+            }
+        }
+        let mm = crate::render::page_render_mismatch_masked(
+            pdfium, input, output, page_index, 500, &excl_px,
+        )?;
+        let _ = std::fs::remove_file(tmp);
+        if mm > 0.005 {
+            let _ = std::fs::remove_file(output);
+            return Err(EngineError::Pdfium(format!(
+                "sửa trong form làm lệch hiển thị NGOÀI vùng sửa ({:.1}% điểm ảnh) — đã huỷ để bảo toàn file (cấu trúc file chưa hỗ trợ)",
+                mm * 100.0
+            )));
+        }
+    }
     Ok(())
 }
