@@ -550,7 +550,9 @@ pub fn list_objects(
             info.font_italic = Some(italic);
             info.font_embedded = t.font().is_embedded().ok();
             // Cỡ hiển thị = cỡ đã scale của run × scale dọc của form chứa nó.
-            info.font_size = Some(t.scaled_font_size().value * mat_vscale(entry.acc));
+            // .abs(): pdfium-render lấy scale = matrix.d CÓ DẤU — file Canva
+            // dùng hệ toạ độ lật (d<0) làm cỡ chữ ÂM, vỡ mọi công thức phía sau.
+            info.font_size = Some((t.scaled_font_size().value * mat_vscale(entry.acc)).abs());
             info.color = t
                 .fill_color()
                 .ok()
@@ -874,8 +876,11 @@ pub fn apply_edits(
                             return Ok(None);
                         };
                         let vs = mat_vscale(entry.acc);
-                        let (tf, scaled) =
-                            (t.unscaled_font_size().value, t.scaled_font_size().value * vs);
+                        // .abs(): matrix lật (Canva) cho cỡ ÂM — chuẩn hoá dương.
+                        let (tf, scaled) = (
+                            t.unscaled_font_size().value.abs(),
+                            (t.scaled_font_size().value * vs).abs(),
+                        );
                         let m = obj.matrix().map_err(err)?;
                         let (_, fy) = mat_apply(entry.acc, m.e(), m.f());
                         let b_raw = obj.bounds().map(|q| quad_to_rect(&q)).unwrap_or(Rect {
@@ -968,9 +973,9 @@ pub fn apply_edits(
                         let m = anchor.matrix().map_err(err)?;
                         let mc = mat_mul(mat_of(&m), entry.acc);
                         let tok = t.font().token();
-                        let unscaled = t.unscaled_font_size().value;
+                        let unscaled = t.unscaled_font_size().value.abs();
                         let scaled =
-                            (t.scaled_font_size().value * mat_vscale(entry.acc)).max(1.0);
+                            (t.scaled_font_size().value * mat_vscale(entry.acc)).abs().max(1.0);
                         let color = t.fill_color().unwrap_or(PdfColor::new(0, 0, 0, 255));
                         let embedded = t.font().is_embedded().unwrap_or(false);
                         let data = t.font().data().ok();
@@ -1234,7 +1239,7 @@ pub fn apply_edits(
             // Cỡ hiển thị so theo KHÔNG GIAN TRANG (nhân scale form) — target
             // từ UI cũng theo trang; hệ số k không đổi khi áp trong form.
             let (old_text, scaled) = match obj.as_text_object() {
-                Some(t) => (t.text(), t.scaled_font_size().value * mat_vscale(entry.acc)),
+                Some(t) => (t.text(), (t.scaled_font_size().value * mat_vscale(entry.acc)).abs()),
                 None => continue,
             };
             if *text != old_text {
@@ -1295,8 +1300,8 @@ pub fn apply_edits(
             let vs = mat_vscale(entry.acc);
             let (unscaled, scaled, color) = if let Some(t) = obj.as_text_object() {
                 (
-                    t.unscaled_font_size().value,
-                    t.scaled_font_size().value * vs,
+                    t.unscaled_font_size().value.abs(),
+                    (t.scaled_font_size().value * vs).abs(),
                     t.fill_color().unwrap_or(PdfColor::new(0, 0, 0, 255)),
                 )
             } else {
