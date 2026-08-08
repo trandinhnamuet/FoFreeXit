@@ -112,6 +112,23 @@ chân dung + toàn bộ chữ khác nguyên vẹn (PROFILE/CONTACT đủ glyph),
 masked pass, undo hoạt động. 2 test round-trip surgical (delete/reflow giữ
 nguyên phần khác của form) + test SetText nested bị từ chối.
 
+**Vá theo phản hồi user trên CV Canva (build 27-28)**:
+- **Cỡ chữ ÂM**: pdfium-render lấy vertical scale = `matrix.d` CÓ DẤU; file
+  Canva hệ toạ độ lật (d<0) → mọi cỡ chữ âm → UI kẹp ô sửa về 6px (sai vị
+  trí/style) và reflow đo bề rộng âm → không bẻ dòng, chữ văng khỏi trang
+  ("text biến mất" — cổng masked không bắt được vì chữ văng ra ít pixel).
+  Fix: chuẩn hoá `.abs()` tại 5 điểm đọc cỡ trong engine + 2 test fixture
+  form MA TRẬN LẬT.
+- **"Text biến mất" phần còn lại là ẢO GIÁC hiển thị**: sau commit, app còn
+  hiện ảnh render-ẩn (chữ cũ đã xoá) suốt vài giây khi engine áp thay đổi
+  (file nặng). Fix: đóng ô sửa → trả ảnh GỐC ngay + hint "Đang áp dụng thay
+  đổi…" → ảnh mới thay khi xong.
+- **Tàn dư dấu "~"** (ngã của Ễ): Canva vẽ dấu bằng op RIÊNG có tâm nằm
+  ngoài bbox khối +2pt → vòng nở không gom để xoá. Fix: pad nở DỌC 8pt
+  (vẫn < nhịp dòng 12pt+ nên không nuốt dòng cạnh).
+- Kiểm chứng cuối (build 28, CV thật): ô sửa đè khít đúng cỡ 37px bold đúng
+  màu; commit ra "NGUYỄN VĂN TÀI X" đủ dấu, không tàn dư, trang nguyên vẹn.
+
 Giới hạn khác:
 - Flatten làm mất clip/ExtGState/transparency group đặt Ở MỨC FORM — các
   trường hợp này thường cũng làm lệch render → cổng an toàn tự chặn.
