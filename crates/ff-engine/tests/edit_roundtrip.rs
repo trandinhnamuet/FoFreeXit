@@ -1303,3 +1303,102 @@ fn flatten_is_visually_lossless_on_simple_form() {
     let mm = ff_engine::page_render_mismatch(&pdf, &input, &out, 0, 500).expect("mismatch");
     assert!(mm < 0.005, "mở gói phải giữ nguyên hiển thị, lệch {:.3}%", mm * 100.0);
 }
+
+/// Fixture kiểu CANVA: form /Matrix lật trục Y, text bên trong cũng lật
+/// (net = xuôi). pdfium-render trả vertical scale CÓ DẤU → cỡ chữ từng bị ÂM.
+fn build_flipped_form_pdf(path: &std::path::Path) {
+    use lopdf::{dictionary, Document, Object, Stream};
+    let mut doc = Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+    let font_id = doc.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Helvetica",
+    });
+    let form_id = doc.add_object(Stream::new(
+        dictionary! {
+            "Type" => "XObject",
+            "Subtype" => "Form",
+            "BBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+            "Matrix" => vec![1.into(), 0.into(), 0.into(), Object::Real(-1.0), 0.into(), 792.into()],
+            "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
+        },
+        b"BT /F1 24 Tf 1 0 0 -1 72 92 Tm (Hello flipped form) Tj ET BT /F1 18 Tf 1 0 0 -1 72 142 Tm (Second flipped stays) Tj ET".to_vec(),
+    ));
+    let content_id = doc.add_object(Stream::new(dictionary! {}, b"q /Fx1 Do Q".to_vec()));
+    let page_id = doc.add_object(dictionary! {
+        "Type" => "Page",
+        "Parent" => pages_id,
+        "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        "Resources" => dictionary! { "XObject" => dictionary! { "Fx1" => form_id } },
+        "Contents" => content_id,
+    });
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Kids" => vec![page_id.into()],
+            "Count" => 1,
+        }),
+    );
+    let catalog_id = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    doc.trailer.set("Root", catalog_id);
+    doc.save(path).expect("lưu fixture flipped form");
+}
+
+// Ma trận lật (Canva): cỡ chữ phải DƯƠNG và đúng ~24, rect đúng vùng y=700.
+#[test]
+fn flipped_form_reports_positive_font_size() {
+    let pdf = pdfium();
+    let input = tmp("ff_edit_flip_list.pdf");
+    build_flipped_form_pdf(&input);
+    let objs = ff_engine::list_objects(&pdf, &input, 0, None).expect("list");
+    let t = objs
+        .iter()
+        .find(|o| o.kind == ObjectKind::Text && o.text.as_deref().map(|s| s.contains("Hello flipped")).unwrap_or(false))
+        .unwrap_or_else(|| panic!("phải thấy text: {objs:?}"));
+    let fs = t.font_size.unwrap_or(0.0);
+    assert!(fs > 20.0 && fs < 28.0, "cỡ chữ phải DƯƠNG ~24, được {fs}");
+    assert!(t.rect.bottom > 660.0 && t.rect.top < 740.0, "rect quanh y=700: {:?}", t.rect);
+}
+
+// Reflow trong form LẬT: chữ mới hiện đúng (không văng khỏi trang do bề
+// rộng đo bằng cỡ âm), chữ cũ mất, dòng kia giữ nguyên.
+#[test]
+fn flipped_form_surgical_reflow() {
+    let pdf = pdfium();
+    let input = tmp("ff_edit_flip_reflow.pdf");
+    build_flipped_form_pdf(&input);
+    let out = tmp("ff_edit_flip_reflow_out.pdf");
+    let idx = find_text_index(&pdf, &input, "Hello flipped");
+
+    ff_engine::apply_edits(
+        &pdf,
+        &input,
+        0,
+        &[EditOp::ReflowText {
+            indices: vec![idx],
+            text: "Đổi chữ trong form lật trục".into(),
+        }],
+        &out,
+        None,
+    )
+    .expect("reflow trong form lật");
+
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    let norm = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(norm.contains("Đổi chữ trong form"), "chữ mới phải có: {text:?}");
+    assert!(!norm.contains("Hello flipped"), "chữ cũ phải mất: {text:?}");
+    assert!(norm.contains("Second flipped stays"), "dòng kia phải nguyên: {text:?}");
+    // Chữ mới phải nằm QUANH vị trí cũ (y~700) — không văng khỏi trang.
+    let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
+    let new_run = objs
+        .iter()
+        .find(|o| o.kind == ObjectKind::Text && o.text.as_deref().map(|s| s.contains("Đổi chữ")).unwrap_or(false))
+        .unwrap_or_else(|| panic!("phải thấy run mới: {objs:?}"));
+    assert!(
+        new_run.rect.left > 50.0 && new_run.rect.left < 200.0 && new_run.rect.bottom > 650.0 && new_run.rect.top < 740.0,
+        "run mới phải quanh chỗ cũ: {:?}",
+        new_run.rect
+    );
+}
