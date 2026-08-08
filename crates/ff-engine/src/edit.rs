@@ -1164,7 +1164,7 @@ pub fn apply_edits(
         let jobs = surgery_jobs(&entries, &nested_removals)?;
         let tmp = output.with_extension("surgery.tmp.pdf");
         drop(document);
-        formsurgery::delete_form_text_ops(input, page_index, &jobs, &tmp)?;
+        crate::formsurgery::delete_form_text_ops(input, page_index, &jobs, &tmp)?;
         document = pdfium
             .load_pdf_from_file(&tmp, password)
             .map_err(|e| EngineError::Pdfium(format!("mở lại sau phẫu thuật: {e}")))?;
