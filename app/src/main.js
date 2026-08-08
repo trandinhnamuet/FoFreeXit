@@ -39,8 +39,6 @@ const state = {
   editArm: null,          // 'text' | 'image' khi đang chờ click đặt; null = không
   editPendingImage: null, // đường dẫn ảnh chờ đặt (Thêm ảnh)
   editPendingPoint: null, // điểm PDF chờ mở ô sửa (đúp chuột từ viewer thường)
-  editFlatBase: null,     // bản "mở gói" Form XObject — không tính là thay đổi
-  editFlattenFailed: null, // cổng an toàn từ chối mở gói — thông điệp chặn sửa
   editColor: [0, 0, 0],   // màu chữ áp khi sửa/thêm text
   editTemps: [],          // mọi file tạm đã materialize trong phiên sửa (để dọn)
   secMode: false,         // thanh Bảo mật (Phase 5) đang mở
@@ -2056,8 +2054,6 @@ function enterEditMode(pageIndex) {
   state.editSel = null;
   state.editArm = null;
   state.editPendingImage = null;
-  state.editFlatBase = null;
-  state.editFlattenFailed = null;
   $("annobar").classList.add("hidden");
   $("editBar").classList.remove("hidden");
   $("viewport").classList.add("hidden");
@@ -2129,29 +2125,9 @@ async function loadEditPage() {
       invoke("render_page", { path: state.editBase, page: state.editPage, width: EDIT_STAGE_W }),
       invoke("edit_list_objects", { path: state.editBase, page: state.editPage, password: null }),
     ]);
-    // Trang có object nằm TRONG Form XObject (file Canva/Illustrator gói cả
-    // trang vào form): PDFium không ghi lại được stream form → "mở gói" form
-    // ra cấp trang MỘT LẦN (hiển thị y hệt) rồi nạp lại — từ đó sửa như
-    // trang thường. Bản mở gói không tính là "có thay đổi" cho tới khi sửa.
-    if (objs.some((o) => o.nested)) {
-      try {
-        const flat = await invoke("edit_flatten_to_temp", {
-          input: state.editBase, page: state.editPage, password: null,
-        });
-        if (flat) {
-          state.editTemps.push(flat);
-          state.editBase = flat;
-          state.editFlatBase = flat;
-          state.editFlattenFailed = null;
-          return loadEditPage();
-        }
-      } catch (e) {
-        // Cổng an toàn từ chối (mở gói làm lệch hiển thị) → vẫn xem được,
-        // nhưng chặn sửa các phần nằm trong form với thông điệp rõ.
-        state.editFlattenFailed = String(e);
-        $("editHint").textContent = String(e);
-      }
-    }
+    // Object nằm TRONG Form XObject (file Canva/Illustrator): sửa/xoá text
+    // được xử lý bằng PHẪU THUẬT stream ở engine (trong suốt với UI) — không
+    // cần mở gói trang.
     $("editImg").src = url;
     state.editObjects = objs;
     buildEditOverlay();
@@ -2159,8 +2135,7 @@ async function loadEditPage() {
   } catch (e) {
     $("editHint").textContent = "Lỗi nạp trang sửa: " + e;
   }
-  // Chưa có thay đổi nào (bản mở gói form không tính).
-  $("edSave").disabled = state.editBase === state.path || state.editBase === state.editFlatBase;
+  $("edSave").disabled = state.editBase === state.path; // chưa có thay đổi nào
   updateEditUndoButtons();
 
   // Đúp chuột từ viewer thường (kiểu Foxit): vào thẳng ô sửa tại điểm đã đúp.
@@ -2616,15 +2591,7 @@ function paragraphLines(o) {
 // đường code duy nhất, giữ nguyên cấu trúc xuống dòng, commit qua reflow.
 // `ev` (nếu có) = sự kiện chuột để đặt con trỏ đúng chỗ vừa đúp.
 function startTextEdit(o, ev) {
-  const lines = paragraphLines(o);
-  // Trang gói form phức tạp không mở gói được an toàn → text vẫn nằm TRONG
-  // form, engine không lưu sửa đổi được — báo rõ thay vì mở ô sửa vô dụng.
-  if (lines.some((l) => l.runs.some((r) => r.nested))) {
-    $("editHint").textContent =
-      state.editFlattenFailed || "Phần này nằm trong Form XObject — chưa sửa được trên file này.";
-    return;
-  }
-  startBlockTextEdit(o, lines, ev);
+  startBlockTextEdit(o, paragraphLines(o), ev);
 }
 
 // Sửa cả đoạn WYSIWYG (chuẩn Foxit Edit Text): contenteditable phủ kín khối,
@@ -2926,6 +2893,13 @@ function applyTextPropToSelected(part) {
     .map((i) => state.editObjects.find((x) => x.index === i))
     .filter((x) => x && x.kind === "text");
   if (!runs.length) return;
+  // Đổi thuộc tính tại chỗ cho run TRONG form chưa hỗ trợ (engine chỉ phẫu
+  // thuật được sửa/xoá nội dung) — đúp chuột để sửa cả đoạn thì được.
+  if (runs.some((r) => r.nested)) {
+    $("editHint").textContent =
+      "Đổi font/cỡ/màu cho chữ trong khối form chưa hỗ trợ — đúp chuột để sửa nội dung, hoặc xoá.";
+    return;
+  }
   stageEditOps(
     runs.map((r) => ({
       op: "setText",
@@ -3022,9 +2996,13 @@ function onEditBoxMouseDown(e, o, runs) {
   const runObjs = runs && runs.length ? runs : [o];
   const runIndices = runObjs.map((r) => (typeof r === "number" ? r : r.index));
   selectEditObject(o.index, runIndices);
-  // Run TRONG Form XObject (file Canva...): sửa text được nhưng chưa hỗ trợ
-  // kéo di chuyển/resize — chọn thôi, không bắt đầu drag.
-  if (runObjs.some((r) => r && typeof r === "object" && r.nested)) return;
+  // Run TRONG Form XObject (file Canva...): sửa/xoá text được nhưng chưa hỗ
+  // trợ kéo di chuyển/resize — chọn thôi, không bắt đầu drag.
+  if (runObjs.some((r) => r && typeof r === "object" && r.nested)) {
+    $("editHint").textContent =
+      "Khối này nằm trong form — đúp chuột để sửa nội dung; di chuyển/resize chưa hỗ trợ.";
+    return;
+  }
   const box = e.currentTarget;
   const startX = e.clientX, startY = e.clientY;
   const left0 = parseFloat(box.style.left), top0 = parseFloat(box.style.top);
@@ -3647,6 +3625,11 @@ async function verifySignaturesAction(pathOverride) {
 // ---------- Sự kiện ----------
 
 $("openBtn").addEventListener("click", openFile);
+
+// Hint bị cắt bớt bằng CSS (1 dòng cố định) → hover xem đủ qua title.
+new MutationObserver(() => {
+  $("editHint").title = $("editHint").textContent;
+}).observe($("editHint"), { childList: true, characterData: true, subtree: true });
 
 // Kéo-thả file PDF từ File Explorer vào cửa sổ → mở luôn (chuẩn desktop app).
 // Tauri v2 bắn sự kiện drag-drop toàn cửa sổ với danh sách đường dẫn thật.

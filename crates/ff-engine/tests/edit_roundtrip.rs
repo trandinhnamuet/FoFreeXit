@@ -1038,7 +1038,8 @@ fn build_form_xobject_pdf(path: &std::path::Path) {
             "BBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
             "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
         },
-        b"BT /F1 24 Tf 72 700 Td (Hello inside form) Tj ET".to_vec(),
+        // 1 path đỏ + 2 dòng text — đủ để kiểm phẫu thuật giữ nguyên phần khác.
+        b"q 0.9 0.2 0.2 rg 40 40 100 20 re f Q BT /F1 24 Tf 72 700 Td (Hello inside form) Tj ET BT /F1 18 Tf 72 650 Td (Second line stays) Tj ET".to_vec(),
     ));
     let content_id = doc.add_object(Stream::new(dictionary! {}, b"q /Fx1 Do Q".to_vec()));
     let page_id = doc.add_object(dictionary! {
@@ -1207,18 +1208,89 @@ fn form_xobject_delete_after_flatten_clears_text() {
     assert!(!text.contains("Hello inside form"), "text phải biến mất sau xoá: {text:?}");
 }
 
-// Op nhắm thẳng vào object trong form (chưa flatten) phải bị TỪ CHỐI rõ ràng
-// (không âm thầm ghi ra bản không đổi).
+// SetText tại chỗ vào object trong form vẫn bị TỪ CHỐI rõ ràng (toolbar đổi
+// thuộc tính) — chỉ ReflowText/Delete đi đường phẫu thuật.
 #[test]
-fn nested_target_without_flatten_is_rejected() {
+fn nested_settext_is_rejected() {
     let pdf = pdfium();
     let input = form_fixture("ff_edit_formx_reject.pdf");
     let out = tmp("ff_edit_formx_reject_out.pdf");
     let idx = find_text_index(&pdf, &input, "Hello inside form");
 
-    let err = ff_engine::apply_edits(&pdf, &input, 0, &[EditOp::Delete { index: idx }], &out, None)
-        .expect_err("op vào object trong form phải bị từ chối");
-    assert!(format!("{err}").contains("mở gói"), "thông điệp phải nhắc flatten: {err}");
+    let err = ff_engine::apply_edits(
+        &pdf,
+        &input,
+        0,
+        &[EditOp::SetText {
+            index: idx,
+            text: "abc".into(),
+            font_size: None,
+            color: None,
+            font_family: None,
+            bold: None,
+            italic: None,
+        }],
+        &out,
+        None,
+    )
+    .expect_err("SetText vào object trong form phải bị từ chối");
+    assert!(format!("{err}").contains("mở gói"), "thông điệp phải rõ: {err}");
+}
+
+// PHẪU THUẬT: xoá 1 dòng TRONG form không cần mở gói — dòng kia + path đỏ
+// giữ nguyên, form còn nguyên là form, cổng an toàn (trong apply_edits) pass.
+#[test]
+fn form_xobject_surgical_delete() {
+    let pdf = pdfium();
+    let input = form_fixture("ff_edit_formx_surg_del.pdf");
+    let out = tmp("ff_edit_formx_surg_del_out.pdf");
+    let idx = find_text_index(&pdf, &input, "Hello inside form");
+
+    ff_engine::apply_edits(&pdf, &input, 0, &[EditOp::Delete { index: idx }], &out, None)
+        .expect("phẫu thuật xoá trong form");
+
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    assert!(!text.contains("Hello inside form"), "dòng xoá phải biến mất: {text:?}");
+    assert!(text.contains("Second line stays"), "dòng còn lại phải nguyên: {text:?}");
+    let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
+    assert!(
+        objs.iter().any(|o| o.kind == ObjectKind::XObjectForm),
+        "form phải CÒN NGUYÊN (không mở gói): {objs:?}"
+    );
+}
+
+// PHẪU THUẬT: sửa cả đoạn TRONG form (reflow) — chữ cũ mất, chữ mới hiện,
+// phần khác của form giữ nguyên.
+#[test]
+fn form_xobject_surgical_reflow() {
+    let pdf = pdfium();
+    let input = form_fixture("ff_edit_formx_surg_ref.pdf");
+    let out = tmp("ff_edit_formx_surg_ref_out.pdf");
+    let idx = find_text_index(&pdf, &input, "Hello inside form");
+
+    ff_engine::apply_edits(
+        &pdf,
+        &input,
+        0,
+        &[EditOp::ReflowText {
+            indices: vec![idx],
+            text: "Sửa trong form bằng phẫu thuật stream".into(),
+        }],
+        &out,
+        None,
+    )
+    .expect("phẫu thuật reflow trong form");
+
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    let norm = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(norm.contains("Sửa trong form"), "chữ mới phải có mặt: {text:?}");
+    assert!(!norm.contains("Hello inside form"), "chữ cũ phải biến mất: {text:?}");
+    assert!(norm.contains("Second line stays"), "dòng khác phải nguyên: {text:?}");
+    let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
+    assert!(
+        objs.iter().any(|o| o.kind == ObjectKind::XObjectForm),
+        "form phải còn nguyên: {objs:?}"
+    );
 }
 
 // Cổng an toàn: mở gói fixture đơn giản phải giữ nguyên hiển thị (lệch ~0%).

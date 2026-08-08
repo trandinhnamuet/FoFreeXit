@@ -127,6 +127,54 @@ pub fn page_render_mismatch(
     Ok(diff as f32 / total as f32)
 }
 
+/// Như [page_render_mismatch] nhưng BỎ QUA pixel trong các ô `exclude_px`
+/// ((x0,y0,x1,y1) theo pixel ảnh render) — dùng cho sửa-trong-form: vùng khối
+/// sửa được phép đổi, phần còn lại của trang phải y nguyên.
+pub fn page_render_mismatch_masked(
+    pdfium: &Pdfium,
+    a: &Path,
+    b: &Path,
+    page_index: u16,
+    target_width: u32,
+    exclude_px: &[(u32, u32, u32, u32)],
+) -> Result<f32, EngineError> {
+    let ia = render_page(pdfium, a, page_index, target_width, None)?.image.to_rgba8();
+    let ib = render_page(pdfium, b, page_index, target_width, None)?.image.to_rgba8();
+    if ia.dimensions() != ib.dimensions() {
+        return Ok(1.0);
+    }
+    let (w, h) = ia.dimensions();
+    let mut total = 0u64;
+    let mut diff = 0u64;
+    for y in 0..h {
+        for x in 0..w {
+            if exclude_px
+                .iter()
+                .any(|&(x0, y0, x1, y1)| x >= x0 && x < x1 && y >= y0 && y < y1)
+            {
+                continue;
+            }
+            total += 1;
+            let pa = ia.get_pixel(x, y);
+            let pb = ib.get_pixel(x, y);
+            let d = pa
+                .0
+                .iter()
+                .zip(pb.0.iter())
+                .map(|(p, q)| (*p as i16 - *q as i16).unsigned_abs())
+                .max()
+                .unwrap_or(0);
+            if d > 12 {
+                diff += 1;
+            }
+        }
+    }
+    if total == 0 {
+        return Ok(0.0);
+    }
+    Ok(diff as f32 / total as f32)
+}
+
 /// Render một trang và ghi ra file PNG.
 pub fn render_page_png(
     pdfium: &Pdfium,
