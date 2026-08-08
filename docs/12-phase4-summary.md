@@ -92,13 +92,25 @@ HUỶ file tạm + trả lỗi rõ; UI hiển thị thông điệp và CHẶN m�
 trong form (xem/chú thích/tổ chức trang vẫn bình thường). File gói form đơn
 giản (đa số file xuất máy in ảo, fixture test) qua cổng → sửa thoải mái.
 
-**Kế hoạch iteration sau cho file Canva-phức-tạp** (đã chốt kiến trúc):
-KHÔNG regenerate qua PDFium — phẫu thuật content stream bằng lopdf:
-(1) xoá đúng các op vẽ chữ (Tj/TJ/'/") của run bị sửa trong stream form
-(map: text-child thứ k của form ↔ show-op thứ k, thứ tự parse tuần tự);
-(2) chữ mới vẽ ở CẤP TRANG bằng PDFium như hiện tại (trang chỉ có Do +
-path — regenerate trang không đụng nội dung form, không dính lỗi trùng tên
-font). Mọi byte khác của form giữ NGUYÊN — lossless by construction.
+**Iteration 4b — PHẪU THUẬT stream (ĐÃ LÀM, thay thế flatten ở UI)**:
+`formsurgery.rs` (lopdf): xoá đúng op vẽ chữ (Tj/TJ/'/") của run bị sửa
+trong stream form — map text-child thứ k ↔ show-op thứ k, form con thứ n ↔
+Do-trỏ-form thứ n (thứ tự parse PDFium tuần tự); MỖI MỨC có bất biến kiểm
+đếm (số op == số object PDFium thấy — lệch là từ chối); '/" thay bằng
+T*/Tw+Tc+T* giữ hiệu ứng vị trí. Chữ mới vẽ ở CẤP TRANG (regenerate trang
+không đụng stream form → không dính lỗi trùng tên font). `apply_edits`:
+run nested trong ReflowText/Delete → phẫu thuật ở pha (A2) rồi MỞ LẠI
+document (tầng-0 token gốc tắt cho anchor nested — token vô hiệu sau mở
+lại); cổng an toàn `page_render_mismatch_masked`: pixel ngoài vùng khối sửa
+lệch >0.5% → huỷ output. UI bỏ auto-flatten, sửa nested trong suốt qua đúp
+chuột; SetText thuộc tính/kéo khối trong form chặn-với-thông-điệp.
+Bẫy lopdf: `decompressed_content()` BÁO LỖI với stream không nén (thiếu
+/Filter) → fallback bytes thô.
+**Kiểm chứng E2E trên CV Canva thật (build 26)**: sửa 1 dòng trong form
+(1155 object nested) → commit thành công, chữ mới đúng chỗ/đúng màu, ảnh
+chân dung + toàn bộ chữ khác nguyên vẹn (PROFILE/CONTACT đủ glyph), cổng
+masked pass, undo hoạt động. 2 test round-trip surgical (delete/reflow giữ
+nguyên phần khác của form) + test SetText nested bị từ chối.
 
 Giới hạn khác:
 - Flatten làm mất clip/ExtGState/transparency group đặt Ở MỨC FORM — các
