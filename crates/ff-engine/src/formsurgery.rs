@@ -36,6 +36,15 @@ fn is_text_show(op: &str) -> bool {
     matches!(op, "Tj" | "TJ" | "'" | "\"")
 }
 
+/// Bytes content của stream: giải nén nếu có filter; stream KHÔNG nén thì
+/// `decompressed_content()` của lopdf báo lỗi thiếu /Filter → dùng bytes thô.
+/// (Bytes sai kiểu sẽ bị bất biến kiểm đếm chặn ở bước sau.)
+fn stream_bytes(stream: &lopdf::Stream) -> Vec<u8> {
+    stream
+        .decompressed_content()
+        .unwrap_or_else(|_| stream.content.clone())
+}
+
 /// Resolve reference (tối đa 8 nấc).
 fn deref<'a>(doc: &'a LoDoc, mut o: &'a Object) -> &'a Object {
     for _ in 0..8 {
@@ -147,7 +156,7 @@ pub(crate) fn delete_form_text_ops(
                 .map_err(le)?
                 .as_stream()
                 .map_err(le)?;
-            let bytes = stream.decompressed_content().map_err(le)?;
+            let bytes = stream_bytes(stream);
             content = Content::decode(&bytes).map_err(le)?;
             res = stream_resources(&doc, id, res.as_ref()).cloned();
             stream_id = Some(id);
@@ -169,7 +178,7 @@ pub(crate) fn delete_form_text_ops(
                 .map_err(le)?
                 .as_stream()
                 .map_err(le)?;
-            stream.decompressed_content().map_err(le)?
+            stream_bytes(stream)
         };
         let content = Content::decode(&bytes).map_err(le)?;
         let total_shows = content
