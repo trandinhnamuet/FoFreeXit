@@ -2770,9 +2770,12 @@ function startBlockTextEdit(o, lines, ev) {
     ce.remove();
     ov.querySelectorAll(".edit-box").forEach((b) => { b.style.display = ""; });
     const changed = save && text.trim() && text !== original;
-    // Huỷ/không đổi gì → trả lại ảnh trang gốc (đang hiện bản ẩn run sửa).
-    if (!changed && bgSwapped) img.src = prevSrc;
+    // LUÔN trả lại ảnh trang gốc ngay (đang hiện bản ẩn run sửa): trong lúc
+    // engine áp thay đổi (file phức tạp mất vài giây) người dùng thấy chữ CŨ
+    // thay vì khoảng trống — hết cảm giác "chữ biến mất".
+    if (bgSwapped) img.src = prevSrc;
     if (changed) {
+      $("editHint").textContent = "Đang áp dụng thay đổi…";
       stageEditOp({
         op: "reflowText",
         indices: allRuns.map((r) => r.index),

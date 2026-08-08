@@ -931,17 +931,23 @@ pub fn apply_edits(
                                 bb.top = bb.top.max(r.top);
                             }
                         }
-                        let pad = 2.0;
+                        // Nới DỌC rộng hơn ngang: dấu tiếng Việt (ngã của Ễ…)
+                        // nhiều file (Canva) vẽ bằng op riêng nằm TRÊN cap —
+                        // tâm ngoài bbox +2pt → sót lại dấu lơ lửng sau sửa.
+                        // 8pt vẫn nhỏ hơn nhịp dòng (≥12pt) nên không nuốt
+                        // nhầm dòng bên cạnh.
+                        let pad_x = 2.0;
+                        let pad_y = 8.0;
                         for i in 0..entries.len() as u16 {
                             if idxs.contains(&i) {
                                 continue;
                             }
                             let Some(r) = text_rect(i) else { continue };
                             let (cx, cy) = ((r.left + r.right) / 2.0, (r.bottom + r.top) / 2.0);
-                            if cx >= bb.left - pad
-                                && cx <= bb.right + pad
-                                && cy >= bb.bottom - pad
-                                && cy <= bb.top + pad
+                            if cx >= bb.left - pad_x
+                                && cx <= bb.right + pad_x
+                                && cy >= bb.bottom - pad_y
+                                && cy <= bb.top + pad_y
                             {
                                 idxs.push(i);
                                 if let Some(g) = geo_of(&page, i)? {
