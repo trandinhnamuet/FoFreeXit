@@ -28,7 +28,123 @@ pub(crate) fn web_compatible_font(
     italic: bool,
     mapping: Option<&FontMapping>,
 ) -> Vec<u8> {
+    // CFF trần (Type1C/FontFile3 — không có vỏ sfnt, header major=1): bọc
+    // thành OTF để FontFace nạp được. Không bọc nổi thì trả nguyên trạng
+    // (UI rơi về font đóng gói).
+    if data.len() >= 4 && data[0] == 1 && data[1] == 0 {
+        return wrap_bare_cff(data, bold, italic, mapping).unwrap_or_else(|| data.to_vec());
+    }
     try_fix(data, bold, italic, mapping).unwrap_or_else(|| data.to_vec())
+}
+
+/// Bọc CFF trần thành OTF (tag OTTO): bảng `CFF ` giữ nguyên bytes gốc, các
+/// bảng sfnt bắt buộc tổng hợp từ CFF (số glyph, encoding/charset, upm) +
+/// PDF (/Widths, /Ascent, /ToUnicode). hmtx đúng bề rộng gốc → chữ trong ô
+/// sửa chiếm chỗ y như trên trang.
+fn wrap_bare_cff(
+    data: &[u8],
+    bold: bool,
+    italic: bool,
+    mapping: Option<&FontMapping>,
+) -> Option<Vec<u8>> {
+    let m = mapping?;
+    if m.code_to_uni.is_empty() {
+        return None;
+    }
+    let cff = crate::cffwrap::parse(data)?;
+    let upm_f = cff.upm.clamp(16.0, 16384.0);
+    let upm = upm_f.round() as u16;
+    let to_units = |w: f32| (w * upm_f / 1000.0).round().clamp(0.0, 65535.0) as u16;
+    let code_gid = |code: u32| -> Option<u16> {
+        let g = if cff.is_cid {
+            cff.cid_to_gid.get(&code).copied()
+        } else {
+            cff.code_to_gid.get(&code).copied()
+        }?;
+        (g != 0 && g < cff.num_glyphs).then_some(g)
+    };
+    let default_w = to_units(if m.default_width > 0.0 { m.default_width } else { 500.0 });
+    let mut advances = vec![default_w; cff.num_glyphs as usize];
+    let mut pairs: Vec<(u32, u16)> = Vec::new();
+    for (&code, &uni) in &m.code_to_uni {
+        let Some(gid) = code_gid(code) else { continue };
+        if uni != 0 && uni <= 0xFFFF {
+            pairs.push((uni, gid));
+        }
+        if let Some(&w) = m.widths.get(&code) {
+            advances[gid as usize] = to_units(w);
+        }
+    }
+    if pairs.is_empty() {
+        return None; // không map được glyph nào — bọc cũng vô dụng
+    }
+    pairs.sort_by_key(|p| p.0);
+    pairs.dedup_by_key(|p| p.0);
+
+    let asc = if m.ascent > 1.0 { (m.ascent * upm_f / 1000.0) as i16 } else { (upm_f * 0.8) as i16 };
+    let desc =
+        if m.descent < -1.0 { (m.descent * upm_f / 1000.0) as i16 } else { -((upm_f * 0.2) as i16) };
+    let adv_max = advances.iter().copied().max().unwrap_or(default_w);
+
+    let mut tables: Vec<([u8; 4], Vec<u8>)> = vec![
+        (*b"CFF ", data.to_vec()),
+        (*b"cmap", build_cmap_format4(&pairs)),
+        (*b"head", build_head(upm, desc, adv_max as i16, asc)),
+        (*b"hhea", build_hhea(asc, desc, adv_max, cff.num_glyphs)),
+        (*b"hmtx", build_hmtx(&advances)),
+        (*b"maxp", build_maxp05(cff.num_glyphs)),
+    ];
+    let os2 = build_os2(&tables, bold, italic)?;
+    tables.push((*b"OS/2", os2));
+    tables.push((*b"name", build_name()));
+    tables.push((*b"post", build_post()));
+    tables.sort_by(|a, b| a.0.cmp(&b.0));
+    Some(assemble(TAG_OTTO, tables))
+}
+
+/// head 54B cho vỏ OTF (magic 0x5F0F3CF5 bắt buộc; checkSumAdjustment do
+/// assemble điền).
+fn build_head(upm: u16, y_min: i16, x_max: i16, y_max: i16) -> Vec<u8> {
+    let mut v = vec![0u8; 54];
+    v[0..4].copy_from_slice(&0x0001_0000u32.to_be_bytes()); // version
+    v[4..8].copy_from_slice(&0x0001_0000u32.to_be_bytes()); // fontRevision
+    v[12..16].copy_from_slice(&0x5F0F_3CF5u32.to_be_bytes()); // magicNumber
+    v[18..20].copy_from_slice(&upm.to_be_bytes());
+    v[38..40].copy_from_slice(&y_min.to_be_bytes());
+    v[40..42].copy_from_slice(&x_max.to_be_bytes());
+    v[42..44].copy_from_slice(&y_max.to_be_bytes());
+    v[46..48].copy_from_slice(&8u16.to_be_bytes()); // lowestRecPPEM
+    v[48..50].copy_from_slice(&2i16.to_be_bytes()); // fontDirectionHint
+    v
+}
+
+fn build_hhea(asc: i16, desc: i16, adv_max: u16, num_h_metrics: u16) -> Vec<u8> {
+    let mut v = vec![0u8; 36];
+    v[0..4].copy_from_slice(&0x0001_0000u32.to_be_bytes());
+    v[4..6].copy_from_slice(&asc.to_be_bytes());
+    v[6..8].copy_from_slice(&desc.to_be_bytes());
+    v[10..12].copy_from_slice(&adv_max.to_be_bytes());
+    v[18..20].copy_from_slice(&1i16.to_be_bytes()); // caretSlopeRise
+    v[34..36].copy_from_slice(&num_h_metrics.to_be_bytes());
+    v
+}
+
+/// hmtx đầy đủ: mỗi glyph advance(u16) + lsb(i16=0).
+fn build_hmtx(advances: &[u16]) -> Vec<u8> {
+    let mut v = Vec::with_capacity(advances.len() * 4);
+    for &a in advances {
+        v.extend_from_slice(&a.to_be_bytes());
+        v.extend_from_slice(&0i16.to_be_bytes());
+    }
+    v
+}
+
+/// maxp version 0.5 (6B) — chuẩn cho font CFF (không có glyf/loca).
+fn build_maxp05(num_glyphs: u16) -> Vec<u8> {
+    let mut v = Vec::with_capacity(6);
+    v.extend_from_slice(&0x0000_5000u32.to_be_bytes());
+    v.extend_from_slice(&num_glyphs.to_be_bytes());
+    v
 }
 
 const TAG_TRUE: u32 = u32::from_be_bytes(*b"true");
@@ -624,7 +740,15 @@ mod tests {
     }
 
     fn mapping(uni: HashMap<u32, u32>, is_cid: bool, cid_to_gid: Option<Vec<u16>>) -> FontMapping {
-        FontMapping { code_to_uni: uni, is_cid, cid_to_gid }
+        FontMapping {
+            code_to_uni: uni,
+            is_cid,
+            cid_to_gid,
+            widths: HashMap::new(),
+            default_width: 1000.0,
+            ascent: 0.0,
+            descent: 0.0,
+        }
     }
 
     #[test]
@@ -707,5 +831,44 @@ mod tests {
         let cm2 = fixed2[o2..o2 + l2].to_vec();
         assert_eq!(lookup_f4(&cm2, 0x1EA3), 7, "'ả' → GID 7 theo CIDToGIDMap");
         assert_eq!(lookup_f4(&cm2, 0x41), 8);
+    }
+
+    /// CFF trần (Type1C): bọc thành OTF — bảng CFF giữ nguyên bytes, cmap từ
+    /// Encoding × ToUnicode, hmtx đúng /Widths của PDF.
+    #[test]
+    fn bare_cff_is_wrapped_into_otf() {
+        let cff = crate::cffwrap::fake_cff();
+        let mut uni = HashMap::new();
+        uni.insert(65u32, 65u32); // 'A' giữ mã
+        uni.insert(66u32, 0x1EA3u32); // mã 66 = 'ả' qua ToUnicode
+        let mut m = mapping(uni, false, None);
+        m.widths.insert(65, 600.0);
+        m.widths.insert(66, 480.0);
+        m.ascent = 800.0;
+        m.descent = -200.0;
+        let out = web_compatible_font(&cff, false, false, Some(&m));
+        assert_ne!(out, cff, "phải được bọc");
+        assert_eq!(&out[0..4], b"OTTO", "vỏ OTF cho CFF");
+        let dir = table_dir(&out);
+        let tags: Vec<&str> = dir.iter().map(|(t, _, _)| t.as_str()).collect();
+        for need in ["CFF ", "OS/2", "cmap", "head", "hhea", "hmtx", "maxp", "name", "post"] {
+            assert!(tags.contains(&need), "thiếu {need}: {tags:?}");
+        }
+        let (_, off, len) = dir[tags.iter().position(|t| *t == "cmap").unwrap()].clone();
+        let cm = out[off..off + len].to_vec();
+        assert_eq!(lookup_f4(&cm, 65), 1, "'A' → gid 1 theo Encoding");
+        assert_eq!(lookup_f4(&cm, 0x1EA3), 2, "'ả' → gid 2");
+        let (_, ho, _) = dir[tags.iter().position(|t| *t == "hmtx").unwrap()].clone();
+        assert_eq!(
+            u16::from_be_bytes(out[ho + 4..ho + 6].try_into().unwrap()),
+            600,
+            "advance gid 1 theo /Widths"
+        );
+        assert_eq!(u16::from_be_bytes(out[ho + 8..ho + 10].try_into().unwrap()), 480);
+        let (_, co, cl) = dir[tags.iter().position(|t| *t == "CFF ").unwrap()].clone();
+        assert_eq!(&out[co..co + cl], &cff[..], "bảng CFF giữ nguyên bytes gốc");
+        assert_eq!(checksum(&out), 0xB1B0_AFBA);
+        // Không có mapping → không bọc nổi, trả nguyên trạng (UI tự fallback).
+        assert_eq!(web_compatible_font(&cff, false, false, None), cff);
     }
 }

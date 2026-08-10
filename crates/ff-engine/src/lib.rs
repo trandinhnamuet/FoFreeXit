@@ -7,6 +7,7 @@
 pub mod annot;
 pub mod convert;
 pub mod edit;
+mod cffwrap;
 mod fontfix;
 mod formsurgery;
 mod tounicode;

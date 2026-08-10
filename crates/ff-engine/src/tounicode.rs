@@ -92,6 +92,22 @@ fn scan_resources(
                     .unwrap_or_default();
                 let is_cid = subtype == b"Type0";
                 let mut cid_to_gid = None;
+                let mut widths: HashMap<u32, f32> = HashMap::new();
+                let mut default_width = 1000.0f32;
+                let mut ascent = 0.0f32;
+                let mut descent = 0.0f32;
+                let mut read_descriptor = |d: &Dictionary, asc: &mut f32, desc: &mut f32| {
+                    if let Ok(x) = d.get(b"FontDescriptor") {
+                        if let Ok(x) = deref(doc, x).as_dict() {
+                            if let Some(v) = x.get(b"Ascent").ok().and_then(|o| as_num(doc, o)) {
+                                *asc = v;
+                            }
+                            if let Some(v) = x.get(b"Descent").ok().and_then(|o| as_num(doc, o)) {
+                                *desc = v;
+                            }
+                        }
+                    }
+                };
                 if is_cid {
                     if let Ok(desc) = fd.get(b"DescendantFonts") {
                         let desc = deref(doc, desc);
@@ -112,13 +128,46 @@ fn scan_resources(
                                     );
                                 }
                             }
+                            // /W: [c [w..] | c1 c2 w] ; /DW: bề rộng mặc định.
+                            if let Ok(w) = dd.get(b"W") {
+                                if let Object::Array(arr) = deref(doc, w) {
+                                    parse_cid_widths(doc, arr, &mut widths);
+                                }
+                            }
+                            if let Some(v) = dd.get(b"DW").ok().and_then(|o| as_num(doc, o)) {
+                                default_width = v;
+                            }
+                            read_descriptor(dd, &mut ascent, &mut descent);
                         }
                     }
+                } else {
+                    // Font đơn giản: /FirstChar + /Widths.
+                    if let (Some(fc), Ok(ws)) = (
+                        fd.get(b"FirstChar").ok().and_then(|o| as_num(doc, o)),
+                        fd.get(b"Widths"),
+                    ) {
+                        if let Object::Array(arr) = deref(doc, ws) {
+                            for (i, w) in arr.iter().enumerate() {
+                                if let Some(w) = as_num(doc, w) {
+                                    widths.insert(fc as u32 + i as u32, w);
+                                }
+                            }
+                        }
+                    }
+                    read_descriptor(fd, &mut ascent, &mut descent);
                 }
                 if code_to_uni.is_empty() {
                     continue; // không có ToUnicode — thử font trùng tên khác
                 }
-                return Some(FontMapping { code_to_uni, is_cid, cid_to_gid });
+                return Some(FontMapping {
+                    code_to_uni,
+                    is_cid,
+                    cid_to_gid,
+                    widths,
+                    default_width,
+                    ascent,
+                    descent,
+                });
             }
         }
     }
@@ -139,6 +188,44 @@ fn scan_resources(
         }
     }
     None
+}
+
+/// Số PDF (Integer/Real, kể cả qua reference) → f32.
+fn as_num(doc: &LoDoc, o: &Object) -> Option<f32> {
+    match deref(doc, o) {
+        Object::Integer(i) => Some(*i as f32),
+        Object::Real(r) => Some(*r),
+        _ => None,
+    }
+}
+
+/// Mảng /W của font CID: dạng `c [w1 w2 …]` (mã c..c+n-1) hoặc `c1 c2 w`.
+fn parse_cid_widths(doc: &LoDoc, arr: &[Object], out: &mut HashMap<u32, f32>) {
+    let mut i = 0;
+    while i < arr.len() {
+        let Some(c1) = as_num(doc, &arr[i]) else { break };
+        match arr.get(i + 1).map(|o| deref(doc, o)) {
+            Some(Object::Array(list)) => {
+                for (k, w) in list.iter().enumerate() {
+                    if let Some(w) = as_num(doc, w) {
+                        out.insert(c1 as u32 + k as u32, w);
+                    }
+                }
+                i += 2;
+            }
+            Some(_) => {
+                let c2 = arr.get(i + 1).and_then(|o| as_num(doc, o));
+                let w = arr.get(i + 2).and_then(|o| as_num(doc, o));
+                let (Some(c2), Some(w)) = (c2, w) else { break };
+                let hi = (c2 as u32).min(c1 as u32 + 0xFFFF);
+                for c in (c1 as u32)..=hi {
+                    out.insert(c, w);
+                }
+                i += 3;
+            }
+            None => break,
+        }
+    }
 }
 
 enum Tok {
