@@ -539,3 +539,45 @@ các mảnh sau commit).
   Fix: vùng nở 8pt chỉ nuốt op NHỎ (cao < 0.6 × median cao run trong khối —
   mảnh dấu); op cao cỡ chữ phải có tâm trong bbox LÕI. Test hồi quy:
   `reflow_tight_leading_does_not_swallow_line_above` (giãn dòng 13pt).
+
+---
+
+# Vòng 7 (10/08/2026): ô sửa dùng FONT NHÚNG của PDF (hết "mất in đậm")
+
+**User báo:** chữ mono vốn in đậm (`newWindowsPassword`), mở ô sửa thì "về
+chữ thường". Chẩn đoán qua `CSS.getPlatformFontsForNode`: span ĐÃ có
+`font-weight:700` — nhưng máy không cài font tài liệu nên WebView thay
+NotoSansMono-Bold bằng **Consolas-Bold nét mảnh** (nhìn như không đậm),
+NotoSans thành Arial.
+
+**Giải pháp:** ô sửa dùng chính font nhúng trong PDF.
+- Engine `font_data(input, page, index)`: bytes font nhúng của run (index
+  phẳng — vào được font trong Form XObject của file Canva).
+- **fontfix.rs**: OTS (OpenType Sanitizer của Chromium) từ chối subset PDF vì
+  (1) thiếu bảng `OS/2` (bắt buộc), (2) cmap chỉ có (1,0) format 0 Mac —
+  không hỗ trợ. Vá: dựng OS/2 v4 từ head/hhea + cờ đậm/nghiêng (weight khớp
+  → không bị synthesize-bold chồng); convert cmap → (3,1) format 4; ghép sfnt
+  chuẩn checksum (tổng = B1B0AFBA), tag 'true' → 0x00010000. CFF trần giữ
+  nguyên (UI tự fallback).
+- **tounicode.rs**: subset LibreOffice gán mã TUỲ BIẾN 1–31 cho ký tự ngoài
+  WinAnsi (chữ Việt có dấu) — chỉ `/ToUnicode` giải nghĩa được. Parse
+  bfchar/bfrange (lopdf, cả surrogate pair), match BaseFont theo suffix sau
+  "ABCDEF+", tìm cả trong resources của form (sâu 3). Không có ToUnicode:
+  ASCII identity + MacRoman; mã không giải nghĩa được thì bỏ (ký tự rơi
+  xuống stack hệ thống).
+- UI: nạp lười theo tên font khi vào trang sửa (dedup), FontFace weight/style
+  theo run, family nhúng đứng đầu stack span/div; đổi phiên sửa bỏ face cũ.
+
+**Kiểm chứng (build 35, CDP getPlatformFontsForNode):** file dịch — 3 span
+đều isCustomFont ("Noto Sans", "Noto Sans Mono" thật, mono đậm y bản in);
+CV Canva gốc — span dùng "Lato" nhúng (run trong form). Quy trình debug đáng
+nhớ: bắt log "OTS parsing error" qua CDP `Log.enable`; nhân bản thuật toán
+sang Node để vá bytes THẬT và load thử trong WebView2 đang chạy TRƯỚC khi
+chờ CI.
+
+**Phát hiện ngoài lề:** file `CV_NGUYENVANTAI.pdf` trong thư mục project bị
+GHI ĐÈ hỏng lúc 09:49 10/08 (xref trỏ 153271 nhưng file phình 259KB, stream
+lệch offset — kiểu hỏng do copy/tải mangle bytes; Producer (Canva), KHÔNG
+phải app ghi). Bản gốc lành còn ở `Downloads\CV_NGUYENVANTAI.pdf` (157KB).
+File hỏng: PDFium render được nhưng object list = 0 → không sửa được; qpdf
+cứu được hiển thị nhưng mất cấu trúc text.
