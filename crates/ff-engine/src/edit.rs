@@ -1748,7 +1748,10 @@ pub fn apply_edits(
                                     };
                                     // Ghi + tự kiểm; hỏng → ghi lại TỪNG TỪ tự đặt
                                     // vị trí (không bao giờ ghi glyph dấu cách).
-                                    let wrote_ok = {
+                                    // Mảnh kế đặt từ MÉP MỰC THẬT (bounds PDFium):
+                                    // hmtx subset có thể không parse được → đo xấp
+                                    // xỉ 0.5em thiếu hụt làm các mảnh ĐÈ nhau.
+                                    let (wrote_ok, ink_right) = {
                                         let mut obj = page
                                             .objects_mut()
                                             .create_text_object(
@@ -1763,12 +1766,14 @@ pub fn apply_edits(
                                             .as_text_object()
                                             .map(|t| t.text() == p.text)
                                             .unwrap_or(false);
+                                        let mut ir = None;
                                         if ok {
                                             obj.apply_matrix(PdfMatrix::new(a, b, c2, d, x, y))
                                                 .map_err(err)?;
                                             obj.set_fill_color(st.color).map_err(err)?;
+                                            ir = obj.bounds().ok().map(|q| q.right().value);
                                         }
-                                        ok
+                                        (ok, ir)
                                     };
                                     if !wrote_ok {
                                         let idx = page.objects().len().saturating_sub(1);
@@ -1793,10 +1798,17 @@ pub fn apply_edits(
                                             obj.apply_matrix(PdfMatrix::new(a, b, c2, d, cx, y))
                                                 .map_err(err)?;
                                             obj.set_fill_color(st.color).map_err(err)?;
-                                            cx += measure_s(p.style, word) + space_w;
+                                            let wir =
+                                                obj.bounds().ok().map(|q| q.right().value);
+                                            cx = (cx + measure_s(p.style, word))
+                                                .max(wir.unwrap_or(0.0))
+                                                + space_w;
                                         }
+                                        x = cx - space_w;
+                                    } else {
+                                        x = (x + measure_s(p.style, &p.text))
+                                            .max(ink_right.unwrap_or(0.0));
                                     }
-                                    x += measure_s(p.style, &p.text);
                                 }
                             }
                         }

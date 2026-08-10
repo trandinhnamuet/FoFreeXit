@@ -455,3 +455,70 @@ Bật chế độ Sửa nội dung (overlay 2 đối tượng); double-click dò
 - Đặt ảnh theo đúng tỉ lệ gốc (hiện mặc định 150×112pt, resize bằng kéo handle); preview ảnh trước khi đặt.
 - Sửa nhiều trang trong 1 phiên lưu (hiện lưu theo trang đang sửa); spell-check; sửa bảng; link text blocks.
 - Mã hoá UI (nợ từ Phase 3).
+
+
+---
+
+# Vòng 6 (10/08/2026): sửa NHIỀU TRANG + nút Huỷ + fix đè chữ khi lưu dòng lẫn style
+
+## 1. Fix đè chữ khi lưu dòng lẫn style (engine, `edit.rs`)
+
+**Triệu chứng:** sửa dòng có nhiều style (thường + mono-bold, ví dụ "Các thuộc
+tính `HttpOnly`, `Secure` và `SameSite`...") → sau commit các mảnh chữ đè lên
+nhau ("auth-storagetừ", dấu "," nằm đè trong chữ trước).
+
+**Nguyên nhân:** con trỏ x đặt mảnh KẾ TIẾP tiến theo bề rộng ĐO bằng hmtx
+(ttf-parser). Với subset font mà ttf-parser không parse được (`measure=None`),
+fallback 0.5em/ký tự ƯỚC LƯỢNG THIẾU (đo "HttpOnly" = 36pt trong khi mực thật
+42.6pt) → mảnh sau bắt đầu bên trong mực mảnh trước.
+
+**Fix:** sau khi vẽ từng mảnh rich, đọc `obj.bounds()` từ PDFium (mép mực
+thật) và tiến con trỏ bằng `max(x + measured, ink_right)` — cả đường vẽ cả
+mảnh lẫn đường fallback bẻ theo từng từ. Ước lượng thiếu bao nhiêu cũng không
+đè được nữa; ước lượng thừa giữ nguyên hành vi cũ.
+
+## 2. Chế độ sửa NHIỀU TRANG (UI)
+
+**Yêu cầu user:** "khi edit text ở trang nào thì các trang còn lại biến mất,
+chỉ xem được trang đó" → giờ chế độ sửa hiển thị CỘT MỌI TRANG như viewer.
+
+Kiến trúc (`#editPagesCol` trong `#editStage`):
+- Mỗi trang 1 `.edit-slot` kích thước theo zoom. Trang ACTIVE chứa
+  `#editPageWrap` (img + overlay sửa được — giữ nguyên toàn bộ code 1-trang
+  cũ, chỉ DI CHUYỂN wrap giữa các slot). Trang khác render ảnh read-only
+  LƯỜI bằng IntersectionObserver (rootMargin 300px).
+- Stamp `editBase + "|" + zoom` trên mỗi slot: op/undo/redo đổi editBase,
+  zoom đổi mức — stamp lệch là render lại khi trang còn trong khung nhìn.
+  `refreshRoSlots()` gọi ở cuối `loadEditPage` + sau render nét debounce.
+- **Đúp vào trang read-only** → trang đó thành active + mở ô sửa NGAY tại
+  điểm đúp (tái dùng cơ chế `editPendingPoint` của luồng đúp-từ-viewer).
+- **Cuộn** (debounce 200ms): ô số trang bám trang giữa khung nhìn; nếu không
+  có ô sửa đang mở, trang đó tự thành active (toolbar/phím tắt luôn tác động
+  đúng trang đang xem). Không auto-switch khi ô sửa đang mở — không mất chữ.
+- Zoom: mọi slot co giãn CSS ngay, render nét sau 220ms (trang active) +
+  refresh trang read-only đang thấy. Nav ▲▼/ô số trang → `switchEditPage`
+  cuộn `scrollIntoView` (start khi nav, nearest khi đúp — không giật).
+
+## 3. Nút "↩ Huỷ thay đổi" (UI)
+
+Cạnh nút Lưu; bật khi `editBase !== path` (đồng bộ cùng chỗ với edSave trong
+`loadEditPage`). `discardEdits()`: đóng ô sửa đang mở → xoá file tạm
+(`cleanupEditTemps` — editBase cũ nằm trong `editTemps`) → `editBase = path`,
+xoá sạch undo/redo → `loadEditPage()` (stamp đổi nên mọi trang read-only tự
+render lại về nội dung gốc).
+
+## 4. Kiểm chứng E2E (CDP trên app thật, file dịch 3 trang)
+
+Tiêm bản vá vào build 29 đang chạy (không cần rebuild) rồi đo:
+- Cột 3 slot, wrap nằm đúng slot active, trang 1+2 read-only render khi cuộn.
+- Cuộn tới trang 2 → `pageInput=2`, active tự đổi; slot cũ trả về read-only.
+- Đúp lên trang 3 (read-only) → active=2, ô sửa mở đúng dòng "ĐÁNH GIÁ AN
+  TOÀN THÔNG TIN" tại điểm đúp.
+- Huỷ thay đổi: `editBase === path`, edSave/edDiscard disabled, undo/redo
+  rỗng, text sửa thử ("KIỂM") biến mất khỏi object list.
+- Zoom 130%: cả 3 slot 1032px, label cập nhật; ▲ về trang 2 cuộn đúng.
+Ảnh: `mp-1-top` → `mp-6-ro-dblclick` (scratchpad phiên làm việc).
+
+Fix đè chữ (mục 1) là code Rust — kiểm chứng lại trên build CI mới bằng đúng
+kịch bản đã tái hiện bug (sửa span thường của dòng lẫn style rồi so bounds
+các mảnh sau commit).

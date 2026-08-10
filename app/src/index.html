@@ -102,6 +102,7 @@
       <button id="edColorBtn" class="atool" title="Màu chữ" disabled><span class="sw" id="edSw"></span> Màu</button>
       <span class="spacer"></span>
       <span id="editHint" class="status"></span>
+      <button id="edDiscard" disabled title="Bỏ mọi thay đổi chưa lưu, quay về nội dung gốc">↩ Huỷ thay đổi</button>
       <button id="edSave" disabled>💾 Lưu thay đổi nội dung</button>
     </div>
 
@@ -172,9 +173,13 @@
       <main id="organizeGrid" class="organize-grid hidden"></main>
 
       <main id="editStage" class="edit-stage hidden">
-        <div id="editPageWrap" class="edit-page-wrap">
-          <img id="editImg" class="edit-img" alt="trang đang sửa"/>
-          <div id="editOverlay" class="edit-overlay"></div>
+        <!-- Cột MỌI trang: trang active chứa #editPageWrap (img+overlay sửa
+             được), các trang khác render read-only — đúp vào là sửa trang đó. -->
+        <div id="editPagesCol" class="edit-pages-col">
+          <div id="editPageWrap" class="edit-page-wrap">
+            <img id="editImg" class="edit-img" alt="trang đang sửa"/>
+            <div id="editOverlay" class="edit-overlay"></div>
+          </div>
         </div>
       </main>
     </div>

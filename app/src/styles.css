@@ -364,6 +364,8 @@ body.tool-active .annotlayer * { pointer-events: none; }
 .editbar button.armed { background: var(--accent); }
 #edSave { background: #2e7d32; }
 #edSave:disabled { background: #555; }
+#edDiscard { background: #8d3030; }
+#edDiscard:disabled { background: #555; }
 
 .edit-stage {
   flex: 1;
@@ -388,6 +390,15 @@ body.tool-active .annotlayer * { pointer-events: none; }
 /* margin auto (thay vì chỉ justify-content) để khi zoom to hơn khung, mép
    trái không bị cắt mất — bug kinh điển của flex center + overflow. */
 .edit-page-wrap { position: relative; box-shadow: 0 2px 12px rgba(0,0,0,.5); background: #fff; margin: auto; }
+/* Cột MỌI trang trong chế độ sửa: trang active chứa .edit-page-wrap, các
+   trang khác là ảnh read-only render lười — đúp vào là sửa trang đó. */
+.edit-pages-col { display: flex; flex-direction: column; gap: 18px; margin: auto; }
+.edit-slot { position: relative; flex: none; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.5); }
+.edit-slot > img.edit-ro { display: block; width: 100%; height: 100%; }
+/* Slot chứa wrap active: bỏ trang trí trùng lặp, cao theo ảnh thật (render
+   có thể lệch 1px so với chiều cao ước tính của slot). */
+.edit-slot .edit-page-wrap { margin: 0; box-shadow: none; }
+.edit-slot:has(.edit-page-wrap) { height: auto !important; }
 .edit-img { display: block; }
 .edit-overlay { position: absolute; inset: 0; }
 .edit-overlay.armed { cursor: crosshair; }

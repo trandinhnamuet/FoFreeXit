@@ -420,11 +420,20 @@ function goToPage(idx) {
   if (slot) slot.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// Chuyển trang trong chế độ Sửa nội dung (undo/redo dùng chung editBase nên
-// vẫn giữ nguyên các thay đổi đã áp ở trang khác).
-function switchEditPage(idx) {
+// Chuyển trang ACTIVE trong chế độ Sửa nội dung (undo/redo dùng chung
+// editBase nên vẫn giữ nguyên các thay đổi đã áp ở trang khác).
+// `scrollBlock`: "start" (nav nút/outline), "nearest" (đúp tại chỗ — không
+// giật màn hình), null (người dùng đang tự cuộn — không cuộn hộ).
+function switchEditPage(idx, scrollBlock) {
   const i = Math.max(0, Math.min(state.pages.length - 1, idx));
-  if (i === state.editPage) return;
+  if (i === state.editPage) {
+    // Vẫn cuộn về trang active (gõ lại số trang sau khi đã cuộn đi xa).
+    const slot = (state.editSlots || [])[i];
+    if (slot && scrollBlock !== null) {
+      slot.scrollIntoView({ block: scrollBlock || "start", behavior: "smooth" });
+    }
+    return;
+  }
   const ce = $("editOverlay").querySelector(".edit-inline");
   if (ce) ce.remove(); // đóng ô sửa đang mở, không lưu
   state.editPage = i;
@@ -432,6 +441,113 @@ function switchEditPage(idx) {
   selectEditObject(-1);
   $("pageInput").value = i + 1;
   loadEditPage();
+  const slot = (state.editSlots || [])[i];
+  if (slot && scrollBlock !== null) {
+    slot.scrollIntoView({ block: scrollBlock || "start", behavior: "smooth" });
+  }
+}
+
+// ---------- Chế độ sửa NHIỀU TRANG ----------
+// Cột đủ mọi trang như viewer: trang active = #editPageWrap (img + overlay
+// sửa được), trang khác render ảnh read-only LƯỜI khi cuộn tới. Đúp vào
+// trang read-only → trang đó thành active + mở ô sửa ngay tại điểm đúp.
+
+let editWrapEl = null; // #editPageWrap — giữ tham chiếu sống khi dựng lại cột
+let editRoObserver = null;
+const editVisibleRo = new Set(); // index các slot read-only đang trong khung nhìn
+
+// Ảnh read-only hợp lệ khi CẢ editBase lẫn zoom chưa đổi từ lúc render.
+function editRoStamp() {
+  return state.editBase + "|" + state.editZoom.toFixed(3);
+}
+
+function sizeEditSlot(slot, p) {
+  const w = editStageWidth(p);
+  slot.style.width = w + "px";
+  slot.style.height = Math.round((w * p.heightPt) / p.widthPt) + "px";
+}
+
+function buildEditColumn() {
+  const col = $("editPagesCol");
+  editWrapEl = editWrapEl || $("editPageWrap");
+  if (editWrapEl.parentElement) editWrapEl.remove(); // tách ra trước khi xoá cột
+  col.innerHTML = "";
+  editVisibleRo.clear();
+  if (editRoObserver) editRoObserver.disconnect();
+  state.editSlots = [];
+  for (const p of state.pages) {
+    const slot = document.createElement("div");
+    slot.className = "edit-slot";
+    slot.dataset.page = String(p.index);
+    sizeEditSlot(slot, p);
+    col.appendChild(slot);
+    state.editSlots.push(slot);
+  }
+  placeEditWrap();
+  editRoObserver = new IntersectionObserver(
+    (entries) => {
+      for (const en of entries) {
+        const idx = Number(en.target.dataset.page);
+        if (en.isIntersecting) {
+          editVisibleRo.add(idx);
+          fillRoSlot(idx);
+        } else {
+          editVisibleRo.delete(idx);
+        }
+      }
+    },
+    { root: $("editStage"), rootMargin: "300px" }
+  );
+  for (const slot of state.editSlots) editRoObserver.observe(slot);
+}
+
+// Đặt wrap sửa được vào slot của trang active; slot cũ quay về ảnh read-only.
+function placeEditWrap() {
+  const slot = (state.editSlots || [])[state.editPage];
+  if (!slot || slot.contains(editWrapEl)) return;
+  const old = editWrapEl.parentElement;
+  const ro = slot.querySelector("img.edit-ro");
+  if (ro) ro.remove();
+  slot.dataset.rendered = ""; // slot này giờ hiển thị bằng wrap
+  slot.appendChild(editWrapEl);
+  if (old && old.classList && old.classList.contains("edit-slot")) {
+    old.dataset.rendered = "";
+    fillRoSlot(Number(old.dataset.page));
+  }
+}
+
+// Render ảnh read-only cho 1 trang không-active nếu đang thấy và ảnh cũ đã
+// stale; stamp chống render trùng khi observer + refresh gọi chồng nhau.
+async function fillRoSlot(idx) {
+  if (idx === state.editPage) return;
+  const slot = (state.editSlots || [])[idx];
+  if (!slot || !editVisibleRo.has(idx)) return;
+  const stamp = editRoStamp();
+  if (slot.dataset.rendered === stamp) return;
+  slot.dataset.rendered = stamp;
+  try {
+    const url = await invoke("render_page", {
+      path: state.editBase, page: idx, width: editStageWidth(state.pages[idx]),
+    });
+    // Trong lúc render: trang này thành active / có lượt mới hơn → bỏ kết quả.
+    if (idx === state.editPage || slot.dataset.rendered !== stamp) return;
+    let img = slot.querySelector("img.edit-ro");
+    if (!img) {
+      img = document.createElement("img");
+      img.className = "edit-ro";
+      img.alt = "trang " + (idx + 1);
+      slot.appendChild(img);
+    }
+    img.src = url;
+  } catch (_) {
+    slot.dataset.rendered = ""; // để lần cuộn/refresh sau thử lại
+  }
+}
+
+// Sau mỗi op/undo/redo/zoom: các trang read-only đang thấy render lại nếu cần
+// (stamp đổi theo editBase + zoom nên gọi thoải mái, không render thừa).
+function refreshRoSlots() {
+  for (const idx of editVisibleRo) fillRoSlot(idx);
 }
 
 // ---------- Zoom ----------
@@ -450,6 +566,10 @@ function setEditZoom(z) {
   const w = editStageWidth(p);
   state.editScale = w / p.widthPt;
   $("editImg").style.width = w + "px";
+  // Mọi slot trong cột co giãn theo ngay (ảnh cũ scale CSS, render nét sau).
+  if (state.editSlots) {
+    for (const pg of state.pages) sizeEditSlot(state.editSlots[pg.index], pg);
+  }
   buildEditOverlay();
   updateZoomLabel();
   scheduleEditSharpRender();
@@ -468,6 +588,7 @@ function scheduleEditSharpRender() {
       if (seq !== editLoadSeq) return; // trang/file đã đổi trong lúc render
       $("editImg").src = url;
     } catch (_) { /* giữ ảnh cũ (đã co giãn CSS) */ }
+    refreshRoSlots(); // các trang read-only đang thấy cũng render nét ở zoom mới
   }, 220);
 }
 
@@ -2131,6 +2252,10 @@ function enterEditMode(pageIndex) {
   $("sidebar").classList.add("hidden");
   $("editModeBtn").classList.add("active");
   setTool(null);
+  buildEditColumn();
+  // Đứng ngay tại trang vào sửa (không smooth — vừa mở chế độ, chưa có ngữ cảnh cuộn).
+  const slot0 = state.editSlots[state.editPage];
+  if (slot0) slot0.scrollIntoView({ block: "start", behavior: "instant" });
   loadEditPage();
 }
 // Dọn mọi file làm việc tạm của phiên sửa (backend chỉ xoá đúng ff_edit_*.pdf
@@ -2201,6 +2326,7 @@ async function loadEditPage() {
       invoke("edit_list_objects", { path: state.editBase, page: state.editPage, password: null }),
     ]);
     if (mySeq !== editLoadSeq) return; // đã có lượt nạp mới hơn — bỏ lượt này
+    placeEditWrap(); // wrap sửa được nằm đúng slot của trang active
     // Object nằm TRONG Form XObject (file Canva/Illustrator): sửa/xoá text
     // được xử lý bằng PHẪU THUẬT stream ở engine (trong suốt với UI) — không
     // cần mở gói trang.
@@ -2216,7 +2342,9 @@ async function loadEditPage() {
     $("editHint").textContent = "Lỗi nạp trang sửa: " + e;
   }
   $("edSave").disabled = state.editBase === state.path; // chưa có thay đổi nào
+  $("edDiscard").disabled = state.editBase === state.path;
   updateEditUndoButtons();
+  refreshRoSlots(); // editBase có thể vừa đổi (op/undo/redo) → trang khác render lại
 
   // Đúp chuột từ viewer thường (kiểu Foxit): vào thẳng ô sửa tại điểm đã đúp.
   const pending = state.editPendingPoint;
@@ -3273,6 +3401,21 @@ async function replaceSelectedImage() {
   stageEditOp({ op: "replaceImage", index: o.index, imagePath: path });
 }
 
+// Huỷ MỌI thay đổi chưa lưu: quay về file gốc, xoá sạch undo/redo + file tạm.
+function discardEdits() {
+  if (state.editBase === state.path) return; // chưa có gì để huỷ
+  const ce = $("editOverlay").querySelector(".edit-inline");
+  if (ce) ce.remove();
+  cleanupEditTemps(); // editBase cũ nằm trong editTemps — xoá luôn
+  state.editBase = state.path;
+  state.editUndo = [];
+  state.editRedo = [];
+  state.editSel = null;
+  selectEditObject(-1);
+  loadEditPage();
+  $("status").textContent = "Đã huỷ mọi thay đổi nội dung — trở về file gốc.";
+}
+
 async function saveEdits() {
   const out = await invoke("pick_save_pdf");
   if (!out) return;
@@ -4025,6 +4168,7 @@ $("edColorBtn").addEventListener("click", () => {
   });
 });
 $("edSave").addEventListener("click", saveEdits);
+$("edDiscard").addEventListener("click", discardEdits);
 $("editOverlay").addEventListener("click", onEditStageClick);
 // Đúp vào KHE giữa các khung (PDF cắt run rời rạc) vẫn mở ô sửa tại chữ gần đó.
 $("editOverlay").addEventListener("dblclick", (e) => {
@@ -4037,6 +4181,45 @@ $("editOverlay").addEventListener("dblclick", (e) => {
   const y = p.heightPt - (e.clientY - r.top) / state.editScale;
   const hit = pickTextAt(state.editObjects, x, y);
   if (hit) startTextEdit(hit, e);
+});
+// Đúp vào trang READ-ONLY trong cột: trang đó thành active + mở ô sửa ngay
+// tại điểm đúp (qua editPendingPoint — cùng cơ chế với đúp từ viewer thường).
+$("editPagesCol").addEventListener("dblclick", (e) => {
+  if (state.editArm) return;
+  const slot = e.target.closest && e.target.closest(".edit-slot");
+  if (!slot || slot.contains(editWrapEl)) return; // trang active: overlay lo
+  const idx = Number(slot.dataset.page);
+  const p = state.pages[idx];
+  const r = slot.getBoundingClientRect();
+  const sc = r.width / p.widthPt;
+  state.editPendingPoint = {
+    x: (e.clientX - r.left) / sc,
+    y: p.heightPt - (e.clientY - r.top) / sc,
+  };
+  switchEditPage(idx, "nearest");
+});
+// Cuộn trong chế độ sửa: ô chỉ số trang bám theo trang đang nhìn; khi không
+// có ô sửa mở, trang giữa khung nhìn tự thành trang active (nav ▲▼, toolbar
+// và phím tắt luôn tác động đúng trang người dùng đang xem).
+let editScrollTimer = null;
+$("editStage").addEventListener("scroll", () => {
+  if (!state.editMode || !(state.editSlots || []).length) return;
+  clearTimeout(editScrollTimer);
+  editScrollTimer = setTimeout(() => {
+    const st = $("editStage").getBoundingClientRect();
+    const mid = st.top + ($("editStage").clientHeight * 0.45);
+    let best = state.editPage;
+    let bestD = Infinity;
+    state.editSlots.forEach((slot, i) => {
+      const r = slot.getBoundingClientRect();
+      const d = Math.abs((r.top + r.bottom) / 2 - mid);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    $("pageInput").value = best + 1;
+    if (best !== state.editPage && !$("editOverlay").querySelector(".edit-inline")) {
+      switchEditPage(best, null); // người dùng đang tự cuộn — không cuộn hộ
+    }
+  }, 200);
 });
 
 // Phím tắt chuẩn của trình xem PDF (Foxit/Adobe): điều hướng trang, zoom,
