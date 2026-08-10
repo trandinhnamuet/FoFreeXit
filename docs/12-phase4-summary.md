@@ -581,3 +581,28 @@ lệch offset — kiểu hỏng do copy/tải mangle bytes; Producer (Canva), KH
 phải app ghi). Bản gốc lành còn ở `Downloads\CV_NGUYENVANTAI.pdf` (157KB).
 File hỏng: PDFium render được nhưng object list = 0 → không sửa được; qpdf
 cứu được hiển thị nhưng mất cấu trúc text.
+
+## Vòng 7b: ĐÓNG GÓI bộ font Noto — không thoả hiệp font hệ thống ở tầng nào
+
+User yêu cầu: khách hàng không có font chuẩn sẵn — phần mềm phải tự chuẩn bị
+font, không thay bằng font "gần giống". Sau font-nhúng (7a) vẫn còn 3 khe hở
+rơi về font hệ thống: font không nhúng, CFF không vá được, và KÝ TỰ MỚI GÕ
+không có trong subset (subset chỉ chứa glyph đã dùng).
+
+- `scripts/fetch-fonts.ps1`: 10 file Noto hinted static (Sans/Serif/Mono ×
+  Regular/Bold/Italic/BoldItalic, phủ tiếng Việt, ~6.7MB) + OFL license →
+  `fonts/` (gitignore); CI cache + đóng vào zip cạnh exe.
+- Tauri `main()` đặt `FOFREEXIT_FONTS_PATH` (fonts/ cạnh exe; dev = gốc
+  workspace); command `app_font_data(kind)` (whitelist 10 kind) trả base64.
+- UI: FontFace `ff-app-{sans|serif|mono}` đăng ký weight/style thật (không
+  synthesize chồng), đứng GIỮA stack: font nhúng PDF → Noto đóng gói → stack
+  hệ thống (lưới lý thuyết cuối). Phân loại theo cssFontStack; nạp trước
+  cùng font nhúng khi vào trang sửa.
+- Engine `find_font_bytes` (đường ghi file cần font thay thế/coverage): ưu
+  tiên tuyệt đối fonts/ đóng gói qua env — kết quả LƯU giống nhau mọi máy.
+
+Kiểm chứng build 36 (instance riêng port 9223, không đụng phiên user):
+- Ô sửa, gõ `Thử ẶỄỠỮ ngoài subset`: 41 glyph đều isCustomFont (Noto Sans
+  nhúng/đóng gói + Noto Sans Mono), **0 glyph font hệ thống**.
+- Commit chuỗi đó: run mới trong PDF dùng `NotoSans-Regular` NHÚNG
+  (embedded=true) từ bộ đóng gói — không còn Arial Windows.
