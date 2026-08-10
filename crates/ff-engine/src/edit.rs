@@ -957,17 +957,37 @@ pub fn apply_edits(
                         // Nới DỌC rộng hơn ngang: dấu tiếng Việt (ngã của Ễ…)
                         // nhiều file (Canva) vẽ bằng op riêng nằm TRÊN cap —
                         // tâm ngoài bbox +2pt → sót lại dấu lơ lửng sau sửa.
-                        // 8pt vẫn nhỏ hơn nhịp dòng (≥12pt) nên không nuốt
-                        // nhầm dòng bên cạnh.
+                        // NHƯNG vùng nở 8pt chỉ được nuốt op NHỎ (mảnh dấu
+                        // thấp hơn hẳn chữ): với giãn dòng sát (~1.25×) tâm
+                        // run của DÒNG KỀ cũng lọt vào bbox+8pt — nuốt nhầm
+                        // cả dòng trên làm khối vẽ lại trồi lên 1 dòng, đè
+                        // chữ (bug "lưu xong đè text khác"). Op cao cỡ chữ
+                        // thường phải có tâm trong bbox LÕI mới bị nuốt.
                         let pad_x = 2.0;
                         let pad_y = 8.0;
+                        let h_med = {
+                            let mut hs: Vec<f32> = idxs
+                                .iter()
+                                .filter_map(|&i| text_rect(i))
+                                .map(|r| r.top - r.bottom)
+                                .filter(|h| *h > 0.1)
+                                .collect();
+                            hs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                            if hs.is_empty() { 0.0 } else { hs[hs.len() / 2] }
+                        };
                         for i in 0..entries.len() as u16 {
                             if idxs.contains(&i) {
                                 continue;
                             }
                             let Some(r) = text_rect(i) else { continue };
                             let (cx, cy) = ((r.left + r.right) / 2.0, (r.bottom + r.top) / 2.0);
-                            if cx >= bb.left - pad_x
+                            let in_core = cx >= bb.left
+                                && cx <= bb.right
+                                && cy >= bb.bottom
+                                && cy <= bb.top;
+                            let small = (r.top - r.bottom) < (h_med * 0.6).max(2.0);
+                            if (in_core || small)
+                                && cx >= bb.left - pad_x
                                 && cx <= bb.right + pad_x
                                 && cy >= bb.bottom - pad_y
                                 && cy <= bb.top + pad_y

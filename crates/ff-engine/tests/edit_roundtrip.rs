@@ -789,6 +789,84 @@ fn reflow_expands_indices_to_cover_block() {
     assert!(!norm.contains("Mảnh một"), "run đã đưa phải bị thay: {norm:?}");
 }
 
+/// Hồi quy bug "lưu xong đè text khác": vùng nở dọc 8pt (bắt dấu tiếng Việt
+/// vẽ rời) KHÔNG được nuốt run cao cỡ chữ của DÒNG KỀ TRÊN khi giãn dòng sát
+/// (~1.0–1.25×) — nuốt nhầm làm dòng trên bị xoá, first_baseline trồi lên và
+/// khối mới vẽ đè lên vị trí dòng trên.
+#[test]
+fn reflow_tight_leading_does_not_swallow_line_above() {
+    let pdf = pdfium();
+    let fx = tmp("ff_swallow_fx.pdf");
+    let out = tmp("ff_swallow_out.pdf");
+    let mk = |y: f32, s: &str| EditOp::AddText {
+        x: 60.0,
+        y,
+        text: s.into(),
+        font_size: 14.0,
+        color: [0, 0, 0, 255],
+        font_family: None,
+        bold: false,
+        italic: false,
+    };
+    // Giãn dòng 13pt < 1.0× cỡ chữ (sát hơn cả file Word thật) — tâm mực của
+    // dòng trên lọt hẳn vào bbox khối + 8pt.
+    ff_engine::apply_edits(
+        &pdf,
+        &sample(),
+        0,
+        &[
+            mk(427.0, "Dòng trên phải sống sót"),
+            mk(414.0, "Dòng sửa thứ nhất trong khối"),
+            mk(401.0, "Dòng sửa thứ hai trong khối"),
+        ],
+        &fx,
+        None,
+    )
+    .expect("fixture 3 dòng sát nhau");
+    let b = find_text_index(&pdf, &fx, "Dòng sửa thứ nhất");
+    let c = find_text_index(&pdf, &fx, "Dòng sửa thứ hai");
+
+    ff_engine::apply_edits(
+        &pdf,
+        &fx,
+        0,
+        &[EditOp::ReflowText {
+            indices: vec![b, c],
+            text: "Nội dung mới dòng một\nnội dung mới dòng hai".into(),
+            rich: None,
+        }],
+        &out,
+        None,
+    )
+    .expect("reflow khối 2 dòng dưới");
+
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    let norm = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        norm.contains("Dòng trên phải sống sót"),
+        "dòng kề trên bị nuốt nhầm vào khối reflow: {norm:?}"
+    );
+    assert!(norm.contains("Nội dung mới dòng một"), "text mới thiếu: {norm:?}");
+
+    // Dòng mới thứ nhất phải nằm ở vị trí dòng B cũ (~414), KHÔNG trồi lên
+    // vị trí dòng trên (~428): mực của nó không được chạm mực dòng trên.
+    let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list");
+    let above = objs
+        .iter()
+        .find(|o| o.text.as_deref().map_or(false, |t| t.contains("Dòng trên phải")))
+        .expect("dòng trên còn đó");
+    let new1 = objs
+        .iter()
+        .find(|o| o.text.as_deref().map_or(false, |t| t.contains("Nội dung mới dòng một")))
+        .expect("dòng mới 1");
+    assert!(
+        new1.rect.top <= above.rect.bottom + 1.5,
+        "dòng mới trồi lên đè dòng trên: new1.top={} vs above.bottom={}",
+        new1.rect.top,
+        above.rect.bottom
+    );
+}
+
 /// Khối gốc CĂN GIỮA (dòng ngắn thụt vào, tâm trùng nhau) → các dòng mới cũng
 /// đặt căn giữa theo tâm khối (không dồn hết về lề trái).
 #[test]

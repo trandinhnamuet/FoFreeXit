@@ -528,7 +528,14 @@ các mảnh sau commit).
   chế độ sửa ảnh chưa load, CSS `:has` cho height auto làm slot cao ≈ 0 →
   cuộn ban đầu lệch cả cột, listener cuộn tự chuyển nhầm trang active.
 - Kiểm đè chữ trên build thật: dòng lẫn style sau commit tăng dần tuyệt đối
-  (worst overlap 0pt) — fix mép mực OK. Lưu ý: file test của user
-  (Ban_dich_tieng_Viet_...) đã NHIỄM sẵn mảnh "Path=/" lạc chỗ từ lần lưu
-  bằng build lỗi cũ — mảnh đó được reflow bảo tồn như marker, KHÔNG phải bug
-  mới; đo kiểm phải loại các mảnh giữ-nguyên-vị-trí.
+  (worst overlap 0pt) — fix mép mực NGANG đạt.
+- ĐÍNH CHÍNH + bug thứ 2 (đè DỌC): ban đầu tưởng file test của user "nhiễm"
+  mảnh `Path=/` lạc chỗ — SAI. File gốc sạch: `Path=/` là ĐẦU BULLET hợp lệ
+  của dòng "Path=/ khiến refresh token…" nằm NGAY TRÊN khối sửa. Thủ phạm là
+  vòng nở dọc `pad_y = 8` (sinh ra để bắt dấu tiếng Việt vẽ rời): với giãn
+  dòng sát (~13–14pt) tâm mực run của DÒNG KỀ TRÊN lọt vào bbox+8pt → cả câu
+  bị nuốt (xoá), baseline của nó thành `first_baseline` → khối vẽ lại trồi
+  lên 1 dòng đè chữ, còn sót mảnh mono `Path=/` (tâm cao hơn ngưỡng chút).
+  Fix: vùng nở 8pt chỉ nuốt op NHỎ (cao < 0.6 × median cao run trong khối —
+  mảnh dấu); op cao cỡ chữ phải có tâm trong bbox LÕI. Test hồi quy:
+  `reflow_tight_leading_does_not_swallow_line_above` (giãn dòng 13pt).
