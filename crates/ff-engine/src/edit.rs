@@ -488,6 +488,43 @@ fn text_object_style(t: &PdfPageTextObject) -> (String, bool, bool) {
 }
 
 /// Liệt kê các page object của 1 trang để UI vẽ overlay chỉnh sửa.
+/// Bytes font NHÚNG của 1 text object (sau giải nén). UI nạp vào WebView qua
+/// FontFace để ô sửa hiển thị ĐÚNG font tài liệu: máy người dùng thường thiếu
+/// font (NotoSansMono-Bold rơi về Consolas nét mảnh → trông như "mất in
+/// đậm"). `object_index` = index PHẲNG như list_objects (vào được cả run
+/// trong Form XObject).
+pub fn font_data(
+    pdfium: &Pdfium,
+    input: &Path,
+    page_index: u16,
+    object_index: u16,
+    password: Option<&str>,
+) -> Result<Vec<u8>, EngineError> {
+    let document = pdfium
+        .load_pdf_from_file(input, password)
+        .map_err(|e| EngineError::Pdfium(e.to_string()))?;
+    let page = document
+        .pages()
+        .get(page_index)
+        .map_err(|e| EngineError::Pdfium(format!("không lấy được trang {page_index}: {e}")))?;
+    let entries = collect_flat(&page);
+    let entry = entries
+        .get(object_index as usize)
+        .ok_or_else(|| EngineError::Pdfium(format!("object {object_index} ngoài phạm vi")))?;
+    let obj = object_at_path(&page, &entry.path)?;
+    let t = obj
+        .as_text_object()
+        .ok_or_else(|| EngineError::Pdfium("object không phải text".into()))?;
+    let data = t
+        .font()
+        .data()
+        .map_err(|e| EngineError::Pdfium(format!("không đọc được font nhúng: {e}")))?;
+    if data.is_empty() {
+        return Err(EngineError::Pdfium("font không nhúng trong file".into()));
+    }
+    Ok(data.to_vec())
+}
+
 pub fn list_objects(
     pdfium: &Pdfium,
     input: &Path,

@@ -703,6 +703,16 @@ fn edit_list_objects(path: String, page: u16, password: Option<String>) -> Resul
         .collect())
 }
 
+/// Bytes font NHÚNG của 1 text run (base64) — UI đăng ký FontFace để ô sửa
+/// hiển thị đúng font tài liệu thay vì font hệ thống gần giống.
+#[tauri::command]
+fn edit_font_data(path: String, page: u16, index: u16, password: Option<String>) -> Result<String, String> {
+    let pdfium = pdfium()?;
+    let data = ff_engine::font_data(&pdfium, std::path::Path::new(&path), page, index, password.as_deref())
+        .map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&data))
+}
+
 /// 1 thao tác sửa nội dung (tagged theo field `op`). Field thừa cho mỗi loại để None/mặc định.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1424,6 +1434,7 @@ fn main() {
             preview_watermark,
             preview_header_footer,
             edit_list_objects,
+            edit_font_data,
             edit_apply,
             edit_apply_to_temp,
             edit_preview,

@@ -2257,6 +2257,7 @@ function enterEditMode(pageIndex) {
   $("sidebar").classList.add("hidden");
   $("editModeBtn").classList.add("active");
   setTool(null);
+  resetDocFonts(); // font nhúng nạp theo phiên sửa (subset mỗi file khác nhau)
   buildEditColumn();
   // Đứng ngay tại trang vào sửa (không smooth — vừa mở chế độ, chưa có ngữ cảnh cuộn).
   const slot0 = state.editSlots[state.editPage];
@@ -2339,6 +2340,11 @@ async function loadEditPage() {
     img.src = url;
     img.style.width = stageW + "px";
     state.editObjects = objs;
+    // Nạp trước font nhúng của mọi run text (dedup theo tên font) — đến lúc
+    // đúp mở ô sửa thì face đã sẵn, đo đạc đúng ngay từ đầu.
+    for (const o of objs) {
+      if (o.kind === "text") ensureDocFont(o, state.editBase, state.editPage);
+    }
     buildEditOverlay();
     $("pageInput").value = state.editPage + 1;
     updateZoomLabel();
@@ -2583,6 +2589,59 @@ const FONT_CSS_ALIASES = {
   couriernewps: "Courier New",
   segoeui: "Segoe UI",
 };
+// ---------- Font NHÚNG của tài liệu cho ô sửa ----------
+// Máy người dùng thường KHÔNG cài font của PDF: WebView thay bằng font hệ
+// thống gần giống (NotoSansMono-Bold → Consolas-Bold nét mảnh — user thấy
+// như "mất in đậm"; NotoSans → Arial). Nạp bytes font nhúng từ engine vào
+// WebView (FontFace) rồi đặt family đó LÊN ĐẦU stack của ô sửa → chữ trong ô
+// đúng font thật của tài liệu. Glyph thiếu trong subset tự rơi xuống stack cũ.
+let docFontSeq = 0; // đổi phiên sửa = bỏ face cũ (subset khác coverage)
+const docFonts = new Map(); // fontName -> family đã nạp | null (lỗi) | Promise
+const docFontFaces = [];
+
+function resetDocFonts() {
+  docFontSeq++;
+  for (const f of docFontFaces) { try { document.fonts.delete(f); } catch (_) {} }
+  docFontFaces.length = 0;
+  docFonts.clear();
+}
+
+// Nạp lười theo TÊN font (NotoSansMono-Bold...): mỗi tên chỉ đọc bytes 1 lần,
+// dùng 1 run đại diện để lấy dữ liệu. Lỗi (font không nhúng, không parse
+// được) → đánh dấu null, ô sửa dùng stack hệ thống như cũ.
+function ensureDocFont(run, path, page) {
+  const name = run && run.fontName;
+  if (!name || docFonts.has(name)) return;
+  const fam = "ff-doc-" + docFontSeq + "-" + name.replace(/[^A-Za-z0-9_-]/g, "");
+  const p = (async () => {
+    try {
+      const b64 = await invoke("edit_font_data", { path, page, index: run.index, password: null });
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const face = new FontFace(fam, bytes.buffer, {
+        weight: run.fontBold ? "700" : "400",
+        style: run.fontItalic ? "italic" : "normal",
+      });
+      await face.load();
+      document.fonts.add(face);
+      docFontFaces.push(face);
+      docFonts.set(name, fam);
+      return fam;
+    } catch (_) {
+      docFonts.set(name, null);
+      return null;
+    }
+  })();
+  docFonts.set(name, p);
+}
+
+// Stack font cho 1 run trong ô sửa: font nhúng (nếu đã nạp xong) đứng đầu,
+// stack hệ thống theo sau làm lưới an toàn.
+function editFontStack(run, fallbackFamily) {
+  const base = cssFontStack(fallbackFamily);
+  const fam = run && run.fontName ? docFonts.get(run.fontName) : null;
+  return typeof fam === "string" && fam ? '"' + fam + '", ' + base : base;
+}
+
 function cssFontStack(family) {
   if (!family) return "sans-serif";
   const k = family.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -2932,7 +2991,7 @@ function startBlockTextEdit(o, lines, ev) {
     const divFs = Math.max(6, (l.fs || 12) * s);
     div.style.fontSize = divFs + "px";
     div.style.lineHeight = perLineAdvances[i] + "px";
-    div.style.fontFamily = cssFontStack(rep.fontFamily || o.fontFamily);
+    div.style.fontFamily = editFontStack(rep, rep.fontFamily || o.fontFamily);
     div.style.fontWeight = (rep.fontBold != null ? rep.fontBold : o.fontBold) ? "bold" : "normal";
     div.style.fontStyle = (rep.fontItalic != null ? rep.fontItalic : o.fontItalic) ? "italic" : "normal";
     if (rep.color || o.color) div.style.color = rgbCss(rep.color || o.color);
@@ -2946,7 +3005,7 @@ function startBlockTextEdit(o, lines, ev) {
         const span = document.createElement("span");
         span.textContent = g.text;
         span.dataset.styleRun = String(g.rep.index);
-        span.style.fontFamily = cssFontStack(g.rep.fontFamily || o.fontFamily);
+        span.style.fontFamily = editFontStack(g.rep, g.rep.fontFamily || o.fontFamily);
         span.style.fontWeight = g.rep.fontBold ? "bold" : "normal";
         span.style.fontStyle = g.rep.fontItalic ? "italic" : "normal";
         span.style.fontSize = Math.max(6, Math.abs(g.rep.fontSize || l.fs || 12) * s) + "px";
