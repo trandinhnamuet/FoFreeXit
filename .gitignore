@@ -27,3 +27,6 @@ Cargo.lock.bak
 # (corpus/ đã track sẵn nên không ảnh hưởng).
 /pdf-file-to-test/
 /*.pdf
+
+# Bo font Noto dong goi (tai bang scripts/fetch-fonts.ps1)
+/fonts/

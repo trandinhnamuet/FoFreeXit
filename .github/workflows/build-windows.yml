@@ -41,6 +41,18 @@ jobs:
         shell: pwsh
         run: powershell -ExecutionPolicy Bypass -File scripts/fetch-qpdf.ps1
 
+      # Bộ font Noto đóng gói theo app (phủ tiếng Việt) — hiển thị/ghi file
+      # giống nhau trên mọi máy khách, không phụ thuộc font hệ điều hành.
+      - name: Cache bundled fonts
+        uses: actions/cache@v4
+        with:
+          path: fonts
+          key: noto-fonts-${{ hashFiles('scripts/fetch-fonts.ps1') }}
+
+      - name: Fetch bundled fonts (Noto)
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/fetch-fonts.ps1
+
       # Test OCR cần tesseract thật (eng + vie). Chocolatey có sẵn trên runner.
       - name: Install Tesseract OCR (eng + vie)
         shell: pwsh
@@ -75,6 +87,8 @@ jobs:
           Copy-Item "qpdf/bin/*.exe" "$dist/"
           Copy-Item "qpdf/bin/*.dll" "$dist/"
           Copy-Item "scripts/portable-readme.txt" "$dist/DOC-doc-truoc-khi-chay.txt"
+          New-Item -ItemType Directory -Force -Path "$dist/fonts" | Out-Null
+          Copy-Item "fonts/*" "$dist/fonts/"
           Compress-Archive -Path "$dist/*" -DestinationPath "FoFreeXit-portable-win64.zip" -Force
 
       - name: Upload artifact

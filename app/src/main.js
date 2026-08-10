@@ -2340,10 +2340,12 @@ async function loadEditPage() {
     img.src = url;
     img.style.width = stageW + "px";
     state.editObjects = objs;
-    // Nạp trước font nhúng của mọi run text (dedup theo tên font) — đến lúc
-    // đúp mở ô sửa thì face đã sẵn, đo đạc đúng ngay từ đầu.
+    // Nạp trước font nhúng của mọi run text (dedup theo tên font) + font Noto
+    // đóng gói cùng phân loại — đến lúc đúp mở ô sửa mọi face đã sẵn.
     for (const o of objs) {
-      if (o.kind === "text") ensureDocFont(o, state.editBase, state.editPage);
+      if (o.kind !== "text") continue;
+      ensureDocFont(o, state.editBase, state.editPage);
+      ensureAppFont(fontClassOf(o.fontFamily), o.fontBold, o.fontItalic);
     }
     buildEditOverlay();
     $("pageInput").value = state.editPage + 1;
@@ -2634,12 +2636,57 @@ function ensureDocFont(run, path, page) {
   docFonts.set(name, p);
 }
 
-// Stack font cho 1 run trong ô sửa: font nhúng (nếu đã nạp xong) đứng đầu,
-// stack hệ thống theo sau làm lưới an toàn.
+// ---- Tầng đỡ: bộ font ĐÓNG GÓI theo app (Noto, phủ tiếng Việt) ----
+// Glyph không có trong subset nhúng (ký tự MỚI gõ vào), font không nhúng hay
+// không vá được → rơi xuống font Noto đóng gói — GIỐNG NHAU trên mọi máy,
+// không rơi về font hệ điều hành "gần giống".
+const appFonts = new Map(); // kind -> true | false | Promise (bền theo app)
+
+function appFontKind(cls, bold, italic) {
+  if (cls === "mono") return "mono-" + (bold ? "bold" : "regular"); // mono không có italic
+  const style = bold && italic ? "bolditalic" : bold ? "bold" : italic ? "italic" : "regular";
+  return cls + "-" + style;
+}
+
+// Phân loại serif/sans/mono theo stack CSS đã suy cho family của run.
+function fontClassOf(family) {
+  const stack = cssFontStack(family).toLowerCase();
+  if (stack.endsWith("monospace")) return "mono";
+  if (/[^-]serif$/.test(stack)) return "serif";
+  return "sans";
+}
+
+function ensureAppFont(cls, bold, italic) {
+  const kind = appFontKind(cls, !!bold, !!italic);
+  if (appFonts.has(kind)) return;
+  const p = (async () => {
+    try {
+      const b64 = await invoke("app_font_data", { kind });
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const face = new FontFace("ff-app-" + cls, bytes.buffer, {
+        weight: bold ? "700" : "400",
+        style: cls !== "mono" && italic ? "italic" : "normal",
+      });
+      await face.load();
+      document.fonts.add(face);
+      appFonts.set(kind, true);
+      return true;
+    } catch (_) {
+      appFonts.set(kind, false); // bản build không kèm fonts/ → stack cũ
+      return false;
+    }
+  })();
+  appFonts.set(kind, p);
+}
+
+// Stack font cho 1 run trong ô sửa: font NHÚNG của tài liệu đứng đầu → font
+// Noto đóng gói theo app → stack hệ thống (lưới cuối cùng).
 function editFontStack(run, fallbackFamily) {
   const base = cssFontStack(fallbackFamily);
+  const mid = '"ff-app-' + fontClassOf(fallbackFamily) + '", ';
   const fam = run && run.fontName ? docFonts.get(run.fontName) : null;
-  return typeof fam === "string" && fam ? '"' + fam + '", ' + base : base;
+  const head = typeof fam === "string" && fam ? '"' + fam + '", ' : "";
+  return head + mid + base;
 }
 
 function cssFontStack(family) {

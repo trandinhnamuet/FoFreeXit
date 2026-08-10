@@ -293,6 +293,21 @@ fn pdf_text_string(s: &str) -> LoObj {
 /// Thử đúng file biến thể (vd `arialbd.ttf`) trước, rồi mới hạ cấp dần về regular
 /// của family khác — để FreeText giữ đúng đậm/nghiêng như Foxit.
 pub(crate) fn find_font_bytes(bold: bool, italic: bool) -> Option<Vec<u8>> {
+    // Bộ font ĐÓNG GÓI theo app (Noto — phủ tiếng Việt): ưu tiên tuyệt đối để
+    // hiển thị/ghi file GIỐNG NHAU trên mọi máy khách, không phụ thuộc font
+    // của hệ điều hành (không thoả hiệp thay bằng font "gần giống").
+    // FOFREEXIT_FONTS_PATH do app đặt lúc khởi động (fonts/ cạnh exe).
+    if let Ok(dir) = std::env::var("FOFREEXIT_FONTS_PATH") {
+        let name = match (bold, italic) {
+            (false, false) => "NotoSans-Regular.ttf",
+            (true, false) => "NotoSans-Bold.ttf",
+            (false, true) => "NotoSans-Italic.ttf",
+            (true, true) => "NotoSans-BoldItalic.ttf",
+        };
+        if let Ok(bytes) = std::fs::read(std::path::Path::new(&dir).join(name)) {
+            return Some(bytes);
+        }
+    }
     #[cfg(windows)]
     {
         // [regular, bold, italic, bold-italic] cho từng family phổ biến trên Windows.

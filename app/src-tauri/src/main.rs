@@ -703,6 +703,31 @@ fn edit_list_objects(path: String, page: u16, password: Option<String>) -> Resul
         .collect())
 }
 
+/// Bytes (base64) của font ĐÓNG GÓI theo app (Noto) — lưới đỡ WYSIWYG cho ô
+/// sửa: glyph không có trong subset nhúng (ký tự mới gõ) hay font không
+/// nhúng đều rơi về font này, KHÔNG rơi về font hệ điều hành.
+#[tauri::command]
+fn app_font_data(kind: String) -> Result<String, String> {
+    let name = match kind.as_str() {
+        "sans-regular" => "NotoSans-Regular.ttf",
+        "sans-bold" => "NotoSans-Bold.ttf",
+        "sans-italic" => "NotoSans-Italic.ttf",
+        "sans-bolditalic" => "NotoSans-BoldItalic.ttf",
+        "mono-regular" => "NotoSansMono-Regular.ttf",
+        "mono-bold" => "NotoSansMono-Bold.ttf",
+        "serif-regular" => "NotoSerif-Regular.ttf",
+        "serif-bold" => "NotoSerif-Bold.ttf",
+        "serif-italic" => "NotoSerif-Italic.ttf",
+        "serif-bolditalic" => "NotoSerif-BoldItalic.ttf",
+        _ => return Err(format!("kind font không hợp lệ: {kind}")),
+    };
+    let dir = std::env::var("FOFREEXIT_FONTS_PATH")
+        .map_err(|_| "app không kèm bộ font (thiếu thư mục fonts/)".to_string())?;
+    let bytes = std::fs::read(std::path::Path::new(&dir).join(name))
+        .map_err(|e| format!("đọc font {name}: {e}"))?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
+
 /// Bytes font NHÚNG của 1 text run (base64) — UI đăng ký FontFace để ô sửa
 /// hiển thị đúng font tài liệu thay vì font hệ thống gần giống.
 #[tauri::command]
@@ -1408,6 +1433,22 @@ fn pick_image(app: tauri::AppHandle) -> Option<String> {
 }
 
 fn main() {
+    // Bộ font ĐÓNG GÓI theo app (Noto): fonts/ cạnh exe (bản portable) hoặc ở
+    // gốc workspace (dev). Engine (find_font_bytes) + command app_font_data
+    // đọc qua env — hiển thị/ghi file giống nhau trên mọi máy khách.
+    let exe_fonts = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("fonts")));
+    let fonts_dir = match exe_fonts {
+        Some(d) if d.join("NotoSans-Regular.ttf").exists() => Some(d),
+        _ => {
+            let w = workspace_root().join("fonts");
+            if w.join("NotoSans-Regular.ttf").exists() { Some(w) } else { None }
+        }
+    };
+    if let Some(d) = fonts_dir {
+        std::env::set_var("FOFREEXIT_FONTS_PATH", &d);
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -1435,6 +1476,7 @@ fn main() {
             preview_header_footer,
             edit_list_objects,
             edit_font_data,
+            app_font_data,
             edit_apply,
             edit_apply_to_temp,
             edit_preview,
