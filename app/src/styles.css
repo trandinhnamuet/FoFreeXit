@@ -385,7 +385,9 @@ body.tool-active .annotlayer * { pointer-events: none; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.edit-page-wrap { position: relative; box-shadow: 0 2px 12px rgba(0,0,0,.5); background: #fff; }
+/* margin auto (thay vì chỉ justify-content) để khi zoom to hơn khung, mép
+   trái không bị cắt mất — bug kinh điển của flex center + overflow. */
+.edit-page-wrap { position: relative; box-shadow: 0 2px 12px rgba(0,0,0,.5); background: #fff; margin: auto; }
 .edit-img { display: block; }
 .edit-overlay { position: absolute; inset: 0; }
 .edit-overlay.armed { cursor: crosshair; }

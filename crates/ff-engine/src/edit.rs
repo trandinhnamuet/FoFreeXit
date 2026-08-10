@@ -142,7 +142,19 @@ pub enum EditOp {
     /// trong `indices` bị thay bằng `text` mới, tự bẻ dòng theo bề rộng khối
     /// (đo bằng hmtx của font), giữ baseline spacing + font/cỡ/màu của run
     /// neo (run có baseline cao nhất). `\n` trong `text` = ngắt dòng cứng.
-    ReflowText { indices: Vec<u16>, text: String },
+    ///
+    /// `rich` (tuỳ chọn): dòng lẫn NHIỀU STYLE (thường + đậm/mono…) — mỗi
+    /// dòng cứng là danh sách đoạn (text, run mang style); engine giữ đúng
+    /// font/cỡ/màu TỪNG ĐOẠN khi vẽ lại. None = cả khối 1 style như cũ.
+    ReflowText { indices: Vec<u16>, text: String, rich: Option<Vec<Vec<RichSeg>>> },
+}
+
+/// 1 đoạn chữ CÙNG STYLE trong 1 dòng cứng của reflow nhiều-style.
+#[derive(Clone, Debug)]
+pub struct RichSeg {
+    pub text: String,
+    /// Index (danh sách phẳng) của run mang style cho đoạn này.
+    pub style: u16,
 }
 
 fn quad_to_rect(q: &PdfQuadPoints) -> Rect {
@@ -651,6 +663,17 @@ struct ReflowPlan {
     /// đúng cỡ dòng gốc thứ i (tiêu đề 22.5/20pt không bị ép về 1 cỡ).
     line_styles: Vec<LineStyle>,
     color: PdfColor,
+    /// Reflow NHIỀU STYLE: các dòng cứng theo đoạn + bảng style đã resolve.
+    rich: Option<(Vec<Vec<RichSeg>>, HashMap<u16, RichStyle>)>,
+}
+
+/// Style đã resolve cho 1 đoạn rich: font vẽ + bytes đo + màu + cỡ.
+struct RichStyle {
+    draw: ReflowFont,
+    measure: Option<Vec<u8>>,
+    color: PdfColor,
+    tf: f32,
+    scaled: f32,
 }
 
 /// Probe: font `token` có ghi được `text` tròn trịa qua PDFium không?
@@ -853,7 +876,7 @@ pub fn apply_edits(
                     font_needed.entry(key.clone()).or_insert(FontLoad::Bytes(bytes));
                     add_text_keys.insert(opi, key);
                 }
-                EditOp::ReflowText { indices, text } => {
+                EditOp::ReflowText { indices, text, rich } => {
                     // Run text hợp lệ của khối (sort + dedup).
                     let mut idxs: Vec<u16> = indices.iter().copied().filter(|i| valid(*i)).collect();
                     idxs.sort_unstable();
@@ -1066,11 +1089,13 @@ pub fn apply_edits(
                     let fam_key = fontmatch::normalize_key(&family);
                     let ascii_only =
                         text.chars().all(|c| c.is_control() || (' '..='~').contains(&c));
-                    // Tầng 0 (dùng lại token font gốc) chỉ dùng được khi run neo
-                    // ở CẤP TRANG: run trong form sẽ bị phẫu thuật xoá + document
-                    // MỞ LẠI (token cũ vô hiệu) → đi tầng nhúng-lại-bytes/cùng-họ.
-                    let anchor_nested = entries[anchor_idx as usize].path.len() > 1;
-                    let original_ok = !anchor_nested
+                    // Tầng 0 (dùng lại token font gốc) chỉ dùng được khi KHỐI
+                    // không dính run trong form: có run nested → phẫu thuật xoá
+                    // + document MỞ LẠI (mọi token cũ vô hiệu) → đi tầng
+                    // nhúng-lại-bytes/cùng-họ.
+                    let block_has_nested =
+                        idxs.iter().any(|&i| entries[i as usize].path.len() > 1);
+                    let original_ok = !block_has_nested
                         && font_embedded
                         && probe_font_roundtrip(&mut page, orig_token, text);
                     let embedded_bytes = if font_embedded {
@@ -1102,6 +1127,116 @@ pub fn apply_edits(
                         (ReflowFont::Loaded(key), Some(bytes))
                     };
 
+                    // Reflow NHIỀU STYLE: resolve font/màu/cỡ TỪNG style-run
+                    // (thang giữ-font như trên, tính theo text của style đó).
+                    let rich_resolved: Option<(Vec<Vec<RichSeg>>, HashMap<u16, RichStyle>)> =
+                        if let Some(rich_lines) = rich {
+                            let mut style_ids: Vec<u16> =
+                                rich_lines.iter().flatten().map(|s| s.style).collect();
+                            style_ids.sort_unstable();
+                            style_ids.dedup();
+                            let mut table: HashMap<u16, RichStyle> = HashMap::new();
+                            for sid in style_ids {
+                                let style_text: String = rich_lines
+                                    .iter()
+                                    .flatten()
+                                    .filter(|s| s.style == sid)
+                                    .map(|s| s.text.as_str())
+                                    .collect();
+                                let src = if valid(sid) { sid } else { anchor_idx };
+                                let (sfam, sbold, sitalic, semb, sdata, stoken, stf, sscaled, scolor, snested) = {
+                                    let entry = &entries[src as usize];
+                                    let obj = object_at_path(&page, &entry.path)?;
+                                    match obj.as_text_object() {
+                                        Some(t) => {
+                                            let (f, b, i2) = text_object_style(t);
+                                            (
+                                                f,
+                                                b,
+                                                i2,
+                                                t.font().is_embedded().unwrap_or(false),
+                                                t.font().data().ok(),
+                                                t.font().token(),
+                                                t.unscaled_font_size().value.abs().max(1.0),
+                                                (t.scaled_font_size().value * mat_vscale(entry.acc)).abs().max(1.0),
+                                                t.fill_color().unwrap_or(PdfColor::new(0, 0, 0, 255)),
+                                                entry.path.len() > 1,
+                                            )
+                                        }
+                                        None => (
+                                            family.clone(),
+                                            bold,
+                                            italic,
+                                            false,
+                                            None,
+                                            orig_token,
+                                            unscaled.max(1.0),
+                                            scaled,
+                                            color,
+                                            true,
+                                        ),
+                                    }
+                                };
+                                let s_ascii = style_text
+                                    .chars()
+                                    .all(|c| c.is_control() || (' '..='~').contains(&c));
+                                let s_orig_ok = !block_has_nested
+                                    && !snested
+                                    && semb
+                                    && probe_font_roundtrip(&mut page, stoken, &style_text);
+                                let s_cover_bytes = if semb {
+                                    sdata.clone().filter(|b| fontmatch::coverage_ok(b, &style_text))
+                                } else {
+                                    None
+                                };
+                                let skey = fontmatch::normalize_key(&sfam);
+                                let (sdraw, smeasure) = if s_orig_ok {
+                                    (
+                                        ReflowFont::Original(stoken),
+                                        sdata.filter(|b| ttf_parser::Face::parse(b, 0).is_ok()),
+                                    )
+                                } else if let Some(bytes) = s_cover_bytes {
+                                    let key = (format!("emb:{skey}:{src}"), sbold, sitalic);
+                                    font_needed
+                                        .entry(key.clone())
+                                        .or_insert(FontLoad::Bytes(bytes.clone()));
+                                    (ReflowFont::Loaded(key), Some(bytes))
+                                } else if let (Some(builtin), true) =
+                                    (builtin_for(&skey, sbold, sitalic), s_ascii)
+                                {
+                                    let measure =
+                                        fontmatch::find_family_font_bytes(&sfam, sbold, sitalic)
+                                            .or_else(|| find_font_bytes(sbold, sitalic));
+                                    let key = (format!("b14:{skey}"), sbold, sitalic);
+                                    font_needed
+                                        .entry(key.clone())
+                                        .or_insert(FontLoad::Builtin(builtin));
+                                    (ReflowFont::Loaded(key), measure)
+                                } else {
+                                    let (key, bytes) = resolve_substitute_font(
+                                        &sfam, sbold, sitalic, &style_text,
+                                    )?;
+                                    font_needed
+                                        .entry(key.clone())
+                                        .or_insert(FontLoad::Bytes(bytes.clone()));
+                                    (ReflowFont::Loaded(key), Some(bytes))
+                                };
+                                table.insert(
+                                    sid,
+                                    RichStyle {
+                                        draw: sdraw,
+                                        measure: smeasure,
+                                        color: scolor,
+                                        tf: stf,
+                                        scaled: sscaled,
+                                    },
+                                );
+                            }
+                            Some((rich_lines.clone(), table))
+                        } else {
+                            None
+                        };
+
                     reflow_plans.insert(
                         opi,
                         ReflowPlan {
@@ -1118,6 +1253,7 @@ pub fn apply_edits(
                             scaled,
                             line_styles,
                             color,
+                            rich: rich_resolved,
                         },
                     );
                 }
@@ -1492,6 +1628,181 @@ pub fn apply_edits(
                         (page_w - plan.left - 8.0).max(0.0)
                     };
                     let grow_limit = (plan.width * 1.35).min(avail.max(plan.width * 1.02));
+
+                    // ---- Vẽ NHIỀU STYLE (dòng lẫn thường + đậm/mono…) ----
+                    // Token hoá theo TỪ giữ style; bẻ dòng chung cả khối; mỗi
+                    // cụm từ liền kề cùng style = 1 text object với đúng
+                    // font/cỡ/màu của style đó.
+                    if let Some((rich_lines, styles)) = &plan.rich {
+                        struct Piece {
+                            text: String,
+                            style: u16,
+                            lead: f32,
+                        }
+                        let faces: HashMap<u16, Option<ttf_parser::Face>> = styles
+                            .iter()
+                            .map(|(k, s)| {
+                                (*k, s.measure.as_deref().and_then(|b| ttf_parser::Face::parse(b, 0).ok()))
+                            })
+                            .collect();
+                        let measure_c = |sid: u16, c: char| -> f32 {
+                            let sc = styles.get(&sid).map(|s| s.scaled).unwrap_or(plan.scaled);
+                            match faces.get(&sid).and_then(|f| f.as_ref()) {
+                                Some(f) => fontmatch::char_advance(f, c, sc),
+                                None => sc * 0.5,
+                            }
+                        };
+                        let measure_s = |sid: u16, s: &str| -> f32 {
+                            s.chars().map(|c| measure_c(sid, c)).sum()
+                        };
+
+                        let (a, b, c2, d) = plan.linear;
+                        let mut line_no = 0usize;
+                        for segs in rich_lines {
+                            // Token hoá: tách từ, giữ "glue" khi 2 đoạn dính liền giữa từ.
+                            struct Tok {
+                                text: String,
+                                style: u16,
+                                glue: bool,
+                            }
+                            let mut toks: Vec<Tok> = Vec::new();
+                            let mut prev_ends_ws = true;
+                            for seg in segs {
+                                let starts_ws = seg.text.starts_with(char::is_whitespace);
+                                let mut first = true;
+                                for w in seg.text.split_whitespace() {
+                                    let glue = first && !starts_ws && !prev_ends_ws && !toks.is_empty();
+                                    toks.push(Tok { text: w.to_string(), style: seg.style, glue });
+                                    first = false;
+                                }
+                                prev_ends_ws = seg.text.trim().is_empty()
+                                    || seg.text.ends_with(char::is_whitespace);
+                            }
+                            // Tổng bề rộng KHÔNG bẻ — xét ngưỡng nở như đường 1-style.
+                            let hard_w: f32 = toks
+                                .iter()
+                                .enumerate()
+                                .map(|(i, t)| {
+                                    let sp = if i == 0 || t.glue { 0.0 } else { measure_c(t.style, ' ') };
+                                    sp + measure_s(t.style, &t.text)
+                                })
+                                .sum();
+                            let must_wrap = hard_w > grow_limit;
+
+                            let mut out: Vec<Vec<Piece>> = Vec::new();
+                            let mut cur: Vec<Piece> = Vec::new();
+                            let mut cur_w = 0.0f32;
+                            for t in toks {
+                                let lead = if cur.is_empty() || t.glue { 0.0 } else { measure_c(t.style, ' ') };
+                                let tw = measure_s(t.style, &t.text);
+                                if must_wrap && !cur.is_empty() && cur_w + lead + tw > plan.width {
+                                    out.push(std::mem::take(&mut cur));
+                                    cur_w = tw;
+                                    cur.push(Piece { text: t.text, style: t.style, lead: 0.0 });
+                                    continue;
+                                }
+                                cur_w += lead + tw;
+                                if let Some(last) = cur.last_mut() {
+                                    if last.style == t.style {
+                                        if lead > 0.0 {
+                                            last.text.push(' ');
+                                        }
+                                        last.text.push_str(&t.text);
+                                        continue;
+                                    }
+                                }
+                                cur.push(Piece { text: t.text, style: t.style, lead });
+                            }
+                            if !cur.is_empty() {
+                                out.push(cur);
+                            }
+                            if out.is_empty() {
+                                out.push(Vec::new()); // dòng trống vẫn chiếm 1 nhịp
+                            }
+
+                            for pieces in out {
+                                let y = plan.first_baseline - (line_no as f32) * plan.line_advance;
+                                line_no += 1;
+                                if pieces.is_empty() {
+                                    continue;
+                                }
+                                let total: f32 = pieces
+                                    .iter()
+                                    .map(|p| p.lead + measure_s(p.style, &p.text))
+                                    .sum();
+                                let mut x = if plan.centered {
+                                    (plan.left + plan.width / 2.0 - total / 2.0).max(8.0)
+                                } else {
+                                    plan.left
+                                };
+                                for p in &pieces {
+                                    x += p.lead;
+                                    let st = &styles[&p.style];
+                                    let token = match &st.draw {
+                                        ReflowFont::Original(tok) => *tok,
+                                        ReflowFont::Loaded(key) => {
+                                            tokens.get(key).copied().ok_or_else(|| {
+                                                EngineError::Pdfium("thiếu token font rich".into())
+                                            })?
+                                        }
+                                    };
+                                    // Ghi + tự kiểm; hỏng → ghi lại TỪNG TỪ tự đặt
+                                    // vị trí (không bao giờ ghi glyph dấu cách).
+                                    let wrote_ok = {
+                                        let mut obj = page
+                                            .objects_mut()
+                                            .create_text_object(
+                                                PdfPoints::ZERO,
+                                                PdfPoints::ZERO,
+                                                p.text.clone(),
+                                                token,
+                                                PdfPoints::new(st.tf),
+                                            )
+                                            .map_err(err)?;
+                                        let ok = obj
+                                            .as_text_object()
+                                            .map(|t| t.text() == p.text)
+                                            .unwrap_or(false);
+                                        if ok {
+                                            obj.apply_matrix(PdfMatrix::new(a, b, c2, d, x, y))
+                                                .map_err(err)?;
+                                            obj.set_fill_color(st.color).map_err(err)?;
+                                        }
+                                        ok
+                                    };
+                                    if !wrote_ok {
+                                        let idx = page.objects().len().saturating_sub(1);
+                                        let removed = page
+                                            .objects_mut()
+                                            .remove_object_at_index(idx as usize)
+                                            .map_err(err)?;
+                                        std::mem::forget(removed);
+                                        let space_w = measure_c(p.style, ' ');
+                                        let mut cx = x;
+                                        for word in p.text.split_whitespace() {
+                                            let mut obj = page
+                                                .objects_mut()
+                                                .create_text_object(
+                                                    PdfPoints::ZERO,
+                                                    PdfPoints::ZERO,
+                                                    word,
+                                                    token,
+                                                    PdfPoints::new(st.tf),
+                                                )
+                                                .map_err(err)?;
+                                            obj.apply_matrix(PdfMatrix::new(a, b, c2, d, cx, y))
+                                                .map_err(err)?;
+                                            obj.set_fill_color(st.color).map_err(err)?;
+                                            cx += measure_s(p.style, word) + space_w;
+                                        }
+                                    }
+                                    x += measure_s(p.style, &p.text);
+                                }
+                            }
+                        }
+                        reflow_out_lines.insert(opi, line_no);
+                        continue;
+                    }
 
                     // Dòng cứng thứ i (theo \n từ ô sửa) giữ cỡ chữ dòng gốc thứ i.
                     let mut out_lines: Vec<(String, LineStyle)> = Vec::new();

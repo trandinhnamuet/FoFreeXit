@@ -635,7 +635,7 @@ của khối đoạn văn ban đầu, giữ nguyên phông chữ nhúng và kho�
         &pdf,
         &fx,
         0,
-        &[EditOp::ReflowText { indices: runs.iter().map(|r| r.index).collect(), text: long_text.into() }],
+        &[EditOp::ReflowText { indices: runs.iter().map(|r| r.index).collect(), text: long_text.into(), rich: None }],
         &out,
         None,
     )
@@ -686,6 +686,7 @@ fn reflow_hard_break_creates_new_line() {
         &[EditOp::ReflowText {
             indices: runs.iter().map(|r| r.index).collect(),
             text: "Đoạn một ngắn.\nĐoạn hai riêng.".into(),
+            rich: None,
         }],
         &out,
         None,
@@ -718,7 +719,7 @@ the declared standard Helvetica base font untouched.";
         &pdf,
         &input,
         0,
-        &[EditOp::ReflowText { indices: vec![idx], text: long_ascii.into() }],
+        &[EditOp::ReflowText { indices: vec![idx], text: long_ascii.into(), rich: None }],
         &out,
         None,
     )
@@ -775,7 +776,7 @@ fn reflow_expands_indices_to_cover_block() {
         &pdf,
         &fx,
         0,
-        &[EditOp::ReflowText { indices: vec![first, third], text: "Dòng đã thay hoàn toàn".into() }],
+        &[EditOp::ReflowText { indices: vec![first, third], text: "Dòng đã thay hoàn toàn".into(), rich: None }],
         &out,
         None,
     )
@@ -853,6 +854,7 @@ fn reflow_preserves_centered_alignment() {
         &[EditOp::ReflowText {
             indices: idxs,
             text: "TIÊU ĐỀ MỚI DÀI HƠN CHÚT\nNGẮN".into(),
+            rich: None,
         }],
         &out,
         None,
@@ -910,7 +912,7 @@ fn reflow_keeps_per_line_font_sizes() {
         &pdf,
         &fx,
         0,
-        &[EditOp::ReflowText { indices: idxs, text: "TIÊU ĐỀ MỚI\nphụ đề mới".into() }],
+        &[EditOp::ReflowText { indices: idxs, text: "TIÊU ĐỀ MỚI\nphụ đề mới".into(), rich: None }],
         &out,
         None,
     )
@@ -964,7 +966,7 @@ fn reflow_hard_line_grows_without_rewrap() {
         &pdf,
         &fx,
         0,
-        &[EditOp::ReflowText { indices: vec![idx], text: new_text.into() }],
+        &[EditOp::ReflowText { indices: vec![idx], text: new_text.into(), rich: None }],
         &out,
         None,
     )
@@ -1165,6 +1167,7 @@ fn form_xobject_reflow_after_flatten_roundtrip() {
         &[EditOp::ReflowText {
             indices: vec![idx],
             text: "Đoạn văn tiếng Việt thay thế trong form, đủ dài để chắc chắn phải bẻ xuống dòng mới".into(),
+            rich: None,
         }],
         &out,
         None,
@@ -1275,6 +1278,7 @@ fn form_xobject_surgical_reflow() {
         &[EditOp::ReflowText {
             indices: vec![idx],
             text: "Sửa trong form bằng phẫu thuật stream".into(),
+            rich: None,
         }],
         &out,
         None,
@@ -1379,6 +1383,7 @@ fn flipped_form_surgical_reflow() {
         &[EditOp::ReflowText {
             indices: vec![idx],
             text: "Đổi chữ trong form lật trục".into(),
+            rich: None,
         }],
         &out,
         None,
@@ -1400,5 +1405,113 @@ fn flipped_form_surgical_reflow() {
         new_run.rect.left > 50.0 && new_run.rect.left < 200.0 && new_run.rect.bottom > 650.0 && new_run.rect.top < 740.0,
         "run mới phải quanh chỗ cũ: {:?}",
         new_run.rect
+    );
+}
+
+/// Fixture 1 dòng LẪN 2 STYLE trên cùng baseline: Helvetica thường +
+/// Courier-Bold (mono đậm) — đúng kiểu "Trang quản trị hiển thị `code`".
+fn build_mixed_style_pdf(path: &std::path::Path) {
+    use lopdf::{dictionary, Document, Object, Stream};
+    let mut doc = Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+    let f1 = doc.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Helvetica",
+    });
+    let f2 = doc.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Courier-Bold",
+    });
+    let content_id = doc.add_object(Stream::new(
+        dictionary! {},
+        b"BT /F1 12 Tf 72 700 Td (Trang quan tri hien thi ) Tj /F2 12 Tf (windowsInitialPassword) Tj ET".to_vec(),
+    ));
+    let page_id = doc.add_object(dictionary! {
+        "Type" => "Page",
+        "Parent" => pages_id,
+        "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        "Resources" => dictionary! { "Font" => dictionary! { "F1" => f1, "F2" => f2 } },
+        "Contents" => content_id,
+    });
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Kids" => vec![page_id.into()],
+            "Count" => 1,
+        }),
+    );
+    let catalog_id = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    doc.trailer.set("Root", catalog_id);
+    doc.save(path).expect("lưu fixture mixed style");
+}
+
+// Reflow NHIỀU STYLE: sửa phần chữ thường, phần mono-đậm GIỮ NGUYÊN FONT
+// (BaseFont Courier-Bold còn nguyên), 2 đoạn nằm cùng dòng đúng thứ tự.
+#[test]
+fn rich_reflow_preserves_mixed_styles() {
+    use ff_engine::RichSeg;
+    let pdf = pdfium();
+    let input = tmp("ff_edit_rich_mixed.pdf");
+    build_mixed_style_pdf(&input);
+    let out = tmp("ff_edit_rich_mixed_out.pdf");
+    let idx_a = find_text_index(&pdf, &input, "Trang quan tri");
+    let idx_b = find_text_index(&pdf, &input, "windowsInitialPassword");
+
+    ff_engine::apply_edits(
+        &pdf,
+        &input,
+        0,
+        &[EditOp::ReflowText {
+            indices: vec![idx_a, idx_b],
+            text: "Trang quan tri hien thi MOI windowsInitialPassword".into(),
+            rich: Some(vec![vec![
+                RichSeg { text: "Trang quan tri hien thi MOI ".into(), style: idx_a },
+                RichSeg { text: "windowsInitialPassword".into(), style: idx_b },
+            ]]),
+        }],
+        &out,
+        None,
+    )
+    .expect("apply_edits rich reflow");
+
+    let text = ff_engine::extract_text(&pdf, &out, 0, None).expect("extract");
+    let norm = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(norm.contains("hien thi MOI"), "chữ sửa phải có mặt: {text:?}");
+    assert!(norm.contains("windowsInitialPassword"), "đoạn mono phải còn: {text:?}");
+
+    let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
+    let mono = objs
+        .iter()
+        .find(|o| o.text.as_deref().map(|t| t.contains("windowsInitialPassword")).unwrap_or(false))
+        .unwrap_or_else(|| panic!("phải có run mono: {objs:?}"));
+    let plain = objs
+        .iter()
+        .find(|o| o.text.as_deref().map(|t| t.contains("hien thi MOI")).unwrap_or(false))
+        .unwrap_or_else(|| panic!("phải có run thường: {objs:?}"));
+    assert!(
+        mono.font_name.as_deref().map(|f| f.contains("Courier")).unwrap_or(false),
+        "đoạn mono phải GIỮ font Courier: {:?}",
+        mono.font_name
+    );
+    assert!(
+        plain.font_name.as_deref().map(|f| f.contains("Helvetica")).unwrap_or(false),
+        "đoạn thường phải giữ Helvetica: {:?}",
+        plain.font_name
+    );
+    // Cùng dòng, mono nằm bên PHẢI đoạn thường.
+    assert!(
+        (mono.rect.bottom - plain.rect.bottom).abs() < 4.0,
+        "2 đoạn phải cùng baseline: {:?} vs {:?}",
+        mono.rect,
+        plain.rect
+    );
+    assert!(
+        mono.rect.left > plain.rect.left + 10.0,
+        "mono phải nằm sau đoạn thường: {:?} vs {:?}",
+        mono.rect,
+        plain.rect
     );
 }

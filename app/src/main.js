@@ -39,6 +39,7 @@ const state = {
   editArm: null,          // 'text' | 'image' khi đang chờ click đặt; null = không
   editPendingImage: null, // đường dẫn ảnh chờ đặt (Thêm ảnh)
   editPendingPoint: null, // điểm PDF chờ mở ô sửa (đúp chuột từ viewer thường)
+  editZoom: 1,            // zoom stage sửa (1.0 = 100% như viewer)
   editColor: [0, 0, 0],   // màu chữ áp khi sửa/thêm text
   editTemps: [],          // mọi file tạm đã materialize trong phiên sửa (để dọn)
   secMode: false,         // thanh Bảo mật (Phase 5) đang mở
@@ -330,14 +331,15 @@ function updatePageTotal() {
 
 function goToPageInput() {
   const n = parseInt($("pageInput").value, 10);
-  if (!Number.isFinite(n)) { $("pageInput").value = state.current + 1; return; }
+  if (!Number.isFinite(n)) { $("pageInput").value = currentPageIndex() + 1; return; }
   const idx = Math.max(0, Math.min(state.pages.length - 1, n - 1));
   goToPage(idx);
   $("pageInput").value = idx + 1;
 }
 
-function gotoPrevPage() { goToPage(Math.max(0, state.current - 1)); }
-function gotoNextPage() { goToPage(Math.min(state.pages.length - 1, state.current + 1)); }
+function currentPageIndex() { return state.editMode ? state.editPage : state.current; }
+function gotoPrevPage() { goToPage(Math.max(0, currentPageIndex() - 1)); }
+function gotoNextPage() { goToPage(Math.min(state.pages.length - 1, currentPageIndex() + 1)); }
 
 // ---------- Thumbnails ----------
 
@@ -412,13 +414,63 @@ function buildOutline(items) {
 // ---------- Điều hướng ----------
 
 function goToPage(idx) {
+  // Chế độ Sửa nội dung: chuyển trang = nạp trang khác của editBase.
+  if (state.editMode) { switchEditPage(idx); return; }
   const slot = state.slots[idx];
   if (slot) slot.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+// Chuyển trang trong chế độ Sửa nội dung (undo/redo dùng chung editBase nên
+// vẫn giữ nguyên các thay đổi đã áp ở trang khác).
+function switchEditPage(idx) {
+  const i = Math.max(0, Math.min(state.pages.length - 1, idx));
+  if (i === state.editPage) return;
+  const ce = $("editOverlay").querySelector(".edit-inline");
+  if (ce) ce.remove(); // đóng ô sửa đang mở, không lưu
+  state.editPage = i;
+  state.editSel = null;
+  selectEditObject(-1);
+  $("pageInput").value = i + 1;
+  loadEditPage();
+}
+
 // ---------- Zoom ----------
 
+// Bề rộng px của stage sửa theo mức zoom hiện tại (1.0 = 100% như viewer).
+function editStageWidth(p) {
+  return Math.max(200, Math.round(p.widthPt * PT_PER_PX * state.editZoom));
+}
+
+// Zoom chế độ Sửa nội dung: co giãn ảnh + overlay NGAY (mượt), render nét
+// bằng PDFium sau khi ngừng thao tác.
+function setEditZoom(z) {
+  state.editZoom = Math.max(0.25, Math.min(4, z));
+  const p = state.pages[state.editPage];
+  if (!p) return;
+  const w = editStageWidth(p);
+  state.editScale = w / p.widthPt;
+  $("editImg").style.width = w + "px";
+  buildEditOverlay();
+  updateZoomLabel();
+  scheduleEditSharpRender();
+}
+
+let editSharpTimer = null;
+function scheduleEditSharpRender() {
+  clearTimeout(editSharpTimer);
+  editSharpTimer = setTimeout(async () => {
+    try {
+      const p = state.pages[state.editPage];
+      const url = await invoke("render_page", {
+        path: state.editBase, page: state.editPage, width: editStageWidth(p),
+      });
+      $("editImg").src = url;
+    } catch (_) { /* giữ ảnh cũ (đã co giãn CSS) */ }
+  }, 220);
+}
+
 function setZoom(z) {
+  if (state.editMode) { setEditZoom(z); return; }
   finishEditing();
   closeNotePopup();
   closeColorPopover();
@@ -468,7 +520,7 @@ function buildZoomSelect() {
 }
 function updateZoomLabel() {
   const sel = $("zoomSelect");
-  const pct = Math.round(state.zoom * 100);
+  const pct = Math.round((state.editMode ? state.editZoom : state.zoom) * 100);
   let custom = sel.querySelector('option[data-custom="1"]');
   const matchesPreset = ZOOM_PRESETS.includes(pct);
   if (matchesPreset) {
@@ -503,6 +555,11 @@ function zoomAtPoint(newZoom, clientX, clientY) {
 
 function fitWidth() {
   if (!state.pages.length) return;
+  if (state.editMode) {
+    const p = state.pages[state.editPage];
+    setEditZoom(($("editStage").clientWidth - 48) / (p.widthPt * PT_PER_PX));
+    return;
+  }
   const avail = $("viewport").clientWidth - 48;
   const p = state.pages[state.current] || state.pages[0];
   setZoom(avail / (p.widthPt * PT_PER_PX));
@@ -510,6 +567,15 @@ function fitWidth() {
 
 function fitPage() {
   if (!state.pages.length) return;
+  if (state.editMode) {
+    const st = $("editStage");
+    const p = state.pages[state.editPage];
+    setEditZoom(Math.min(
+      (st.clientWidth - 48) / (p.widthPt * PT_PER_PX),
+      (st.clientHeight - 48) / (p.heightPt * PT_PER_PX)
+    ));
+    return;
+  }
   const vp = $("viewport");
   const availW = vp.clientWidth - 48;
   const availH = vp.clientHeight - 48;
@@ -2047,6 +2113,8 @@ function enterEditMode(pageIndex) {
   if (state.organizeMode) exitOrganizeMode();
   state.editMode = true;
   state.editPage = Number.isInteger(pageIndex) ? pageIndex : state.current;
+  // Kế thừa mức zoom đang xem để không "giật" cỡ hiển thị khi vào chế độ sửa.
+  state.editZoom = Math.max(0.25, Math.min(4, state.zoom));
   state.editBase = state.path;
   state.editUndo = [];
   state.editRedo = [];
@@ -2119,18 +2187,23 @@ async function onViewerDblClick(e) {
 // Đọc lại object + render ảnh trang hiện tại từ editBase, dựng overlay box.
 async function loadEditPage() {
   const p = state.pages[state.editPage];
-  state.editScale = EDIT_STAGE_W / p.widthPt;
+  const stageW = editStageWidth(p);
+  state.editScale = stageW / p.widthPt;
   try {
     const [url, objs] = await Promise.all([
-      invoke("render_page", { path: state.editBase, page: state.editPage, width: EDIT_STAGE_W }),
+      invoke("render_page", { path: state.editBase, page: state.editPage, width: stageW }),
       invoke("edit_list_objects", { path: state.editBase, page: state.editPage, password: null }),
     ]);
     // Object nằm TRONG Form XObject (file Canva/Illustrator): sửa/xoá text
     // được xử lý bằng PHẪU THUẬT stream ở engine (trong suốt với UI) — không
     // cần mở gói trang.
-    $("editImg").src = url;
+    const img = $("editImg");
+    img.src = url;
+    img.style.width = stageW + "px";
     state.editObjects = objs;
     buildEditOverlay();
+    $("pageInput").value = state.editPage + 1;
+    updateZoomLabel();
     $("editHint").textContent = `Trang ${state.editPage + 1} · ${objs.length} đối tượng`;
   } catch (e) {
     $("editHint").textContent = "Lỗi nạp trang sửa: " + e;
@@ -2514,6 +2587,46 @@ function stripLineMarkers(line) {
   };
 }
 
+// Khoá style của 1 run (gom span trong ô sửa + so trùng style).
+function styleKeyOf(r) {
+  return [
+    (r.fontFamily || "").toLowerCase(),
+    !!r.fontBold,
+    !!r.fontItalic,
+    Math.round(Math.abs(r.fontSize || 12) * 10),
+    (r.color || [0, 0, 0]).slice(0, 3).join(","),
+  ].join("|");
+}
+
+// Nhóm các run LIỀN KỀ cùng style của 1 dòng thành đoạn văn bản (giữ logic
+// chèn khoảng trắng theo khoảng hở như composeLineText) — để dòng lẫn chữ
+// thường + đậm hiện đúng từng phần trong ô sửa.
+function styleGroupsOfLine(runs) {
+  const groups = [];
+  let prev = null;
+  for (const r of runs) {
+    const t = r.text || "";
+    if (!t.trim()) continue;
+    let sep = "";
+    if (prev && groups.length) {
+      const gap = r.rect.left - prev.rect.right;
+      const em = Math.abs(r.fontSize || 12) * 0.28;
+      const prevText = groups[groups.length - 1].text;
+      if (gap > em && !prevText.endsWith(" ") && !t.startsWith(" ")) sep = " ";
+    }
+    const key = styleKeyOf(r);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.text += sep + t;
+    } else {
+      if (last && sep) last.text += " ";
+      groups.push({ key, rep: r, text: t });
+    }
+    prev = r;
+  }
+  return groups;
+}
+
 // Format đại diện của 1 dòng (từ run có chữ đầu tiên) — để so "cùng đoạn".
 function lineFormat(l) {
   const rep = l.runs.find((r) => (r.text || "").trim()) || l.runs[0];
@@ -2676,9 +2789,6 @@ function startBlockTextEdit(o, lines, ev) {
     const rep = l.runs.find((r) => (r.text || "").trim()) || l.runs[0] || o;
     const div = document.createElement("div");
     div.className = "edit-line";
-    const t = composeLineText(l.runs);
-    if (t) div.textContent = t;
-    else div.innerHTML = "<br>";
     const divFs = Math.max(6, (l.fs || 12) * s);
     div.style.fontSize = divFs + "px";
     div.style.lineHeight = perLineAdvances[i] + "px";
@@ -2686,6 +2796,24 @@ function startBlockTextEdit(o, lines, ev) {
     div.style.fontWeight = (rep.fontBold != null ? rep.fontBold : o.fontBold) ? "bold" : "normal";
     div.style.fontStyle = (rep.fontItalic != null ? rep.fontItalic : o.fontItalic) ? "italic" : "normal";
     if (rep.color || o.color) div.style.color = rgbCss(rep.color || o.color);
+    // MỖI NHÓM STYLE = 1 span riêng: dòng lẫn chữ thường + đậm/mono hiện
+    // đúng từng phần; dataset.styleRun = run mang style (commit giữ style).
+    const groups = styleGroupsOfLine(l.runs);
+    if (!groups.length) {
+      div.innerHTML = "<br>";
+    } else {
+      for (const g of groups) {
+        const span = document.createElement("span");
+        span.textContent = g.text;
+        span.dataset.styleRun = String(g.rep.index);
+        span.style.fontFamily = cssFontStack(g.rep.fontFamily || o.fontFamily);
+        span.style.fontWeight = g.rep.fontBold ? "bold" : "normal";
+        span.style.fontStyle = g.rep.fontItalic ? "italic" : "normal";
+        span.style.fontSize = Math.max(6, Math.abs(g.rep.fontSize || l.fs || 12) * s) + "px";
+        if (g.rep.color) span.style.color = rgbCss(g.rep.color);
+        div.appendChild(span);
+      }
+    }
     // Giữ thụt lề từng dòng so với mép khối (dòng đầu đoạn thụt vào…).
     if (!centered) {
       const indent = (l.rect.left - leftPt) * s;
@@ -2723,7 +2851,9 @@ function startBlockTextEdit(o, lines, ev) {
         password: null,
       });
       state.editTemps.push(tmp);
-      const url = await invoke("render_page", { path: tmp, page: state.editPage, width: EDIT_STAGE_W });
+      const url = await invoke("render_page", {
+        path: tmp, page: state.editPage, width: editStageWidth(state.pages[state.editPage]),
+      });
       if (ce.isConnected) {
         img.src = url;
         bgSwapped = true;
@@ -2762,11 +2892,44 @@ function startBlockTextEdit(o, lines, ev) {
     return t;
   };
 
+  // \u0110\u1ecdc theo \u0110O\u1ea0N STYLE: m\u1ed7i d\u00f2ng = [{text, style: index run mang style}].
+  // Text node tr\u1ea7n (g\u00f5 \u1edf m\u00e9p d\u00f2ng) m\u01b0\u1ee3n style c\u1ee7a span k\u1ec1 b\u00ean.
+  const readRich = () => {
+    const lines = [];
+    for (const div of ce.querySelectorAll(".edit-line")) {
+      const segs = [];
+      for (const node of div.childNodes) {
+        const txt = (node.textContent || "").replace(/\u00a0/g, " ");
+        if (!txt || node.nodeName === "BR") continue;
+        let si = null;
+        if (node.nodeType === 1 && node.dataset && node.dataset.styleRun) {
+          si = Number(node.dataset.styleRun);
+        } else {
+          const pick = (sib) =>
+            sib && sib.nodeType === 1 && sib.dataset && sib.dataset.styleRun
+              ? Number(sib.dataset.styleRun)
+              : null;
+          const p = pick(node.previousSibling);
+          si = p != null ? p : pick(node.nextSibling);
+        }
+        if (segs.length && segs[segs.length - 1].style === si) segs[segs.length - 1].text += txt;
+        else segs.push({ text: txt, style: si });
+      }
+      const known = segs.find((g) => g.style != null);
+      for (const g of segs) {
+        if (g.style == null) g.style = known ? known.style : allRuns[0].index;
+      }
+      lines.push(segs);
+    }
+    return lines;
+  };
+
   let done = false;
   const commit = (save) => {
     if (done) return;
     done = true;
     const text = readText();
+    const rich = readRich();
     ce.remove();
     ov.querySelectorAll(".edit-box").forEach((b) => { b.style.display = ""; });
     const changed = save && text.trim() && text !== original;
@@ -2776,10 +2939,17 @@ function startBlockTextEdit(o, lines, ev) {
     if (bgSwapped) img.src = prevSrc;
     if (changed) {
       $("editHint").textContent = "Đang áp dụng thay đổi…";
+      // Khối có TỪ 2 STYLE trở lên (thường + đậm/mono...) → gửi kèm đoạn
+      // style để engine giữ đúng font/màu từng phần; 1 style → đường cũ
+      // (ưu tiên dùng lại chính font object gốc).
+      const styleCount = new Set(
+        rich.flatMap((line) => line.map((g) => styleKeyOf(state.editObjects.find((x) => x.index === g.style) || {})))
+      ).size;
       stageEditOp({
         op: "reflowText",
         indices: allRuns.map((r) => r.index),
         text,
+        richLines: styleCount > 1 ? rich : null,
       });
     } else {
       $("editHint").textContent = "";
@@ -2845,7 +3015,13 @@ function fitEditLinesToPdf(ce, lines, s, page) {
       const wantFs = targetPx / inkPerPx;
       const ratio = wantFs / f.fs;
       if (ratio < 0.88 || ratio > 1.12) {
-        divs[i].style.fontSize = f.fs * Math.max(0.3, Math.min(3, ratio)) + "px";
+        const k = Math.max(0.3, Math.min(3, ratio));
+        divs[i].style.fontSize = f.fs * k + "px";
+        // Dòng nhiều style: span có cỡ px riêng → scale theo cùng hệ số.
+        divs[i].querySelectorAll("span[data-style-run]").forEach((sp) => {
+          const cur = parseFloat(sp.style.fontSize) || f.fs;
+          sp.style.fontSize = cur * k + "px";
+        });
       }
     }
   }
@@ -2879,10 +3055,13 @@ function fitEditLinesToPdf(ce, lines, s, page) {
 }
 
 // Bbox render thật của text trong div — đo bằng Range (chỉ tính chữ, không
-// tính line-box nên không dính line-height); null nếu dòng rỗng.
+// tính line-box nên không dính line-height); null nếu dòng rỗng. Text có
+// thể nằm trong SPAN (dòng nhiều style) → tìm text node đầu tiên theo sâu.
 function firstTextRect(div) {
-  const tn = div.firstChild;
-  if (!tn || tn.nodeType !== Node.TEXT_NODE) return null;
+  const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT);
+  let tn = walker.nextNode();
+  while (tn && !(tn.textContent || "").trim()) tn = walker.nextNode();
+  if (!tn) return null;
   const range = document.createRange();
   range.selectNodeContents(tn);
   const rects = range.getClientRects();
@@ -3649,8 +3828,19 @@ if (window.__TAURI__.event) {
     loadDocument(pdf);
   });
 }
-$("zoomIn").addEventListener("click", () => setZoom(state.zoom * 1.25));
-$("zoomOut").addEventListener("click", () => setZoom(state.zoom / 1.25));
+$("zoomIn").addEventListener("click", () => setZoom((state.editMode ? state.editZoom : state.zoom) * 1.25));
+$("zoomOut").addEventListener("click", () => setZoom((state.editMode ? state.editZoom : state.zoom) / 1.25));
+
+// Ctrl + lăn chuột để zoom trong chế độ Sửa nội dung (viewer đã có sẵn).
+$("editStage").addEventListener(
+  "wheel",
+  (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    setEditZoom(state.editZoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+  },
+  { passive: false }
+);
 $("zoomFit").addEventListener("click", fitWidth);
 $("zoomFitPage").addEventListener("click", fitPage);
 buildZoomSelect();

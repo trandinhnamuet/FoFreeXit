@@ -741,6 +741,18 @@ struct EditOpDto {
     /// reflowText: index các run của khối đoạn văn.
     #[serde(default)]
     indices: Vec<u16>,
+    /// reflowText nhiều style: mỗi dòng cứng = danh sách đoạn (text + run
+    /// mang style). None/thiếu = khối 1 style.
+    #[serde(default)]
+    rich_lines: Option<Vec<Vec<RichSegDto>>>,
+}
+
+/// 1 đoạn cùng style trong reflow nhiều-style.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RichSegDto {
+    text: String,
+    style: u16,
 }
 
 fn one() -> f32 {
@@ -771,7 +783,20 @@ fn edit_op_from_dto(d: EditOpDto) -> Result<ff_engine::EditOp, String> {
             bold: d.bold.unwrap_or(false),
             italic: d.italic.unwrap_or(false),
         },
-        "reflowText" => ff_engine::EditOp::ReflowText { indices: d.indices, text: d.text },
+        "reflowText" => ff_engine::EditOp::ReflowText {
+            indices: d.indices,
+            text: d.text,
+            rich: d.rich_lines.map(|lines| {
+                lines
+                    .into_iter()
+                    .map(|line| {
+                        line.into_iter()
+                            .map(|s| ff_engine::RichSeg { text: s.text, style: s.style })
+                            .collect()
+                    })
+                    .collect()
+            }),
+        },
         "addImage" => ff_engine::EditOp::AddImage {
             x: d.x,
             y: d.y,
