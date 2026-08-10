@@ -522,7 +522,15 @@ pub fn font_data(
     if data.is_empty() {
         return Err(EngineError::Pdfium("font không nhúng trong file".into()));
     }
-    Ok(data.to_vec())
+    // Subset PDF hay thiếu bảng OS/2 và mang cmap (1,0) OTS không hỗ trợ →
+    // FontFace của WebView từ chối. Vá: thêm OS/2 (cờ đậm/nghiêng cho
+    // fsSelection/usWeightClass) + dựng cmap (3,1) format 4; mã tuỳ biến
+    // (chữ Việt trong subset LibreOffice) giải nghĩa qua /ToUnicode.
+    let (_, bold, italic) = text_object_style(t);
+    let raw_name = t.font().name();
+    let fname = if raw_name.trim().is_empty() { t.font().family() } else { raw_name };
+    let uni = crate::tounicode::code_to_unicode(input, page_index, &fname);
+    Ok(crate::fontfix::web_compatible_font(&data, bold, italic, uni.as_ref()))
 }
 
 pub fn list_objects(

@@ -39,14 +39,14 @@ fn is_text_show(op: &str) -> bool {
 /// Bytes content của stream: giải nén nếu có filter; stream KHÔNG nén thì
 /// `decompressed_content()` của lopdf báo lỗi thiếu /Filter → dùng bytes thô.
 /// (Bytes sai kiểu sẽ bị bất biến kiểm đếm chặn ở bước sau.)
-fn stream_bytes(stream: &lopdf::Stream) -> Vec<u8> {
+pub(crate) fn stream_bytes(stream: &lopdf::Stream) -> Vec<u8> {
     stream
         .decompressed_content()
         .unwrap_or_else(|_| stream.content.clone())
 }
 
 /// Resolve reference (tối đa 8 nấc).
-fn deref<'a>(doc: &'a LoDoc, mut o: &'a Object) -> &'a Object {
+pub(crate) fn deref<'a>(doc: &'a LoDoc, mut o: &'a Object) -> &'a Object {
     for _ in 0..8 {
         match o {
             Object::Reference(id) => match doc.get_object(*id) {

@@ -7,7 +7,9 @@
 pub mod annot;
 pub mod convert;
 pub mod edit;
+mod fontfix;
 mod formsurgery;
+mod tounicode;
 pub(crate) mod fontmatch;
 pub mod form;
 pub mod meta;
