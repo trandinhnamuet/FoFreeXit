@@ -3216,7 +3216,9 @@ function startBlockTextEdit(o, lines, ev) {
     const rich = readRich();
     ce.remove();
     ov.querySelectorAll(".edit-box").forEach((b) => { b.style.display = ""; });
-    const changed = save && text.trim() && text !== original;
+    // "Có thay đổi" gồm cả đổi FORMAT thuần (bôi đen → B/I, chữ giữ nguyên).
+    const hasOverride = rich.some((line) => line.some((g) => g.bold != null || g.italic != null));
+    const changed = save && text.trim() && (text !== original || hasOverride);
     // LUÔN trả lại ảnh trang gốc ngay (đang hiện bản ẩn run sửa): trong lúc
     // engine áp thay đổi (file phức tạp mất vài giây) người dùng thấy chữ CŨ
     // thay vì khoảng trống — hết cảm giác "chữ biến mất".
@@ -3230,7 +3232,6 @@ function startBlockTextEdit(o, lines, ev) {
         rich.flatMap((line) => line.map((g) => styleKeyOf(state.editObjects.find((x) => x.index === g.style) || {})))
       ).size;
       // Có override B/I từng đoạn → bắt buộc đi đường rich dù khối 1 style.
-      const hasOverride = rich.some((line) => line.some((g) => g.bold != null || g.italic != null));
       stageEditOp({
         op: "reflowText",
         indices: allRuns.map((r) => r.index),
