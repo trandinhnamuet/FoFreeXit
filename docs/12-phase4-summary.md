@@ -522,3 +522,13 @@ Tiêm bản vá vào build 29 đang chạy (không cần rebuild) rồi đo:
 Fix đè chữ (mục 1) là code Rust — kiểm chứng lại trên build CI mới bằng đúng
 kịch bản đã tái hiện bug (sửa span thường của dòng lẫn style rồi so bounds
 các mảnh sau commit).
+
+**Bổ sung sau kiểm chứng build 31 (E2E trên build thật):**
+- Fix thêm: slot trang active phải giữ `min-height` ước tính — lúc vừa vào
+  chế độ sửa ảnh chưa load, CSS `:has` cho height auto làm slot cao ≈ 0 →
+  cuộn ban đầu lệch cả cột, listener cuộn tự chuyển nhầm trang active.
+- Kiểm đè chữ trên build thật: dòng lẫn style sau commit tăng dần tuyệt đối
+  (worst overlap 0pt) — fix mép mực OK. Lưu ý: file test của user
+  (Ban_dich_tieng_Viet_...) đã NHIỄM sẵn mảnh "Path=/" lạc chỗ từ lần lưu
+  bằng build lỗi cũ — mảnh đó được reflow bảo tồn như marker, KHÔNG phải bug
+  mới; đo kiểm phải loại các mảnh giữ-nguyên-vị-trí.

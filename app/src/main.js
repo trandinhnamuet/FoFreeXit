@@ -463,8 +463,13 @@ function editRoStamp() {
 
 function sizeEditSlot(slot, p) {
   const w = editStageWidth(p);
+  const h = Math.round((w * p.heightPt) / p.widthPt);
   slot.style.width = w + "px";
-  slot.style.height = Math.round((w * p.heightPt) / p.widthPt) + "px";
+  slot.style.height = h + "px";
+  // Slot active cao theo ảnh thật (CSS :has cho height auto) — nhưng lúc ảnh
+  // CHƯA load mà để cao 0 thì cuộn ban đầu lệch cả cột và listener cuộn tự
+  // chuyển nhầm trang active → luôn giữ tối thiểu chiều cao ước tính.
+  slot.style.minHeight = h + "px";
 }
 
 function buildEditColumn() {
