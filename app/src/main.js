@@ -126,9 +126,22 @@ async function loadDocument(path) {
 }
 
 async function boot() {
+  // Cửa sổ được tạo ẨN (tauri.conf.json visible:false) để user không thấy
+  // khung trắng ĐƠ trong lúc WebView khởi tạo — hiện NGAY khi UI chạy tới
+  // đây (đã tương tác được), splash che nốt phần nạp tài liệu đầu tiên.
+  try {
+    const w = window.__TAURI__.window.getCurrentWindow();
+    await w.show();
+    await w.setFocus();
+  } catch (_) { /* chạy ngoài Tauri (harness test) */ }
   // Nếu app được mở qua "Open with FoFreeXit" / double-click file PDF trong
   // Explorer, Windows truyền đường dẫn file qua command-line — ưu tiên mở nó.
   const fromExplorer = await invoke("initial_file");
+  const splash = $("bootSplash");
+  if (splash) {
+    splash.classList.add("hide");
+    setTimeout(() => splash.remove(), 400);
+  }
   loadDocument(fromExplorer || (await invoke("default_pdf")));
 }
 
@@ -2864,9 +2877,12 @@ function styleGroupsOfLine(runs) {
     const last = groups[groups.length - 1];
     if (last && last.key === key) {
       last.text += sep + t;
+      last.right = Math.max(last.right, r.rect.right);
     } else {
       if (last && sep) last.text += " ";
-      groups.push({ key, rep: r, text: t });
+      // left/right: quãng chiếm chỗ THẬT của nhóm trên trang (pt) — dùng bù
+      // bề rộng khi ô sửa phải thay font (metrics khác font gốc).
+      groups.push({ key, rep: r, text: t, left: r.rect.left, right: r.rect.right });
     }
     prev = r;
   }
@@ -3052,6 +3068,8 @@ function startBlockTextEdit(o, lines, ev) {
         const span = document.createElement("span");
         span.textContent = g.text;
         span.dataset.styleRun = String(g.rep.index);
+        // Bề rộng nhóm trên trang (pt) — pass bù metrics trong fitEditLinesToPdf.
+        if (g.right > g.left) span.dataset.pdfw = String(g.right - g.left);
         span.style.fontFamily = editFontStack(g.rep, g.rep.fontFamily || o.fontFamily);
         span.style.fontWeight = g.rep.fontBold ? "bold" : "normal";
         span.style.fontStyle = g.rep.fontItalic ? "italic" : "normal";
@@ -3128,8 +3146,11 @@ function startBlockTextEdit(o, lines, ev) {
     sel.addRange(r);
   }
   ce.scrollIntoView({ block: "center", behavior: "instant" });
+  // Trong ô sửa luôn cho phép B/I trên phần bôi đen (chuẩn Word).
+  $("edBold").disabled = false;
+  $("edItalic").disabled = false;
   $("editHint").textContent =
-    "Sửa cả đoạn — Enter: xuống dòng · Ctrl+Enter hoặc bấm ra ngoài: áp dụng · Esc: huỷ";
+    "Sửa cả đoạn — Enter: xuống dòng · Bôi đen + B/I (Ctrl+B/I): đậm/nghiêng từng chữ · Ctrl+Enter: áp dụng · Esc: huỷ";
 
   // Đọc nội dung theo DÒNG từ contenteditable (div/br → \n).
   const readText = () => {
@@ -3148,8 +3169,13 @@ function startBlockTextEdit(o, lines, ev) {
         const txt = (node.textContent || "").replace(/\u00a0/g, " ");
         if (!txt || node.nodeName === "BR") continue;
         let si = null;
+        let bold = null;
+        let italic = null;
         if (node.nodeType === 1 && node.dataset && node.dataset.styleRun) {
           si = Number(node.dataset.styleRun);
+          // Override B/I ng\u01b0\u1eddi d\u00f9ng \u0111\u1eb7t cho ri\u00eang \u0111o\u1ea1n (b\u00f4i \u0111en \u2192 B/I).
+          if (node.dataset.boldOverride != null) bold = node.dataset.boldOverride === "1";
+          if (node.dataset.italicOverride != null) italic = node.dataset.italicOverride === "1";
         } else {
           const pick = (sib) =>
             sib && sib.nodeType === 1 && sib.dataset && sib.dataset.styleRun
@@ -3158,8 +3184,12 @@ function startBlockTextEdit(o, lines, ev) {
           const p = pick(node.previousSibling);
           si = p != null ? p : pick(node.nextSibling);
         }
-        if (segs.length && segs[segs.length - 1].style === si) segs[segs.length - 1].text += txt;
-        else segs.push({ text: txt, style: si });
+        const last = segs[segs.length - 1];
+        if (last && last.style === si && last.bold === bold && last.italic === italic) {
+          last.text += txt;
+        } else {
+          segs.push({ text: txt, style: si, bold, italic });
+        }
       }
       const known = segs.find((g) => g.style != null);
       for (const g of segs) {
@@ -3191,11 +3221,13 @@ function startBlockTextEdit(o, lines, ev) {
       const styleCount = new Set(
         rich.flatMap((line) => line.map((g) => styleKeyOf(state.editObjects.find((x) => x.index === g.style) || {})))
       ).size;
+      // Có override B/I từng đoạn → bắt buộc đi đường rich dù khối 1 style.
+      const hasOverride = rich.some((line) => line.some((g) => g.bold != null || g.italic != null));
       stageEditOp({
         op: "reflowText",
         indices: allRuns.map((r) => r.index),
         text,
-        richLines: styleCount > 1 ? rich : null,
+        richLines: styleCount > 1 || hasOverride ? rich : null,
       });
     } else {
       $("editHint").textContent = "";
@@ -3272,6 +3304,28 @@ function fitEditLinesToPdf(ce, lines, s, page) {
     }
   }
 
+  // (1b) BỀ RỘNG từng nhóm style — kiểu Adobe Sans MM: khi font trong ô sửa
+  // không phải font gốc (thay bằng Noto đóng gói…), bề rộng chữ lệch so với
+  // trang → bù bằng letter-spacing để mỗi nhóm chiếm ĐÚNG quãng gốc (chữ nằm
+  // trùng chữ, con trỏ đặt đúng chỗ). Font nhúng đúng thì lệch <2%, bỏ qua.
+  ce.querySelectorAll("span[data-style-run][data-pdfw]").forEach((sp) => {
+    const text = sp.textContent || "";
+    if (text.trim().length < 2) return;
+    const target = parseFloat(sp.dataset.pdfw) * s;
+    if (!(target > 4)) return;
+    const range = document.createRange();
+    range.selectNodeContents(sp);
+    const actual = range.getBoundingClientRect().width;
+    if (!(actual > 1)) return;
+    const diff = target - actual;
+    if (Math.abs(diff) / target <= 0.02) return;
+    const fs = parseFloat(sp.style.fontSize) || 12;
+    const perChar = diff / text.length;
+    // Kẹp ±18% cỡ chữ — lệch quá mức là dữ liệu bất thường, đừng phá layout.
+    const ls = Math.max(-0.18 * fs, Math.min(0.18 * fs, perChar));
+    if (Math.abs(ls) > 0.05) sp.style.letterSpacing = ls.toFixed(2) + "px";
+  });
+
   // (2) Vị trí từng dòng (đo lại sau khi đã chỉnh cỡ).
   const imgR = img.getBoundingClientRect();
   for (let i = 0; i < divs.length && i < lines.length; i++) {
@@ -3312,6 +3366,77 @@ function firstTextRect(div) {
   range.selectNodeContents(tn);
   const rects = range.getClientRects();
   return rects.length ? rects[0] : null;
+}
+
+// ---- Format TỪNG CHỮ trong ô sửa (bôi đen → B/I, chuẩn Word/Foxit) ----
+// Tách span[data-style-run] theo vùng chọn; phần được chọn thành span riêng
+// mang override (data-bold-override / data-italic-override) — commit gửi
+// override từng đoạn để engine lấy font BIẾN THỂ thật (không giả lập đậm).
+function toggleInlineFormat(prop) {
+  const ce = $("editOverlay").querySelector(".edit-inline");
+  if (!ce) return false;
+  const sel = window.getSelection();
+  if (!sel.rangeCount || sel.isCollapsed) return false;
+  const range = sel.getRangeAt(0);
+  if (!ce.contains(range.commonAncestorContainer)) return false;
+  const walker = document.createTreeWalker(ce, NodeFilter.SHOW_TEXT);
+  const parts = [];
+  let n;
+  while ((n = walker.nextNode())) {
+    if (!range.intersectsNode(n)) continue;
+    const start = n === range.startContainer ? range.startOffset : 0;
+    const end = n === range.endContainer ? range.endOffset : (n.textContent || "").length;
+    if (end > start) parts.push({ node: n, start, end });
+  }
+  const spanOf = (node) =>
+    node.parentElement && node.parentElement.closest("span[data-style-run]");
+  const targets = parts.filter((p) => spanOf(p.node));
+  if (!targets.length) return false;
+  const isOn = (sp) =>
+    prop === "bold"
+      ? sp.style.fontWeight === "bold" || parseInt(sp.style.fontWeight, 10) >= 600
+      : sp.style.fontStyle === "italic";
+  // Chuẩn Word: tất cả phần chọn đã ở trạng thái đó → tắt; còn lại → bật.
+  const turnOn = !targets.every((p) => isOn(spanOf(p.node)));
+  for (const p of targets) {
+    const sp = spanOf(p.node);
+    const whole =
+      p.start === 0 && p.end === (p.node.textContent || "").length && sp.childNodes.length === 1;
+    if (whole) {
+      applyInlineOverride(sp, prop, turnOn);
+      continue;
+    }
+    // Tách text node thành [trước][chọn][sau], mỗi phần bọc span cùng gốc.
+    let mid = p.node;
+    if (p.start > 0) mid = mid.splitText(p.start);
+    if (p.end - p.start < (mid.textContent || "").length) mid.splitText(p.end - p.start);
+    const frag = document.createDocumentFragment();
+    for (const child of [...sp.childNodes]) {
+      const piece = sp.cloneNode(false);
+      delete piece.dataset.pdfw; // đã tách — bề rộng gốc không còn ứng với đoạn
+      piece.textContent = child.textContent;
+      if (child === mid) applyInlineOverride(piece, prop, turnOn);
+      frag.appendChild(piece);
+    }
+    sp.replaceWith(frag);
+  }
+  sel.removeAllRanges(); // DOM đã đổi — bỏ vùng chọn, giữ focus trong ô
+  ce.focus();
+  $("editHint").textContent = turnOn
+    ? (prop === "bold" ? "Đã in đậm phần bôi đen" : "Đã in nghiêng phần bôi đen") +
+      " — Ctrl+Enter để áp dụng"
+    : "Đã bỏ " + (prop === "bold" ? "in đậm" : "in nghiêng") + " phần bôi đen";
+  return true;
+}
+
+function applyInlineOverride(sp, prop, on) {
+  if (prop === "bold") {
+    sp.style.fontWeight = on ? "bold" : "normal";
+    sp.dataset.boldOverride = on ? "1" : "0";
+  } else {
+    sp.style.fontStyle = on ? "italic" : "normal";
+    sp.dataset.italicOverride = on ? "1" : "0";
+  }
 }
 
 // Đổi thuộc tính chữ cho CẢ DÒNG đang chọn: setText từng run (giữ nội dung
@@ -4263,11 +4388,21 @@ $("edFontFamily").addEventListener("change", () => {
   const fam = $("edFontFamily").value;
   if (fam) applyTextPropToSelected({ fontFamily: fam });
 });
+// B/I: đang mở ô sửa + có bôi đen → format RIÊNG phần bôi đen; ngoài ô sửa →
+// đổi cả dòng đang chọn như cũ. mousedown preventDefault để bấm nút không
+// cướp focus của ô sửa (blur = commit sớm, mất vùng chọn).
+for (const id of ["edBold", "edItalic"]) {
+  $(id).addEventListener("mousedown", (e) => {
+    if ($("editOverlay").querySelector(".edit-inline")) e.preventDefault();
+  });
+}
 $("edBold").addEventListener("click", () => {
+  if (toggleInlineFormat("bold")) return;
   const o = state.editObjects.find((x) => x.index === state.editSel);
   if (o) applyTextPropToSelected({ bold: !o.fontBold });
 });
 $("edItalic").addEventListener("click", () => {
+  if (toggleInlineFormat("italic")) return;
   const o = state.editObjects.find((x) => x.index === state.editSel);
   if (o) applyTextPropToSelected({ italic: !o.fontItalic });
 });
@@ -4348,6 +4483,13 @@ window.addEventListener("keydown", (e) => {
     }
     finishEditing(); closeNotePopup(); closeColorPopover(); deselectAnnot(); setTool(null);
     return;
+  }
+  // Ctrl+B / Ctrl+I trong ô sửa: format phần bôi đen (chuẩn Word).
+  if (e.ctrlKey && !e.altKey && state.editMode && (e.key === "b" || e.key === "B")) {
+    if (toggleInlineFormat("bold")) { e.preventDefault(); return; }
+  }
+  if (e.ctrlKey && !e.altKey && state.editMode && (e.key === "i" || e.key === "I")) {
+    if (toggleInlineFormat("italic")) { e.preventDefault(); return; }
   }
   if ((e.key === "Delete" || e.key === "Backspace") && !typing && state.editMode && state.editSel != null) {
     e.preventDefault();

@@ -17,17 +17,18 @@
 
 use std::collections::HashMap;
 
+use crate::tounicode::FontMapping;
+
 /// Bytes font sẵn sàng cho FontFace: vá nếu cần, còn lại giữ nguyên.
-/// `code_to_uni`: map mã→Unicode từ /ToUnicode của PDF (cho các mã tuỳ biến
-/// ngoài ASCII — chữ Việt trong subset LibreOffice); None → chỉ ASCII
-/// identity + MacRoman.
+/// `mapping`: giải mã từ PDF (/ToUnicode + CIDToGIDMap) — cho mã tuỳ biến của
+/// subset LibreOffice lẫn font CID/Identity-H (Word/InDesign) KHÔNG có cmap.
 pub(crate) fn web_compatible_font(
     data: &[u8],
     bold: bool,
     italic: bool,
-    code_to_uni: Option<&HashMap<u32, u32>>,
+    mapping: Option<&FontMapping>,
 ) -> Vec<u8> {
-    try_fix(data, bold, italic, code_to_uni).unwrap_or_else(|| data.to_vec())
+    try_fix(data, bold, italic, mapping).unwrap_or_else(|| data.to_vec())
 }
 
 const TAG_TRUE: u32 = u32::from_be_bytes(*b"true");
@@ -37,21 +38,23 @@ fn try_fix(
     data: &[u8],
     bold: bool,
     italic: bool,
-    code_to_uni: Option<&HashMap<u32, u32>>,
+    mapping: Option<&FontMapping>,
 ) -> Option<Vec<u8>> {
     if data.len() < 12 {
         return None;
     }
     let ver = u32::from_be_bytes(data[0..4].try_into().ok()?);
     if ver != 0x0001_0000 && ver != TAG_TRUE && ver != TAG_OTTO {
-        return None; // không phải sfnt (CFF trần...) — không đụng vào
+        return None; // không phải sfnt — CFF trần đi đường wrap_bare_cff
     }
     let num = u16::from_be_bytes(data[4..6].try_into().ok()?) as usize;
     if num == 0 || data.len() < 12 + num * 16 {
         return None;
     }
-    let mut tables: Vec<([u8; 4], Vec<u8>)> = Vec::with_capacity(num + 1);
+    let mut tables: Vec<([u8; 4], Vec<u8>)> = Vec::with_capacity(num + 4);
     let mut has_os2 = false;
+    let mut has_name = false;
+    let mut has_post = false;
     for i in 0..num {
         let o = 12 + i * 16;
         let tag: [u8; 4] = data[o..o + 4].try_into().ok()?;
@@ -60,28 +63,162 @@ fn try_fix(
         if off.checked_add(len)? > data.len() {
             return None; // danh mục hỏng — trả nguyên trạng cho lành
         }
-        if &tag == b"OS/2" {
-            has_os2 = true;
+        match &tag {
+            b"OS/2" => has_os2 = true,
+            b"name" => has_name = true,
+            b"post" => has_post = true,
+            _ => {}
         }
         tables.push((tag, data[off..off + len].to_vec()));
     }
-    // cmap (1,0) format 0/6 — OTS không hỗ trợ → chuyển sang (3,1) format 4.
+    let num_glyphs = read_num_glyphs(&tables);
+    // cmap: (1,0) fmt 0/6 → chuyển sang (3,1) fmt 4; KHÔNG có cmap (font
+    // CID/Identity-H của Word) → dựng mới từ /ToUnicode × CIDToGIDMap.
     let mut cmap_changed = false;
-    if let Some(ci) = tables.iter().position(|(t, _)| t == b"cmap") {
-        if let Some(converted) = convert_cmap(&tables[ci].1, code_to_uni) {
-            tables[ci].1 = converted;
-            cmap_changed = true;
+    match tables.iter().position(|(t, _)| t == b"cmap") {
+        Some(ci) => {
+            if let Some(converted) =
+                convert_cmap(&tables[ci].1, mapping.map(|m| &m.code_to_uni))
+            {
+                tables[ci].1 = converted;
+                cmap_changed = true;
+            } else if !cmap_has_unicode_subtable(&tables[ci].1) {
+                if let Some(cm) = mapping.and_then(|m| build_cid_cmap(m, num_glyphs)) {
+                    tables[ci].1 = cm;
+                    cmap_changed = true;
+                }
+            }
+        }
+        None => {
+            if let Some(cm) = mapping.and_then(|m| build_cid_cmap(m, num_glyphs)) {
+                tables.push((*b"cmap", cm));
+                cmap_changed = true;
+            }
         }
     }
-    if has_os2 && ver == 0x0001_0000 && !cmap_changed {
+    if has_os2 && has_name && has_post && ver == 0x0001_0000 && !cmap_changed {
         return None; // đã chuẩn sẵn — giữ nguyên bytes gốc
     }
     if !has_os2 {
         let os2 = build_os2(&tables, bold, italic)?;
         tables.push((*b"OS/2", os2));
     }
+    // OTS cũng BẮT BUỘC name + post — subset CID hay bỏ cả hai.
+    if !has_name {
+        tables.push((*b"name", build_name()));
+    }
+    if !has_post {
+        tables.push((*b"post", build_post()));
+    }
     tables.sort_by(|a, b| a.0.cmp(&b.0));
     Some(assemble(ver, tables))
+}
+
+/// numGlyphs từ maxp (chặn GID rác khi dựng cmap); 0 = không rõ, không chặn.
+fn read_num_glyphs(tables: &[([u8; 4], Vec<u8>)]) -> u16 {
+    tables
+        .iter()
+        .find(|(t, _)| t == b"maxp")
+        .and_then(|(_, b)| b.get(4..6))
+        .and_then(|s| s.try_into().ok())
+        .map(u16::from_be_bytes)
+        .unwrap_or(0)
+}
+
+/// cmap đã có subtable Unicode OTS chấp nhận chưa ((0,*), (3,1), (3,10))?
+fn cmap_has_unicode_subtable(cmap: &[u8]) -> bool {
+    let Some(n) = cmap.get(2..4).and_then(|s| s.try_into().ok()).map(u16::from_be_bytes) else {
+        return false;
+    };
+    for i in 0..n as usize {
+        let o = 4 + i * 8;
+        let Some(plat) = cmap.get(o..o + 2).and_then(|s| s.try_into().ok()).map(u16::from_be_bytes)
+        else {
+            return false;
+        };
+        let Some(enc) =
+            cmap.get(o + 2..o + 4).and_then(|s| s.try_into().ok()).map(u16::from_be_bytes)
+        else {
+            return false;
+        };
+        if plat == 0 || (plat == 3 && (enc == 1 || enc == 10)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// cmap (3,1) format 4 cho font CID/Identity-H: Unicode ← /ToUnicode(mã),
+/// GID ← CIDToGIDMap(mã) (Identity = chính mã). Bỏ mapping ngoài BMP/GID rác.
+fn build_cid_cmap(m: &FontMapping, num_glyphs: u16) -> Option<Vec<u8>> {
+    if !m.is_cid || m.code_to_uni.is_empty() {
+        return None;
+    }
+    let mut pairs: Vec<(u32, u16)> = Vec::new();
+    for (&code, &uni) in &m.code_to_uni {
+        if uni == 0 || uni > 0xFFFF {
+            continue;
+        }
+        let gid = match &m.cid_to_gid {
+            Some(map) => *map.get(code as usize).unwrap_or(&0),
+            None => {
+                if code > 0xFFFF {
+                    continue;
+                }
+                code as u16
+            }
+        };
+        if gid == 0 || (num_glyphs != 0 && gid >= num_glyphs) {
+            continue;
+        }
+        pairs.push((uni, gid));
+    }
+    if pairs.is_empty() {
+        return None;
+    }
+    pairs.sort_by_key(|p| p.0);
+    pairs.dedup_by_key(|p| p.0);
+    Some(build_cmap_format4(&pairs))
+}
+
+/// name tối thiểu (format 0, family + subfamily, Windows Unicode en-US) — OTS
+/// bắt buộc có bảng name; nội dung không ảnh hưởng hiển thị (CSS đặt alias).
+fn build_name() -> Vec<u8> {
+    let entries: [(u16, &str); 2] = [(1, "FFX Embedded"), (2, "Regular")];
+    let mut strings: Vec<u8> = Vec::new();
+    let mut records: Vec<u8> = Vec::new();
+    for (id, s) in entries {
+        let start = strings.len() as u16;
+        for u in s.encode_utf16() {
+            strings.extend_from_slice(&u.to_be_bytes());
+        }
+        let len = strings.len() as u16 - start;
+        records.extend_from_slice(&3u16.to_be_bytes()); // platform Windows
+        records.extend_from_slice(&1u16.to_be_bytes()); // encoding Unicode BMP
+        records.extend_from_slice(&0x0409u16.to_be_bytes()); // en-US
+        records.extend_from_slice(&id.to_be_bytes());
+        records.extend_from_slice(&len.to_be_bytes());
+        records.extend_from_slice(&start.to_be_bytes());
+    }
+    let mut out = Vec::with_capacity(6 + records.len() + strings.len());
+    out.extend_from_slice(&0u16.to_be_bytes()); // format 0
+    out.extend_from_slice(&(entries.len() as u16).to_be_bytes());
+    out.extend_from_slice(&((6 + records.len()) as u16).to_be_bytes()); // stringOffset
+    out.extend_from_slice(&records);
+    out.extend_from_slice(&strings);
+    out
+}
+
+/// post version 3.0 (32 byte, không tên glyph) — đủ cho OTS.
+fn build_post() -> Vec<u8> {
+    let mut v = Vec::with_capacity(32);
+    v.extend_from_slice(&0x0003_0000u32.to_be_bytes()); // version 3.0
+    v.extend_from_slice(&0i32.to_be_bytes()); // italicAngle (Fixed)
+    v.extend_from_slice(&(-100i16).to_be_bytes()); // underlinePosition
+    v.extend_from_slice(&50i16.to_be_bytes()); // underlineThickness
+    v.extend_from_slice(&0u32.to_be_bytes()); // isFixedPitch
+    v.extend_from_slice(&[0u8; 16]); // min/max mem Type42/Type1
+    v
 }
 
 /// MacRoman 0x80–0xFF → Unicode (bảng chuẩn Apple) — fallback cho mã cao khi
@@ -412,11 +549,15 @@ mod tests {
         let subset = fake_subset();
         let fixed = web_compatible_font(&subset, true, false, None);
         assert_ne!(fixed, subset, "phải được vá");
-        // Tag chuẩn hoá + có OS/2 + danh mục sắp theo tag.
+        // Tag chuẩn hoá + có OS/2 + name/post tổng hợp + danh mục sắp theo tag.
         assert_eq!(&fixed[0..4], &0x0001_0000u32.to_be_bytes());
         let dir = table_dir(&fixed);
         let tags: Vec<&str> = dir.iter().map(|(t, _, _)| t.as_str()).collect();
-        assert_eq!(tags, vec!["OS/2", "glyf", "head", "hhea"], "sắp theo tag: {tags:?}");
+        assert_eq!(
+            tags,
+            vec!["OS/2", "glyf", "head", "hhea", "name", "post"],
+            "sắp theo tag: {tags:?}"
+        );
         // OS/2 đọc lại đúng nội dung suy ra.
         let (_, off, len) = dir[0].clone();
         let os2 = &fixed[off..off + len];
@@ -482,12 +623,17 @@ mod tests {
         0
     }
 
+    fn mapping(uni: HashMap<u32, u32>, is_cid: bool, cid_to_gid: Option<Vec<u16>>) -> FontMapping {
+        FontMapping { code_to_uni: uni, is_cid, cid_to_gid }
+    }
+
     #[test]
     fn unsupported_cmap_is_converted_to_windows_format4() {
         let subset = fake_subset_with_cmap();
         let mut uni = HashMap::new();
         uni.insert(1u32, 0x1EA3u32); // mã 1 = 'ả'
-        let fixed = web_compatible_font(&subset, false, false, Some(&uni));
+        let m = mapping(uni, false, None);
+        let fixed = web_compatible_font(&subset, false, false, Some(&m));
         assert_ne!(fixed, subset);
         // Tìm bảng cmap mới.
         let num = u16::from_be_bytes(fixed[4..6].try_into().unwrap()) as usize;
@@ -510,5 +656,56 @@ mod tests {
             .map(|i| String::from_utf8_lossy(&fixed[12 + i * 16..16 + i * 16]).to_string())
             .collect();
         assert!(tags.contains(&"OS/2".to_string()), "tags: {tags:?}");
+    }
+
+    /// Font CID/Identity-H kiểu Word: KHÔNG có cmap, mã = CID, GID = CID
+    /// (Identity) hoặc qua bảng CIDToGIDMap → dựng cmap (3,1) fmt 4 mới.
+    fn fake_cid_subset() -> Vec<u8> {
+        let mut head = vec![0u8; 54];
+        head[18..20].copy_from_slice(&2048u16.to_be_bytes());
+        let mut hhea = vec![0u8; 36];
+        hhea[4..6].copy_from_slice(&1638i16.to_be_bytes());
+        hhea[6..8].copy_from_slice(&(-410i16).to_be_bytes());
+        let mut maxp = vec![0u8; 32];
+        maxp[4..6].copy_from_slice(&50u16.to_be_bytes()); // numGlyphs = 50
+        let tables: Vec<([u8; 4], Vec<u8>)> =
+            vec![(*b"glyf", vec![0u8; 8]), (*b"head", head), (*b"hhea", hhea), (*b"maxp", maxp)];
+        assemble(0x0001_0000, tables)
+    }
+
+    #[test]
+    fn cid_font_without_cmap_gets_synthesized_cmap() {
+        let subset = fake_cid_subset();
+        let mut uni = HashMap::new();
+        uni.insert(5u32, 0x1EA3u32); // CID 5 = 'ả'
+        uni.insert(6u32, 0x0041u32); // CID 6 = 'A'
+        uni.insert(99u32, 0x0042u32); // CID 99 ≥ numGlyphs → phải bị bỏ
+        // Identity: GID = CID.
+        let m = mapping(uni.clone(), true, None);
+        let fixed = web_compatible_font(&subset, false, false, Some(&m));
+        assert_ne!(fixed, subset, "phải được vá");
+        let dir = table_dir(&fixed);
+        let tags: Vec<&str> = dir.iter().map(|(t, _, _)| t.as_str()).collect();
+        for need in ["cmap", "OS/2", "name", "post"] {
+            assert!(tags.contains(&need), "thiếu {need}: {tags:?}");
+        }
+        let (_, off, len) = dir[tags.iter().position(|t| *t == "cmap").unwrap()].clone();
+        let cm = fixed[off..off + len].to_vec();
+        assert_eq!(lookup_f4(&cm, 0x1EA3), 5, "'ả' → GID 5 (Identity)");
+        assert_eq!(lookup_f4(&cm, 0x41), 6, "'A' → GID 6");
+        assert_eq!(lookup_f4(&cm, 0x42), 0, "GID ngoài numGlyphs bị bỏ");
+
+        // Có bảng CIDToGIDMap: CID 5 → GID 7.
+        let mut c2g = vec![0u16; 10];
+        c2g[5] = 7;
+        c2g[6] = 8;
+        let m2 = mapping(uni, true, Some(c2g));
+        let fixed2 = web_compatible_font(&subset, false, false, Some(&m2));
+        let dir2 = table_dir(&fixed2);
+        let tags2: Vec<&str> = dir2.iter().map(|(t, _, _)| t.as_str()).collect();
+        let (_, o2, l2) = dir2[tags2.iter().position(|t| *t == "cmap").unwrap()].clone();
+        let cm2 = fixed2[o2..o2 + l2].to_vec();
+        assert_eq!(lookup_f4(&cm2, 0x1EA3), 7, "'ả' → GID 7 theo CIDToGIDMap");
+        assert_eq!(lookup_f4(&cm2, 0x41), 8);
     }
 }

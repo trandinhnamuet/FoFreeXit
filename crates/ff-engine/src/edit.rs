@@ -155,6 +155,26 @@ pub struct RichSeg {
     pub text: String,
     /// Index (danh sách phẳng) của run mang style cho đoạn này.
     pub style: u16,
+    /// Override đậm/nghiêng NGƯỜI DÙNG đặt cho riêng đoạn này (bôi đen 1 chữ
+    /// rồi bấm B/I trong ô sửa). None = giữ theo run mang style. Khi override
+    /// đổi biến thể, engine lấy font biến thể THẬT cùng họ (fontmatch), không
+    /// dùng lại font gốc.
+    pub bold: Option<bool>,
+    pub italic: Option<bool>,
+}
+
+/// Khoá style hiệu dụng của 1 đoạn rich: run nguồn + override đậm/nghiêng.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+struct RichKey {
+    style: u16,
+    bold: Option<bool>,
+    italic: Option<bool>,
+}
+
+impl RichKey {
+    fn of(seg: &RichSeg) -> Self {
+        RichKey { style: seg.style, bold: seg.bold, italic: seg.italic }
+    }
 }
 
 fn quad_to_rect(q: &PdfQuadPoints) -> Rect {
@@ -529,8 +549,8 @@ pub fn font_data(
     let (_, bold, italic) = text_object_style(t);
     let raw_name = t.font().name();
     let fname = if raw_name.trim().is_empty() { t.font().family() } else { raw_name };
-    let uni = crate::tounicode::code_to_unicode(input, page_index, &fname);
-    Ok(crate::fontfix::web_compatible_font(&data, bold, italic, uni.as_ref()))
+    let mapping = crate::tounicode::font_mapping(input, page_index, &fname);
+    Ok(crate::fontfix::web_compatible_font(&data, bold, italic, mapping.as_ref()))
 }
 
 pub fn list_objects(
@@ -708,8 +728,12 @@ struct ReflowPlan {
     /// đúng cỡ dòng gốc thứ i (tiêu đề 22.5/20pt không bị ép về 1 cỡ).
     line_styles: Vec<LineStyle>,
     color: PdfColor,
-    /// Reflow NHIỀU STYLE: các dòng cứng theo đoạn + bảng style đã resolve.
-    rich: Option<(Vec<Vec<RichSeg>>, HashMap<u16, RichStyle>)>,
+    /// Reflow NHIỀU STYLE: các dòng cứng theo đoạn + bảng style đã resolve
+    /// (khoá theo run nguồn + override đậm/nghiêng của đoạn).
+    rich: Option<(Vec<Vec<RichSeg>>, HashMap<RichKey, RichStyle>)>,
+    /// Khối OCR (mọi run là text ẨN trên ảnh scan): bbox vùng chữ cũ — vẽ
+    /// rect TRẮNG che ảnh rồi vẽ text mới HIỆN màu đen.
+    ocr_cover: Option<Rect>,
 }
 
 /// Style đã resolve cho 1 đoạn rich: font vẽ + bytes đo + màu + cỡ.
@@ -1045,6 +1069,43 @@ pub fn apply_edits(
                         }
                         idxs.sort_unstable();
                     }
+                    // OCR: mọi run của khối là text ẨN (lớp OCR đè trên ảnh
+                    // scan) → khi vẽ lại phải CHE vùng chữ cũ trên ảnh (rect
+                    // trắng) và vẽ text mới HIỆN màu đen — hành vi "sửa tài
+                    // liệu scan" chuẩn Foxit.
+                    let ocr_cover: Option<Rect> = {
+                        let mut all_inv = !idxs.is_empty();
+                        let mut bb = Rect {
+                            left: f32::INFINITY,
+                            bottom: f32::INFINITY,
+                            right: f32::NEG_INFINITY,
+                            top: f32::NEG_INFINITY,
+                        };
+                        for &i in &idxs {
+                            let entry = &entries[i as usize];
+                            let Ok(obj) = object_at_path(&page, &entry.path) else {
+                                all_inv = false;
+                                break;
+                            };
+                            let Some(t) = obj.as_text_object() else {
+                                all_inv = false;
+                                break;
+                            };
+                            if t.render_mode() != PdfPageTextRenderMode::Invisible {
+                                all_inv = false;
+                                break;
+                            }
+                            if let Ok(q) = obj.bounds() {
+                                let r = mat_rect(entry.acc, &quad_to_rect(&q));
+                                bb.left = bb.left.min(r.left);
+                                bb.bottom = bb.bottom.min(r.bottom);
+                                bb.right = bb.right.max(r.right);
+                                bb.top = bb.top.max(r.top);
+                            }
+                        }
+                        if all_inv && bb.left.is_finite() { Some(bb) } else { None }
+                    };
+
                     // Run neo: baseline cao nhất, trái nhất.
                     let anchor_idx = geos
                         .iter()
@@ -1192,20 +1253,22 @@ pub fn apply_edits(
                         (ReflowFont::Loaded(key), Some(bytes))
                     };
 
-                    // Reflow NHIỀU STYLE: resolve font/màu/cỡ TỪNG style-run
-                    // (thang giữ-font như trên, tính theo text của style đó).
-                    let rich_resolved: Option<(Vec<Vec<RichSeg>>, HashMap<u16, RichStyle>)> =
+                    // Reflow NHIỀU STYLE: resolve font/màu/cỡ TỪNG khoá style
+                    // (run nguồn + override đậm/nghiêng của đoạn — bôi đen 1
+                    // chữ bấm B/I tạo khoá riêng với font BIẾN THỂ thật).
+                    let rich_resolved: Option<(Vec<Vec<RichSeg>>, HashMap<RichKey, RichStyle>)> =
                         if let Some(rich_lines) = rich {
-                            let mut style_ids: Vec<u16> =
-                                rich_lines.iter().flatten().map(|s| s.style).collect();
-                            style_ids.sort_unstable();
+                            let mut style_ids: Vec<RichKey> =
+                                rich_lines.iter().flatten().map(RichKey::of).collect();
+                            style_ids.sort_unstable_by_key(|k| (k.style, k.bold, k.italic));
                             style_ids.dedup();
-                            let mut table: HashMap<u16, RichStyle> = HashMap::new();
-                            for sid in style_ids {
+                            let mut table: HashMap<RichKey, RichStyle> = HashMap::new();
+                            for rk in style_ids {
+                                let sid = rk.style;
                                 let style_text: String = rich_lines
                                     .iter()
                                     .flatten()
-                                    .filter(|s| s.style == sid)
+                                    .filter(|s| RichKey::of(s) == rk)
                                     .map(|s| s.text.as_str())
                                     .collect();
                                 let src = if valid(sid) { sid } else { anchor_idx };
@@ -1245,6 +1308,52 @@ pub fn apply_edits(
                                 let s_ascii = style_text
                                     .chars()
                                     .all(|c| c.is_control() || (' '..='~').contains(&c));
+                                let skey = fontmatch::normalize_key(&sfam);
+                                // Override đổi biến thể: font gốc/nhúng là MẶT
+                                // CŨ — phải lấy biến thể thật (cùng họ →
+                                // builtin → substitute), không dùng lại.
+                                let eff_bold = rk.bold.unwrap_or(sbold);
+                                let eff_italic = rk.italic.unwrap_or(sitalic);
+                                if (eff_bold, eff_italic) != (sbold, sitalic) {
+                                    let (sdraw, smeasure) = if let Some(bytes) =
+                                        fontmatch::find_family_font_bytes(&sfam, eff_bold, eff_italic)
+                                            .filter(|b| fontmatch::coverage_ok(b, &style_text))
+                                    {
+                                        let key = (format!("var:{skey}"), eff_bold, eff_italic);
+                                        font_needed
+                                            .entry(key.clone())
+                                            .or_insert(FontLoad::Bytes(bytes.clone()));
+                                        (ReflowFont::Loaded(key), Some(bytes))
+                                    } else if let (Some(builtin), true) =
+                                        (builtin_for(&skey, eff_bold, eff_italic), s_ascii)
+                                    {
+                                        let measure = find_font_bytes(eff_bold, eff_italic);
+                                        let key = (format!("b14:{skey}"), eff_bold, eff_italic);
+                                        font_needed
+                                            .entry(key.clone())
+                                            .or_insert(FontLoad::Builtin(builtin));
+                                        (ReflowFont::Loaded(key), measure)
+                                    } else {
+                                        let (key, bytes) = resolve_substitute_font(
+                                            &sfam, eff_bold, eff_italic, &style_text,
+                                        )?;
+                                        font_needed
+                                            .entry(key.clone())
+                                            .or_insert(FontLoad::Bytes(bytes.clone()));
+                                        (ReflowFont::Loaded(key), Some(bytes))
+                                    };
+                                    table.insert(
+                                        rk,
+                                        RichStyle {
+                                            draw: sdraw,
+                                            measure: smeasure,
+                                            color: scolor,
+                                            tf: stf,
+                                            scaled: sscaled,
+                                        },
+                                    );
+                                    continue;
+                                }
                                 let s_orig_ok = !block_has_nested
                                     && !snested
                                     && semb
@@ -1254,7 +1363,6 @@ pub fn apply_edits(
                                 } else {
                                     None
                                 };
-                                let skey = fontmatch::normalize_key(&sfam);
                                 let (sdraw, smeasure) = if s_orig_ok {
                                     (
                                         ReflowFont::Original(stoken),
@@ -1287,7 +1395,7 @@ pub fn apply_edits(
                                     (ReflowFont::Loaded(key), Some(bytes))
                                 };
                                 table.insert(
-                                    sid,
+                                    rk,
                                     RichStyle {
                                         draw: sdraw,
                                         measure: smeasure,
@@ -1319,6 +1427,7 @@ pub fn apply_edits(
                             line_styles,
                             color,
                             rich: rich_resolved,
+                            ocr_cover,
                         },
                     );
                 }
@@ -1694,6 +1803,25 @@ pub fn apply_edits(
                     };
                     let grow_limit = (plan.width * 1.35).min(avail.max(plan.width * 1.02));
 
+                    // Khối OCR: che vùng chữ scan cũ bằng rect TRẮNG (nới
+                    // 1.5pt) trước khi vẽ; text mới vẽ HIỆN màu đen.
+                    if let Some(cv) = &plan.ocr_cover {
+                        page.objects_mut()
+                            .create_path_object_rect(
+                                PdfRect::new_from_values(
+                                    cv.bottom - 1.5,
+                                    cv.left - 1.5,
+                                    cv.top + 1.5,
+                                    cv.right + 1.5,
+                                ),
+                                None,
+                                None,
+                                Some(PdfColor::new(255, 255, 255, 255)),
+                            )
+                            .map_err(err)?;
+                    }
+                    let ocr_black = plan.ocr_cover.is_some();
+
                     // ---- Vẽ NHIỀU STYLE (dòng lẫn thường + đậm/mono…) ----
                     // Token hoá theo TỪ giữ style; bẻ dòng chung cả khối; mỗi
                     // cụm từ liền kề cùng style = 1 text object với đúng
@@ -1701,23 +1829,23 @@ pub fn apply_edits(
                     if let Some((rich_lines, styles)) = &plan.rich {
                         struct Piece {
                             text: String,
-                            style: u16,
+                            style: RichKey,
                             lead: f32,
                         }
-                        let faces: HashMap<u16, Option<ttf_parser::Face>> = styles
+                        let faces: HashMap<RichKey, Option<ttf_parser::Face>> = styles
                             .iter()
                             .map(|(k, s)| {
                                 (*k, s.measure.as_deref().and_then(|b| ttf_parser::Face::parse(b, 0).ok()))
                             })
                             .collect();
-                        let measure_c = |sid: u16, c: char| -> f32 {
+                        let measure_c = |sid: RichKey, c: char| -> f32 {
                             let sc = styles.get(&sid).map(|s| s.scaled).unwrap_or(plan.scaled);
                             match faces.get(&sid).and_then(|f| f.as_ref()) {
                                 Some(f) => fontmatch::char_advance(f, c, sc),
                                 None => sc * 0.5,
                             }
                         };
-                        let measure_s = |sid: u16, s: &str| -> f32 {
+                        let measure_s = |sid: RichKey, s: &str| -> f32 {
                             s.chars().map(|c| measure_c(sid, c)).sum()
                         };
 
@@ -1727,7 +1855,7 @@ pub fn apply_edits(
                             // Token hoá: tách từ, giữ "glue" khi 2 đoạn dính liền giữa từ.
                             struct Tok {
                                 text: String,
-                                style: u16,
+                                style: RichKey,
                                 glue: bool,
                             }
                             let mut toks: Vec<Tok> = Vec::new();
@@ -1737,7 +1865,7 @@ pub fn apply_edits(
                                 let mut first = true;
                                 for w in seg.text.split_whitespace() {
                                     let glue = first && !starts_ws && !prev_ends_ws && !toks.is_empty();
-                                    toks.push(Tok { text: w.to_string(), style: seg.style, glue });
+                                    toks.push(Tok { text: w.to_string(), style: RichKey::of(seg), glue });
                                     first = false;
                                 }
                                 prev_ends_ws = seg.text.trim().is_empty()
@@ -1835,7 +1963,7 @@ pub fn apply_edits(
                                         if ok {
                                             obj.apply_matrix(PdfMatrix::new(a, b, c2, d, x, y))
                                                 .map_err(err)?;
-                                            obj.set_fill_color(st.color).map_err(err)?;
+                                            obj.set_fill_color(if ocr_black { PdfColor::new(0, 0, 0, 255) } else { st.color }).map_err(err)?;
                                             ir = obj.bounds().ok().map(|q| q.right().value);
                                         }
                                         (ok, ir)
@@ -1862,7 +1990,7 @@ pub fn apply_edits(
                                                 .map_err(err)?;
                                             obj.apply_matrix(PdfMatrix::new(a, b, c2, d, cx, y))
                                                 .map_err(err)?;
-                                            obj.set_fill_color(st.color).map_err(err)?;
+                                            obj.set_fill_color(if ocr_black { PdfColor::new(0, 0, 0, 255) } else { st.color }).map_err(err)?;
                                             let wir =
                                                 obj.bounds().ok().map(|q| q.right().value);
                                             cx = (cx + measure_s(p.style, word))
@@ -1940,7 +2068,7 @@ pub fn apply_edits(
                             if ok {
                                 obj.apply_matrix(PdfMatrix::new(a, b, c2, d, x, y))
                                     .map_err(err)?;
-                                obj.set_fill_color(plan.color).map_err(err)?;
+                                obj.set_fill_color(if ocr_black { PdfColor::new(0, 0, 0, 255) } else { plan.color }).map_err(err)?;
                             }
                             ok
                         };
@@ -1966,7 +2094,7 @@ pub fn apply_edits(
                                     .map_err(err)?;
                                 obj.apply_matrix(PdfMatrix::new(a, b, c2, d, cx, y))
                                     .map_err(err)?;
-                                obj.set_fill_color(plan.color).map_err(err)?;
+                                obj.set_fill_color(if ocr_black { PdfColor::new(0, 0, 0, 255) } else { plan.color }).map_err(err)?;
                                 cx += word.chars().map(|c| measure_at(c, style.scaled)).sum::<f32>()
                                     + space_w;
                             }

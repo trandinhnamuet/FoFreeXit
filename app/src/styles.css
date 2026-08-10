@@ -367,6 +367,32 @@ body.tool-active .annotlayer * { pointer-events: none; }
 #edDiscard { background: #8d3030; }
 #edDiscard:disabled { background: #555; }
 
+/* Màn hình khởi động — hiện NGAY khi HTML paint, mờ dần khi app sẵn sàng. */
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #2b2b2b;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  transition: opacity 0.3s ease;
+}
+.boot-splash.hide { opacity: 0; pointer-events: none; }
+.boot-splash .boot-logo { font-size: 28px; font-weight: 700; color: #7aa2ff; letter-spacing: 1px; }
+.boot-splash .boot-note { font-size: 12px; color: #999; }
+.boot-spin {
+  width: 26px;
+  height: 26px;
+  border: 3px solid #555;
+  border-top-color: #7aa2ff;
+  border-radius: 50%;
+  animation: bootspin 0.9s linear infinite;
+}
+@keyframes bootspin { to { transform: rotate(360deg); } }
+
 .edit-stage {
   flex: 1;
   overflow: auto;

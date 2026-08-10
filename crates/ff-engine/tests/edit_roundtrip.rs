@@ -1546,8 +1546,18 @@ fn rich_reflow_preserves_mixed_styles() {
             indices: vec![idx_a, idx_b],
             text: "Trang quan tri hien thi MOI windowsInitialPassword".into(),
             rich: Some(vec![vec![
-                RichSeg { text: "Trang quan tri hien thi MOI ".into(), style: idx_a },
-                RichSeg { text: "windowsInitialPassword".into(), style: idx_b },
+                RichSeg {
+                    text: "Trang quan tri hien thi MOI ".into(),
+                    style: idx_a,
+                    bold: None,
+                    italic: None,
+                },
+                RichSeg {
+                    text: "windowsInitialPassword".into(),
+                    style: idx_b,
+                    bold: None,
+                    italic: None,
+                },
             ]]),
         }],
         &out,
@@ -1592,4 +1602,136 @@ fn rich_reflow_preserves_mixed_styles() {
         mono.rect,
         plain.rect
     );
+}
+
+/// Fixture kiểu file đã OCR: text render mode 3 (INVISIBLE — lớp chữ ẩn đè
+/// trên ảnh scan để tìm kiếm/copy).
+fn build_invisible_text_pdf(path: &std::path::Path) {
+    use lopdf::{dictionary, Document, Object, Stream};
+    let mut doc = Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+    let f1 = doc.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Helvetica",
+    });
+    let content_id = doc.add_object(Stream::new(
+        dictionary! {},
+        b"BT /F1 14 Tf 3 Tr 72 700 Td (Van ban OCR nhan dien tu anh) Tj ET".to_vec(),
+    ));
+    let page_id = doc.add_object(dictionary! {
+        "Type" => "Page",
+        "Parent" => pages_id,
+        "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        "Resources" => dictionary! { "Font" => dictionary! { "F1" => f1 } },
+        "Contents" => content_id,
+    });
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Kids" => vec![page_id.into()],
+            "Count" => 1,
+        }),
+    );
+    let catalog_id = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    doc.trailer.set("Root", catalog_id);
+    doc.save(path).expect("lưu fixture OCR");
+}
+
+/// Sửa khối text ẨN (file scan đã OCR): engine phải CHE vùng chữ cũ bằng rect
+/// trắng và vẽ text mới HIỆN màu đen — như "edit scanned document" của Foxit.
+#[test]
+fn ocr_invisible_block_becomes_visible_with_cover() {
+    let pdf = pdfium();
+    let input = tmp("ff_edit_ocr_fx.pdf");
+    build_invisible_text_pdf(&input);
+    let out = tmp("ff_edit_ocr_out.pdf");
+    let idx = find_text_index(&pdf, &input, "Van ban OCR");
+    let paths_before = ff_engine::list_objects(&pdf, &input, 0, None)
+        .expect("list in")
+        .iter()
+        .filter(|o| o.kind == ObjectKind::Path)
+        .count();
+
+    ff_engine::apply_edits(
+        &pdf,
+        &input,
+        0,
+        &[EditOp::ReflowText {
+            indices: vec![idx],
+            text: "Van ban OCR DA SUA lai noi dung".into(),
+            rich: None,
+        }],
+        &out,
+        None,
+    )
+    .expect("reflow khối OCR");
+
+    let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
+    let paths_after = objs.iter().filter(|o| o.kind == ObjectKind::Path).count();
+    assert!(paths_after > paths_before, "phải có rect trắng che vùng chữ scan cũ");
+    let t = objs
+        .iter()
+        .find(|o| o.text.as_deref().map(|t| t.contains("DA SUA")).unwrap_or(false))
+        .unwrap_or_else(|| panic!("thiếu text mới: {objs:?}"));
+    assert_eq!(t.color, Some([0, 0, 0, 255]), "chữ mới phải màu đen (hiện)");
+}
+
+/// Format TỪNG CHỮ: bôi đen 1 từ bấm B → seg mang override bold=true; engine
+/// phải vẽ từ đó bằng BIẾN THỂ đậm thật (không phải giả lập), các từ quanh
+/// giữ nguyên; italic tương tự.
+#[test]
+fn rich_seg_bold_italic_override_uses_variant_font() {
+    use ff_engine::RichSeg;
+    let pdf = pdfium();
+    let input = tmp("ff_edit_rich_override.pdf");
+    build_mixed_style_pdf(&input);
+    let out = tmp("ff_edit_rich_override_out.pdf");
+    let idx_a = find_text_index(&pdf, &input, "Trang quan tri");
+
+    ff_engine::apply_edits(
+        &pdf,
+        &input,
+        0,
+        &[EditOp::ReflowText {
+            indices: vec![idx_a],
+            text: "Trang quan tri hien thi".into(),
+            rich: Some(vec![vec![
+                RichSeg { text: "Trang ".into(), style: idx_a, bold: None, italic: None },
+                RichSeg { text: "quan tri ".into(), style: idx_a, bold: Some(true), italic: None },
+                RichSeg { text: "hien ".into(), style: idx_a, bold: None, italic: Some(true) },
+                RichSeg { text: "thi".into(), style: idx_a, bold: None, italic: None },
+            ]]),
+        }],
+        &out,
+        None,
+    )
+    .expect("apply_edits rich override");
+
+    let objs = ff_engine::list_objects(&pdf, &out, 0, None).expect("list out");
+    let find = |needle: &str| {
+        objs.iter()
+            .find(|o| o.text.as_deref().map(|t| t.contains(needle)).unwrap_or(false))
+            .unwrap_or_else(|| panic!("thiếu run '{needle}': {objs:?}"))
+    };
+    let plain = find("Trang");
+    let bolded = find("quan tri");
+    let italicized = find("hien");
+    assert_eq!(plain.font_bold, Some(false), "'Trang' giữ thường: {:?}", plain.font_name);
+    assert_eq!(
+        bolded.font_bold,
+        Some(true),
+        "'quan tri' phải thành ĐẬM thật: {:?}",
+        bolded.font_name
+    );
+    assert_eq!(
+        italicized.font_italic,
+        Some(true),
+        "'hien' phải thành NGHIÊNG thật: {:?}",
+        italicized.font_name
+    );
+    // Cùng baseline, thứ tự trái→phải giữ nguyên.
+    assert!((bolded.rect.bottom - plain.rect.bottom).abs() < 4.0);
+    assert!(bolded.rect.left > plain.rect.left && italicized.rect.left > bolded.rect.left);
 }

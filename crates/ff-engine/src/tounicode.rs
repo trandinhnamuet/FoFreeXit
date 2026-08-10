@@ -10,15 +10,26 @@ use lopdf::{Dictionary, Document as LoDoc, Object};
 
 use crate::formsurgery::{deref, stream_bytes};
 
-/// Map mã→Unicode của font có BaseFont khớp `font_name` (so phần sau prefix
-/// subset "ABCDEF+") trên trang `page_index`; tìm cả trong resources của Form
+/// Thông tin giải mã của 1 font trong PDF — đủ để fontfix dựng cmap Unicode.
+pub(crate) struct FontMapping {
+    /// Mã trong content stream → Unicode (từ /ToUnicode).
+    pub code_to_uni: HashMap<u32, u32>,
+    /// Font CID (Type0/Identity-H): mã = CID. `cid_to_gid`: None = Identity
+    /// (GID = CID — trường hợp phổ biến của Word/InDesign), Some = bảng tra
+    /// từ stream /CIDToGIDMap (2 byte big-endian mỗi CID).
+    pub is_cid: bool,
+    pub cid_to_gid: Option<Vec<u16>>,
+}
+
+/// Mapping của font có BaseFont khớp `font_name` (so phần sau prefix subset
+/// "ABCDEF+") trên trang `page_index`; tìm cả trong resources của Form
 /// XObject (sâu tối đa 3). Không thấy/không parse được → None (fontfix rơi về
 /// ASCII identity + MacRoman).
-pub(crate) fn code_to_unicode(
+pub(crate) fn font_mapping(
     input: &Path,
     page_index: u16,
     font_name: &str,
-) -> Option<HashMap<u32, u32>> {
+) -> Option<FontMapping> {
     let want = font_name.rsplit('+').next().unwrap_or(font_name).trim();
     if want.is_empty() {
         return None;
@@ -36,7 +47,7 @@ fn scan_resources(
     res: &Dictionary,
     want: &str,
     depth: usize,
-) -> Option<HashMap<u32, u32>> {
+) -> Option<FontMapping> {
     if depth > 3 {
         return None;
     }
@@ -54,14 +65,51 @@ fn scan_resources(
                 if suffix != want {
                     continue;
                 }
-                let Ok(tu) = fd.get(b"ToUnicode") else { continue };
-                if let Object::Stream(s) = deref(doc, tu) {
-                    if let Some(m) = parse_cmap(&stream_bytes(s)) {
-                        if !m.is_empty() {
-                            return Some(m);
+                let mut code_to_uni = HashMap::new();
+                if let Ok(tu) = fd.get(b"ToUnicode") {
+                    if let Object::Stream(s) = deref(doc, tu) {
+                        if let Some(m) = parse_cmap(&stream_bytes(s)) {
+                            code_to_uni = m;
                         }
                     }
                 }
+                // Type0 (Identity-H): mã = CID; GID tra qua /CIDToGIDMap của
+                // descendant font (Name "Identity" hoặc stream 2B/CID).
+                let subtype = fd
+                    .get(b"Subtype")
+                    .ok()
+                    .and_then(|o| deref(doc, o).as_name().ok())
+                    .map(|n| n.to_vec())
+                    .unwrap_or_default();
+                let is_cid = subtype == b"Type0";
+                let mut cid_to_gid = None;
+                if is_cid {
+                    if let Ok(desc) = fd.get(b"DescendantFonts") {
+                        let desc = deref(doc, desc);
+                        let first = match desc {
+                            Object::Array(a) => a.first().map(|o| deref(doc, o)),
+                            other => Some(other),
+                        };
+                        if let Some(Ok(dd)) = first.map(|o| o.as_dict()) {
+                            if let Ok(map) = dd.get(b"CIDToGIDMap") {
+                                if let Object::Stream(s) = deref(doc, map) {
+                                    let raw = stream_bytes(s);
+                                    cid_to_gid = Some(
+                                        raw.chunks(2)
+                                            .map(|c| {
+                                                u16::from_be_bytes([c[0], *c.get(1).unwrap_or(&0)])
+                                            })
+                                            .collect(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                if code_to_uni.is_empty() {
+                    continue; // không có ToUnicode — thử font trùng tên khác
+                }
+                return Some(FontMapping { code_to_uni, is_cid, cid_to_gid });
             }
         }
     }

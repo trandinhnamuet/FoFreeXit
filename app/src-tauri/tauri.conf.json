@@ -13,7 +13,8 @@
         "label": "main",
         "title": "FoFreeXit — PDF Viewer (Phase 1)",
         "width": 1100,
-        "height": 850
+        "height": 850,
+        "visible": false
       }
     ],
     "security": {

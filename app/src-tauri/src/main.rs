@@ -703,6 +703,62 @@ fn edit_list_objects(path: String, page: u16, password: Option<String>) -> Resul
         .collect())
 }
 
+/// TỰ ĐĂNG KÝ "Open with" mỗi lần khởi động (HKCU — không cần admin): bản
+/// portable hay bị di chuyển/ghi đè → entry Applications trong registry trỏ
+/// đường dẫn exe CŨ, Windows không khởi chạy được và hiện lại hộp "chọn ứng
+/// dụng khác". Ghi lại command trỏ exe HIỆN TẠI + ProgID cho .pdf để
+/// FoFreeXit luôn có mặt (và chạy được) trong menu Open with.
+#[cfg(windows)]
+fn register_open_with() {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let Ok(exe) = std::env::current_exe() else { return };
+    let exe_s = exe.to_string_lossy().to_string();
+    let open_cmd = format!("\"{exe_s}\" \"%1\"");
+    let icon = format!("\"{exe_s}\",0");
+    let reg = |args: &[&str]| {
+        let _ = std::process::Command::new("reg")
+            .args(args)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
+    };
+    // Entry của picker "Choose another app" (Windows tạo khi user browse exe).
+    reg(&[
+        "add",
+        r"HKCU\Software\Classes\Applications\FoFreeXit.exe\shell\open\command",
+        "/ve", "/t", "REG_SZ", "/d", &open_cmd, "/f",
+    ]);
+    reg(&[
+        "add",
+        r"HKCU\Software\Classes\Applications\FoFreeXit.exe",
+        "/v", "FriendlyAppName", "/t", "REG_SZ", "/d", "FoFreeXit", "/f",
+    ]);
+    // ProgID riêng + gắn vào danh sách Open With của .pdf.
+    reg(&[
+        "add",
+        r"HKCU\Software\Classes\FoFreeXit.pdf\shell\open\command",
+        "/ve", "/t", "REG_SZ", "/d", &open_cmd, "/f",
+    ]);
+    reg(&[
+        "add",
+        r"HKCU\Software\Classes\FoFreeXit.pdf",
+        "/ve", "/t", "REG_SZ", "/d", "Tài liệu PDF (FoFreeXit)", "/f",
+    ]);
+    reg(&[
+        "add",
+        r"HKCU\Software\Classes\FoFreeXit.pdf\DefaultIcon",
+        "/ve", "/t", "REG_SZ", "/d", &icon, "/f",
+    ]);
+    reg(&[
+        "add",
+        r"HKCU\Software\Classes\.pdf\OpenWithProgids",
+        "/v", "FoFreeXit.pdf", "/t", "REG_SZ", "/d", "", "/f",
+    ]);
+}
+
+#[cfg(not(windows))]
+fn register_open_with() {}
+
 /// Bytes (base64) của font ĐÓNG GÓI theo app (Noto) — lưới đỡ WYSIWYG cho ô
 /// sửa: glyph không có trong subset nhúng (ký tự mới gõ) hay font không
 /// nhúng đều rơi về font này, KHÔNG rơi về font hệ điều hành.
@@ -782,12 +838,17 @@ struct EditOpDto {
     rich_lines: Option<Vec<Vec<RichSegDto>>>,
 }
 
-/// 1 đoạn cùng style trong reflow nhiều-style.
+/// 1 đoạn cùng style trong reflow nhiều-style. `bold`/`italic`: override
+/// người dùng đặt riêng cho đoạn (bôi đen 1 chữ bấm B/I) — None = theo run.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RichSegDto {
     text: String,
     style: u16,
+    #[serde(default)]
+    bold: Option<bool>,
+    #[serde(default)]
+    italic: Option<bool>,
 }
 
 fn one() -> f32 {
@@ -826,7 +887,12 @@ fn edit_op_from_dto(d: EditOpDto) -> Result<ff_engine::EditOp, String> {
                     .into_iter()
                     .map(|line| {
                         line.into_iter()
-                            .map(|s| ff_engine::RichSeg { text: s.text, style: s.style })
+                            .map(|s| ff_engine::RichSeg {
+                                text: s.text,
+                                style: s.style,
+                                bold: s.bold,
+                                italic: s.italic,
+                            })
                             .collect()
                     })
                     .collect()
@@ -1451,6 +1517,24 @@ fn main() {
     }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            // Cửa sổ tạo ẨN (tauri.conf.json visible:false) — UI gọi show()
+            // khi frontend SẴN SÀNG để user không thấy khung trắng đơ lúc
+            // WebView khởi tạo. Lưới an toàn: JS lỗi sớm thì vẫn hiện sau 4s.
+            use tauri::Manager;
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(4));
+                if let Some(w) = handle.get_webview_window("main") {
+                    if !w.is_visible().unwrap_or(true) {
+                        let _ = w.show();
+                    }
+                }
+            });
+            // Đăng ký Open-with ở nền — không chặn khởi động.
+            std::thread::spawn(register_open_with);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             open_document,
             render_page,
