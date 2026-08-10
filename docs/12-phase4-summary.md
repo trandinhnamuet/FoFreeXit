@@ -606,3 +606,52 @@ Kiểm chứng build 36 (instance riêng port 9223, không đụng phiên user):
   nhúng/đóng gói + Noto Sans Mono), **0 glyph font hệ thống**.
 - Commit chuỗi đó: run mới trong PDF dùng `NotoSans-Regular` NHÚNG
   (embedded=true) từ bộ đóng gói — không còn Arial Windows.
+
+---
+
+# Vòng 8 (10/08/2026): edit chuẩn mọi PDF — CID/CFF/OCR, format từng chữ, UX khởi động
+
+Yêu cầu user: "đáp ứng edit đẹp và chuẩn mọi file pdf, trải nghiệm như Word,
+mượt như Foxit, kể cả file OCR; format riêng từng chữ trong dòng" + fix đơ
+khởi động + Open with.
+
+## Đã làm (build 40, commit 74f161a/57b8b84/090e387)
+
+1. **Font CID/Identity-H (PDF từ Word/InDesign)** — fontfix v2: tổng hợp bảng
+   name/post thiếu; font KHÔNG có cmap → dựng (3,1) fmt4 từ /ToUnicode ×
+   /CIDToGIDMap (Identity: GID=CID; stream 2B/CID); chặn GID ≥ maxp.
+2. **CFF/Type1C trần** — `cffwrap.rs`: parser CFF tối thiểu tự viết
+   (INDEX/DICT/Encoding/charset/FontMatrix, kể cả real nibble), bọc thành
+   OTF: bảng CFF giữ nguyên, hmtx từ /Widths + /W (tounicode thu thêm
+   widths/DW/Ascent/Descent), maxp v0.5, head magic chuẩn.
+3. **Format TỪNG CHỮ** (chuẩn Word): bôi đen → B/I (nút không cướp focus +
+   Ctrl+B/I); UI tách span, override theo đoạn; engine RichKey (run nguồn +
+   override) → font BIẾN THỂ THẬT cùng họ. Bug tìm ra khi E2E: đổi format
+   thuần (chữ giữ nguyên) bị commit coi "không thay đổi" → nuốt op — fix
+   changed tính cả override.
+4. **Edit file OCR**: khối toàn run render-mode INVISIBLE → vẽ rect TRẮNG
+   che vùng chữ cũ trên ảnh + text mới vẽ HIỆN màu đen (4 đường vẽ).
+5. **Bù metrics kiểu Adobe Sans MM**: span mang data-pdfw; pass letter-spacing
+   trong fitEditLinesToPdf cho khớp quãng gốc khi font thay thế (>2%, kẹp 18%).
+6. **UX khởi động**: window visible:false + JS show() khi sẵn sàng + splash;
+   lưới an toàn 4s. **Open with**: registry Applications tự đăng ký lại mỗi
+   lần chạy (HKCU) — hết vòng lặp "chọn app khác" do entry trỏ exe cũ.
+7. **CJK pack tuỳ chọn** (fetch-fonts-cjk.ps1, OTC 2 file ~40MB): UI nạp lười
+   khi text có CJK; chưa nối đường GHI (Windows luôn có font CJK hệ thống).
+8. CI: fetch-qpdf dùng GITHUB_TOKEN + pin v12.2.0 (hết fail oan rate-limit).
+
+## Kiểm chứng build 40 (E2E CDP, 10/10 PASS + 2 bài hồi quy)
+
+- Bôi đen "không" giữa câu → B → commit: 3 mảnh "Quản trị viên | không[B]
+  (NotoSans-Bold) | phải là…", worst overlap **0pt**.
+- File CID kiểu Word (in từ Edge headless, CIDFontType2/Identity-H, 4 font
+  subset đều nạp FontFace OK): sửa đoạn tiếng Việt, chữ đậm giữa câu GIỮ,
+  overlap 0.43pt.
+- File OCR (ảnh scan + text ẩn 3 Tr): sửa lớp ẩn → rect trắng che + text mới
+  màu đen HIỆN.
+- Hồi quy: nhiều trang + min-height ✓; đè ngang 0pt + dòng kề sống sót ✓.
+- Registry Open-with trỏ đúng exe; splash gỡ sau khởi động.
+
+Test PDF chuẩn tạo bằng: Edge headless `--print-to-pdf` (file kiểu Word
+thật) + raw PDF tự dựng (ảnh DeviceGray + text `3 Tr`) — xem
+scratchpad/make-test-pdfs.js của phiên làm việc.
