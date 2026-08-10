@@ -460,10 +460,12 @@ function scheduleEditSharpRender() {
   clearTimeout(editSharpTimer);
   editSharpTimer = setTimeout(async () => {
     try {
+      const seq = editLoadSeq;
       const p = state.pages[state.editPage];
       const url = await invoke("render_page", {
         path: state.editBase, page: state.editPage, width: editStageWidth(p),
       });
+      if (seq !== editLoadSeq) return; // trang/file đã đổi trong lúc render
       $("editImg").src = url;
     } catch (_) { /* giữ ảnh cũ (đã co giãn CSS) */ }
   }, 220);
@@ -2185,7 +2187,11 @@ async function onViewerDblClick(e) {
 }
 
 // Đọc lại object + render ảnh trang hiện tại từ editBase, dựng overlay box.
+// Guard số thứ tự: chuyển trang/zoom nhanh tạo nhiều lượt nạp song song —
+// chỉ lượt MỚI NHẤT được ghi vào DOM/state (lượt chậm về sau bị bỏ).
+let editLoadSeq = 0;
 async function loadEditPage() {
+  const mySeq = ++editLoadSeq;
   const p = state.pages[state.editPage];
   const stageW = editStageWidth(p);
   state.editScale = stageW / p.widthPt;
@@ -2194,6 +2200,7 @@ async function loadEditPage() {
       invoke("render_page", { path: state.editBase, page: state.editPage, width: stageW }),
       invoke("edit_list_objects", { path: state.editBase, page: state.editPage, password: null }),
     ]);
+    if (mySeq !== editLoadSeq) return; // đã có lượt nạp mới hơn — bỏ lượt này
     // Object nằm TRONG Form XObject (file Canva/Illustrator): sửa/xoá text
     // được xử lý bằng PHẪU THUẬT stream ở engine (trong suốt với UI) — không
     // cần mở gói trang.

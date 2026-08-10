@@ -77,6 +77,28 @@ Máy dev không có Rust nên **CI là nơi duy nhất chạy test**: workflow t
 bước `cargo test -p ff-engine` TRƯỚC khi build release (fail test = fail
 build, không publish bản hỏng); cache thêm `target/` gốc workspace.
 
+### Vòng 5 — zoom/chuyển trang trong chế độ sửa + dòng lẫn nhiều style
+Ba vấn đề user báo (kiểm chứng E2E build 29 trên file dịch 3 trang):
+- **Zoom**: stage sửa hết cứng 820px — `editZoom` riêng (kế thừa zoom viewer),
+  Ctrl+wheel/nút ±/dropdown %/Vừa rộng/Vừa trang đều chạy; co giãn CSS ngay,
+  render nét sau 220ms; `margin:auto` fix flex-center overflow. Kiểm: 794→1191px.
+- **Chuyển trang**: ▲▼/ô nhập trang nhận biết edit mode (`switchEditPage` —
+  giữ undo/thay đổi trang khác vì chung editBase); guard `editLoadSeq` cho
+  loadEditPage/sharp-render: lượt nạp chậm không đè lượt mới (race khi
+  chuyển trang/zoom nhanh). Kiểm: Trang 2 · 114 đối tượng.
+- **Dòng lẫn style (thường + mono-đậm…)**: ô sửa dựng SPAN theo nhóm run
+  cùng style (styleKeyOf/styleGroupsOfLine) — WYSIWYG từng phần; commit đọc
+  đoạn-style (`readRich`, text node trần mượn span kề), ≥2 style gửi
+  `richLines`. Engine: `ReflowText.rich` — resolve thang giữ-font RIÊNG cho
+  từng style-run, token hoá theo từ (giữ glue giữa đoạn dính liền), bẻ dòng
+  chung, vẽ mỗi cụm cùng-style 1 object đúng font/cỡ/màu + tự kiểm/fallback
+  từng từ. Tầng-0 token gốc tắt khi KHỐI có run nested (token vô hiệu sau
+  mở lại document hậu phẫu thuật — trước chỉ xét anchor). Kiểm trên dòng
+  "Hiển thị `vmDetails.vm.windowsInitialPassword`.": ô sửa 3 span đúng
+  style; sau commit mono giữ NotoSansMono-Bold, "." giữ NotoSans-Regular
+  (token gốc), phần sửa sang Arial hợp lệ (subset gốc thiếu glyph Ể hoa).
+  Test engine: fixture Helvetica + Courier-Bold cùng dòng.
+
 ### CỔNG AN TOÀN + giới hạn ghi nhận (iteration 4 v1)
 Kiểm chứng E2E trên file Canva THẬT (CV, 1149 object sau mở gói) phát hiện:
 **generator của PDFium ghi lại cả trang là LOSSY với file phức tạp**:
