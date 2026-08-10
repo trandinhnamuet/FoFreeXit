@@ -2359,6 +2359,7 @@ async function loadEditPage() {
       if (o.kind !== "text") continue;
       ensureDocFont(o, state.editBase, state.editPage);
       ensureAppFont(fontClassOf(o.fontFamily), o.fontBold, o.fontItalic);
+      if (hasCjk(o.text)) ensureAppFont("cjk", o.fontBold, false);
     }
     buildEditOverlay();
     $("pageInput").value = state.editPage + 1;
@@ -2656,9 +2657,15 @@ function ensureDocFont(run, path, page) {
 const appFonts = new Map(); // kind -> true | false | Promise (bền theo app)
 
 function appFontKind(cls, bold, italic) {
-  if (cls === "mono") return "mono-" + (bold ? "bold" : "regular"); // mono không có italic
+  // mono/cjk không có biến thể italic riêng — trình duyệt tự nghiêng.
+  if (cls === "mono" || cls === "cjk") return cls + "-" + (bold ? "bold" : "regular");
   const style = bold && italic ? "bolditalic" : bold ? "bold" : italic ? "italic" : "regular";
   return cls + "-" + style;
+}
+
+// Text có ký tự CJK (Hoa/Nhật/Hàn)? — nạp thêm gói CJK tuỳ chọn nếu app kèm.
+function hasCjk(text) {
+  return /[぀-ヿ㐀-䶿一-鿿가-힯]/.test(text || "");
 }
 
 // Phân loại serif/sans/mono theo stack CSS đã suy cho family của run.
@@ -2693,10 +2700,11 @@ function ensureAppFont(cls, bold, italic) {
 }
 
 // Stack font cho 1 run trong ô sửa: font NHÚNG của tài liệu đứng đầu → font
-// Noto đóng gói theo app → stack hệ thống (lưới cuối cùng).
+// Noto đóng gói theo app (+CJK nếu chữ CJK) → stack hệ thống (lưới cuối).
 function editFontStack(run, fallbackFamily) {
   const base = cssFontStack(fallbackFamily);
-  const mid = '"ff-app-' + fontClassOf(fallbackFamily) + '", ';
+  let mid = '"ff-app-' + fontClassOf(fallbackFamily) + '", ';
+  if (run && hasCjk(run.text)) mid += '"ff-app-cjk", ';
   const fam = run && run.fontName ? docFonts.get(run.fontName) : null;
   const head = typeof fam === "string" && fam ? '"' + fam + '", ' : "";
   return head + mid + base;

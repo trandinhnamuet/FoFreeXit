@@ -775,6 +775,10 @@ fn app_font_data(kind: String) -> Result<String, String> {
         "serif-bold" => "NotoSerif-Bold.ttf",
         "serif-italic" => "NotoSerif-Italic.ttf",
         "serif-bolditalic" => "NotoSerif-BoldItalic.ttf",
+        // Gói CJK tuỳ chọn (scripts/fetch-fonts-cjk.ps1) — không có file thì
+        // trả lỗi, UI tự rơi về font CJK hệ thống.
+        "cjk-regular" => "NotoSansCJK-Regular.ttc",
+        "cjk-bold" => "NotoSansCJK-Bold.ttc",
         _ => return Err(format!("kind font không hợp lệ: {kind}")),
     };
     let dir = std::env::var("FOFREEXIT_FONTS_PATH")

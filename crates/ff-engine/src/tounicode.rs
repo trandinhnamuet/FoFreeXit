@@ -10,7 +10,8 @@ use lopdf::{Dictionary, Document as LoDoc, Object};
 
 use crate::formsurgery::{deref, stream_bytes};
 
-/// Thông tin giải mã của 1 font trong PDF — đủ để fontfix dựng cmap Unicode.
+/// Thông tin giải mã của 1 font trong PDF — đủ để fontfix dựng cmap Unicode
+/// và (với CFF trần) cả hmtx/OS-2 khi bọc thành OTF.
 pub(crate) struct FontMapping {
     /// Mã trong content stream → Unicode (từ /ToUnicode).
     pub code_to_uni: HashMap<u32, u32>,
@@ -19,6 +20,14 @@ pub(crate) struct FontMapping {
     /// từ stream /CIDToGIDMap (2 byte big-endian mỗi CID).
     pub is_cid: bool,
     pub cid_to_gid: Option<Vec<u16>>,
+    /// Mã → bề rộng advance (đơn vị text space ×1000): /Widths (font đơn
+    /// giản) hoặc /W (font CID).
+    pub widths: HashMap<u32, f32>,
+    /// /DW của font CID (mặc định 1000) — bề rộng cho mã không có trong /W.
+    pub default_width: f32,
+    /// /Ascent /Descent từ FontDescriptor (0 = không rõ).
+    pub ascent: f32,
+    pub descent: f32,
 }
 
 /// Mapping của font có BaseFont khớp `font_name` (so phần sau prefix subset

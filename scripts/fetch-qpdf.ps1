@@ -9,12 +9,23 @@ $qpdfDir = Join-Path $root "qpdf"
 $tmp = Join-Path $env:TEMP "qpdf-win-msvc64.zip"
 
 Write-Output "Tra cuu release moi nhat cua qpdf/qpdf..."
-$release = Invoke-RestMethod -Uri "https://api.github.com/repos/qpdf/qpdf/releases/latest" -UseBasicParsing
-$asset = $release.assets | Where-Object { $_.name -like "*msvc64.zip" } | Select-Object -First 1
-if (-not $asset) { throw "Khong tim thay asset msvc64.zip trong release $($release.tag_name)" }
-
-Write-Output "Tai $($asset.name) (tu release $($release.tag_name))..."
-Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmp -UseBasicParsing
+# Dung GITHUB_TOKEN khi co (CI) - goi API khong xac thuc tu runner hay dinh
+# rate limit lam fail build oan. API loi thi roi ve ban pin cung.
+$headers = @{}
+if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $($env:GITHUB_TOKEN)" }
+$dlUrl = $null
+try {
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/qpdf/qpdf/releases/latest" -Headers $headers -UseBasicParsing
+    $asset = $release.assets | Where-Object { $_.name -like "*msvc64.zip" } | Select-Object -First 1
+    if ($asset) { $dlUrl = $asset.browser_download_url; Write-Output "Tai $($asset.name) (release $($release.tag_name))..." }
+} catch {
+    Write-Output "API loi ($($_.Exception.Message)) - dung ban pin."
+}
+if (-not $dlUrl) {
+    $dlUrl = "https://github.com/qpdf/qpdf/releases/download/v12.2.0/qpdf-12.2.0-msvc64.zip"
+    Write-Output "Tai ban pin: $dlUrl"
+}
+Invoke-WebRequest -Uri $dlUrl -OutFile $tmp -UseBasicParsing
 
 $extractDir = Join-Path $env:TEMP "qpdf-extract"
 if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }

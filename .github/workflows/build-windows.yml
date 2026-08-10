@@ -40,6 +40,8 @@ jobs:
       - name: Fetch QPDF (Windows x64)
         shell: pwsh
         run: powershell -ExecutionPolicy Bypass -File scripts/fetch-qpdf.ps1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Bộ font Noto đóng gói theo app (phủ tiếng Việt) — hiển thị/ghi file
       # giống nhau trên mọi máy khách, không phụ thuộc font hệ điều hành.
