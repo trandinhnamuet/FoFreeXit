@@ -110,7 +110,20 @@ pub fn extract_text(
     let text = page
         .text()
         .map_err(|e| EngineError::Pdfium(format!("đọc text trang {page_index}: {e}")))?;
-    Ok(text.all())
+    Ok(all_page_text(&text))
+}
+
+/// Toàn bộ text của trang, KHÔNG phụ thuộc hộp trang.
+///
+/// `PdfPageText::all()` của pdfium-render 0.8.37 chỉ lấy text trong hộp
+/// `(0, 0, width, height)` (`page_size()`), trong khi toạ độ ký tự của PDFium
+/// ở không gian người dùng CHƯA xoay: trang xoay 90/270 (width/height bị đổi
+/// chỗ) hoặc có CropBox gốc khác (0,0) sẽ mất một phần/toàn bộ text. Dùng cùng
+/// hàm PDFium (`FPDFText_GetBoundedText`) với một hộp rất lớn để giữ nguyên cách
+/// chèn xuống dòng/dấu cách như `all()` trên trang thường.
+fn all_page_text(text: &PdfPageText) -> String {
+    const HUGE: f32 = 1.0e7;
+    text.inside_rect(PdfRect::new_from_values(-HUGE, -HUGE, HUGE, HUGE))
 }
 
 /// Tìm `query` trong toàn tài liệu. `case_sensitive=false` -> không phân biệt hoa thường.
@@ -139,8 +152,14 @@ pub fn search(
             Ok(t) => t,
             Err(_) => continue,
         };
-        let full = text.all();
-        let hay: Vec<char> = full.chars().map(|c| fold(c, case_sensitive)).collect();
+        // Ghép theo TỪNG ký tự của text page (không lọc theo hộp trang — trang
+        // xoay/crop vẫn tìm được); vị trí trong `hay` trùng đúng chỉ số ký tự
+        // PDFium nên `char_range_rect` lấy đúng khung của đoạn khớp.
+        let hay: Vec<char> = text
+            .chars()
+            .iter()
+            .map(|ch| fold(ch.unicode_char().unwrap_or('\u{FFFD}'), case_sensitive))
+            .collect();
 
         // Tìm tất cả vị trí khớp (sliding window đơn giản).
         if hay.len() < needle.len() {

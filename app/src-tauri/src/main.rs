@@ -33,8 +33,17 @@ fn pdfium() -> Result<pdfium_render::prelude::Pdfium, String> {
 #[serde(rename_all = "camelCase")]
 struct PageMeta {
     index: u16,
+    /// Kích thước hiển thị (đã áp /Rotate) — khung ảnh render.
     width_pt: f32,
     height_pt: f32,
+    /// /Rotate hiệu lực: 0/90/180/270 (chiều kim đồng hồ).
+    rotation: u16,
+    /// Hộp trang hiển thị (CropBox ∩ MediaBox) trong không gian PDF CHƯA xoay
+    /// — cùng không gian với char box / annotation / redaction.
+    box_left: f32,
+    box_bottom: f32,
+    box_width: f32,
+    box_height: f32,
 }
 
 #[derive(Serialize)]
@@ -90,6 +99,11 @@ fn open_document(path: String) -> Result<DocMeta, String> {
                 index: d.index,
                 width_pt: d.width_pt,
                 height_pt: d.height_pt,
+                rotation: d.rotation,
+                box_left: d.box_left,
+                box_bottom: d.box_bottom,
+                box_width: d.box_width,
+                box_height: d.box_height,
             })
             .collect(),
         outline: outline

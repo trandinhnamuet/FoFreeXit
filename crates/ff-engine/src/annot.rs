@@ -232,7 +232,7 @@ pub fn apply_annotations(
 
         document
             .save_to_file(output)
-            .map_err(|e| EngineError::Pdfium(format!("lưu file: {e}")))?;
+            .map_err(|e| EngineError::Pdfium(format!("lưu file: {}", crate::pdfium_msg(&e))))?;
     }
 
     // ----- Pass 2: lopdf ghi FreeText/Note với định dạng đầy đủ -----
@@ -402,7 +402,7 @@ pub(crate) fn find_font_bytes(bold: bool, italic: bool) -> Option<Vec<u8>> {
 /// PDF spec quy định widths của Type0/CIDFont LUÔN lấy từ /W + /DW, KHÔNG lấy từ
 /// bảng hmtx trong font nhúng — thiếu /W khiến mọi glyph bị coi là rộng /DW (1 em),
 /// chữ bị dãn cách quá rộng. Trả về object ID Type0 font.
-fn embed_type0_font(doc: &mut LoDoc, font_bytes: &[u8], used_text: &str) -> Result<ObjectId, EngineError> {
+pub(crate) fn embed_type0_font(doc: &mut LoDoc, font_bytes: &[u8], used_text: &str) -> Result<ObjectId, EngineError> {
     let face = ttf_parser::Face::parse(font_bytes, 0)
         .map_err(|e| EngineError::Pdfium(format!("ttf-parser: {:?}", e)))?;
 

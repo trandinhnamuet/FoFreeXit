@@ -10,7 +10,9 @@
 //!
 //! Điền field: đặt `/V`; với checkbox/radio đặt cả `/AS` của widget về đúng
 //! tên trạng thái bật; bật `NeedAppearances=true` để viewer tự dựng lại
-//! appearance (cách portable nhất, mọi viewer hiểu).
+//! appearance (cách portable nhất, mọi viewer hiểu). Đồng thời TỰ DỰNG
+//! appearance stream (/AP /N) cho text/combo (và checkbox chưa có /AP) — vì
+//! Flatten của PDFium chỉ "in" appearance có sẵn, thiếu /AP thì giá trị mất.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -351,20 +353,56 @@ pub fn fill_form_fields(input: &Path, values: &[FieldValue], output: &Path) -> R
     let lookup: BTreeMap<&str, &str> = values.iter().map(|v| (v.name.as_str(), v.value.as_str())).collect();
 
     let fields = collect_fields(&doc);
+
+    // Font cho appearance tự dựng: biết trước MỌI giá trị text sẽ điền để nhúng
+    // font Unicode (nếu cần) đúng 1 lần, đủ độ rộng glyph.
+    let mut all_text = String::new();
+    for (_, name, dict) in &fields {
+        if let Some(&val) = lookup.get(name.as_str()) {
+            let is_btn = effective_ft(&doc, dict).as_deref() == Some(b"Btn");
+            if !is_btn {
+                all_text.push_str(val);
+                all_text.push('\n');
+            }
+        }
+    }
+    let mut fonts = ApFonts::new(&mut doc, &all_text);
+
     let mut filled = 0usize;
     for (id, name, dict) in fields {
         let Some(&val) = lookup.get(name.as_str()) else { continue };
         let ft = effective_ft(&doc, &dict);
         let is_btn = ft.as_deref() == Some(b"Btn");
+        let flags = dict.get(b"Ff").and_then(Object::as_i64).unwrap_or(0);
         if is_btn {
             let on = on_state(&doc, &dict).unwrap_or_else(|| "Yes".into());
             let turn_on = matches!(val.to_ascii_lowercase().as_str(), "on" | "true" | "yes" | "1" | "checked");
             let state = if turn_on { on.as_str() } else { "Off" };
             set_button_state(&mut doc, id, &dict, state);
+            // Checkbox (không phải radio/pushbutton) chưa có /AP → dựng để
+            // Flatten còn dấu tick.
+            if !bit(flags, 16) && !bit(flags, 17) {
+                for wid in widget_ids(&dict, id) {
+                    if !widget_has_ap(&doc, wid) {
+                        let _ = build_checkbox_ap(&mut doc, wid, &on);
+                    }
+                }
+            }
         } else {
             if let Ok(f) = doc.get_object_mut(id).and_then(Object::as_dict_mut) {
                 f.set("V", encode_pdf_text(val));
-                f.remove(b"AP"); // buộc dựng lại appearance
+            }
+            let is_text = ft.as_deref() == Some(b"Tx");
+            let is_combo = ft.as_deref() == Some(b"Ch") && bit(flags, 18);
+            for wid in widget_ids(&dict, id) {
+                let built = (is_text || is_combo)
+                    && build_text_ap(&mut doc, &mut fonts, wid, &dict, val).is_ok();
+                if !built {
+                    // Không tự dựng được (list box…) → bỏ /AP cũ, buộc viewer dựng lại.
+                    if let Ok(w) = doc.get_object_mut(wid).and_then(Object::as_dict_mut) {
+                        w.remove(b"AP");
+                    }
+                }
             }
         }
         filled += 1;
@@ -384,8 +422,20 @@ fn set_button_state(doc: &mut Document, id: ObjectId, dict: &Dictionary, state: 
     if let Ok(f) = doc.get_object_mut(id).and_then(Object::as_dict_mut) {
         f.set("V", state_name.clone());
     }
-    // /AS trên widget: field tự là widget?
-    let widget_ids: Vec<ObjectId> = if dict.has(b"AP") || dict.has(b"Rect") {
+    // /AS trên widget: field tự là widget, hoặc các widget con.
+    for wid in widget_ids(dict, id) {
+        // /AS chỉ đặt tên trạng thái nếu widget có appearance tương ứng, ngược
+        // lại vẫn đặt (viewer tự xử lý qua NeedAppearances).
+        if let Ok(w) = doc.get_object_mut(wid).and_then(Object::as_dict_mut) {
+            w.set("AS", Object::Name(state.as_bytes().to_vec()));
+        }
+    }
+}
+
+/// Widget của field: chính field (nếu nó là widget — có /AP hoặc /Rect), hoặc
+/// các phần tử /Kids (widget con không tên).
+fn widget_ids(dict: &Dictionary, id: ObjectId) -> Vec<ObjectId> {
+    if dict.has(b"AP") || dict.has(b"Rect") {
         vec![id]
     } else {
         dict.get(b"Kids")
@@ -393,14 +443,466 @@ fn set_button_state(doc: &mut Document, id: ObjectId, dict: &Dictionary, state: 
             .ok()
             .map(|kids| kids.iter().filter_map(|k| k.as_reference().ok()).collect())
             .unwrap_or_default()
-    };
-    for wid in widget_ids {
-        // /AS chỉ đặt tên trạng thái nếu widget có appearance tương ứng, ngược
-        // lại vẫn đặt (viewer tự xử lý qua NeedAppearances).
-        if let Ok(w) = doc.get_object_mut(wid).and_then(Object::as_dict_mut) {
-            w.set("AS", Object::Name(state.as_bytes().to_vec()));
+    }
+}
+
+fn widget_has_ap(doc: &Document, wid: ObjectId) -> bool {
+    doc.get_object(wid)
+        .and_then(Object::as_dict)
+        .map(|d| d.has(b"AP"))
+        .unwrap_or(false)
+}
+
+// ---- Appearance stream tự dựng (để Flatten giữ giá trị đã điền) ----
+
+/// Mã WinAnsi của 1 ký tự nếu có (0x20–0x7E và 0xA0–0xFF trùng Latin-1).
+fn winansi_byte(c: char) -> Option<u8> {
+    let u = c as u32;
+    if (0x20..=0x7E).contains(&u) || (0xA0..=0xFF).contains(&u) {
+        Some(u as u8)
+    } else {
+        None
+    }
+}
+
+/// Chuỗi có ký tự ngoài WinAnsi (tiếng Việt, CJK…) → cần font Unicode.
+fn needs_unicode(s: &str) -> bool {
+    s.chars()
+        .any(|c| !matches!(c, '\n' | '\r' | '\t') && winansi_byte(c).is_none())
+}
+
+/// Font cho appearance tự dựng: Helvetica (WinAnsi, không nhúng) cho giá trị
+/// Latin; font Unicode nhúng (Type0/Identity-H + /ToUnicode) khi có ký tự
+/// ngoài WinAnsi. Mỗi font tạo tối đa 1 lần cho cả tài liệu.
+struct ApFonts {
+    helv: Option<ObjectId>,
+    uni: Option<(ObjectId, Vec<u8>)>,
+}
+
+impl ApFonts {
+    fn new(doc: &mut Document, all_text: &str) -> ApFonts {
+        let uni = if needs_unicode(all_text) {
+            crate::annot::find_font_bytes(false, false).and_then(|bytes| {
+                let id = crate::annot::embed_type0_font(doc, &bytes, all_text).ok()?;
+                add_to_unicode(doc, id, &bytes, all_text);
+                Some((id, bytes))
+            })
+        } else {
+            None
+        };
+        ApFonts { helv: None, uni }
+    }
+
+    fn helv(&mut self, doc: &mut Document) -> ObjectId {
+        if let Some(id) = self.helv {
+            return id;
+        }
+        let mut d = Dictionary::new();
+        d.set("Type", Object::Name(b"Font".to_vec()));
+        d.set("Subtype", Object::Name(b"Type1".to_vec()));
+        d.set("BaseFont", Object::Name(b"Helvetica".to_vec()));
+        d.set("Encoding", Object::Name(b"WinAnsiEncoding".to_vec()));
+        let id = doc.add_object(Object::Dictionary(d));
+        self.helv = Some(id);
+        id
+    }
+}
+
+/// Gắn /ToUnicode (glyph id → Unicode) cho font Type0 Identity-H vừa nhúng,
+/// để text sau khi flatten vẫn copy/tìm kiếm được.
+fn add_to_unicode(doc: &mut Document, font0_id: ObjectId, font_bytes: &[u8], text: &str) {
+    let Ok(face) = ttf_parser::Face::parse(font_bytes, 0) else { return };
+    let mut map: BTreeMap<u16, char> = BTreeMap::new();
+    for ch in text.chars().chain([' ', '?']) {
+        if ch.is_control() {
+            continue;
+        }
+        if let Some(g) = face.glyph_index(ch) {
+            map.entry(g.0).or_insert(ch);
         }
     }
+    let entries: Vec<(u16, char)> = map.into_iter().collect();
+    let mut cmap = String::from(
+        "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n\
+         /CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n\
+         /CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n\
+         1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n",
+    );
+    for chunk in entries.chunks(100) {
+        cmap.push_str(&format!("{} beginbfchar\n", chunk.len()));
+        for (gid, ch) in chunk {
+            let mut buf = [0u16; 2];
+            let hex: String = ch.encode_utf16(&mut buf).iter().map(|u| format!("{u:04X}")).collect();
+            cmap.push_str(&format!("<{gid:04X}> <{hex}>\n"));
+        }
+        cmap.push_str("endbfchar\n");
+    }
+    cmap.push_str("endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n");
+    let sid = doc.add_object(Object::Stream(lopdf::Stream::new(Dictionary::new(), cmap.into_bytes())));
+    if let Ok(f) = doc.get_object_mut(font0_id).and_then(Object::as_dict_mut) {
+        f.set("ToUnicode", Object::Reference(sid));
+    }
+}
+
+/// Kích thước (rộng, cao) của widget theo /Rect.
+fn widget_size(doc: &Document, wid: ObjectId) -> Option<(f32, f32)> {
+    let d = doc.get_object(wid).and_then(Object::as_dict).ok()?;
+    let arr = d.get(b"Rect").and_then(Object::as_array).ok()?;
+    if arr.len() != 4 {
+        return None;
+    }
+    let v: Vec<f32> = arr.iter().filter_map(|o| o.as_float().ok()).collect();
+    if v.len() != 4 {
+        return None;
+    }
+    let (w, h) = ((v[2] - v[0]).abs(), (v[3] - v[1]).abs());
+    if w > 0.0 && h > 0.0 {
+        Some((w, h))
+    } else {
+        None
+    }
+}
+
+fn pdf_string_text(o: &Object) -> Option<String> {
+    match o {
+        Object::String(b, _) => Some(String::from_utf8_lossy(b).into_owned()),
+        _ => None,
+    }
+}
+
+fn acroform_dict(doc: &Document) -> Option<&Dictionary> {
+    let acro = doc.catalog().ok()?.get(b"AcroForm").ok()?;
+    match acro {
+        Object::Reference(id) => doc.get_object(*id).and_then(Object::as_dict).ok(),
+        Object::Dictionary(d) => Some(d),
+        _ => None,
+    }
+}
+
+/// /DA hiệu lực của widget: widget → field → các field cha → /AcroForm.
+fn effective_da(doc: &Document, wid: ObjectId, field: &Dictionary) -> String {
+    let da_of = |d: &Dictionary| d.get(b"DA").ok().and_then(pdf_string_text);
+    if let Some(s) = doc.get_object(wid).and_then(Object::as_dict).ok().and_then(da_of) {
+        return s;
+    }
+    if let Some(s) = da_of(field) {
+        return s;
+    }
+    let mut parent = field.get(b"Parent").and_then(Object::as_reference).ok();
+    for _ in 0..32 {
+        let Some(pid) = parent else { break };
+        let Ok(p) = doc.get_object(pid).and_then(Object::as_dict) else { break };
+        if let Some(s) = da_of(p) {
+            return s;
+        }
+        parent = p.get(b"Parent").and_then(Object::as_reference).ok();
+    }
+    acroform_dict(doc)
+        .and_then(da_of)
+        .unwrap_or_else(|| "/Helv 0 Tf 0 g".to_string())
+}
+
+/// Từ /DA lấy cỡ chữ (0 = tự co) và lệnh màu tô (`g`/`rg`/`k`, mặc định đen).
+/// Chỉ nhận toán hạng là số để không chèn rác vào content stream.
+fn parse_da(da: &str) -> (f32, String) {
+    let toks: Vec<&str> = da.split_whitespace().collect();
+    let nums = |ts: &[&str]| -> Option<String> {
+        let v: Option<Vec<f32>> = ts.iter().map(|t| t.parse::<f32>().ok()).collect();
+        v.map(|v| v.iter().map(|x| format!("{x}")).collect::<Vec<_>>().join(" "))
+    };
+    let mut size = 0.0f32;
+    let mut color = String::from("0 g");
+    for (i, t) in toks.iter().enumerate() {
+        let (n, op) = match *t {
+            "Tf" => (1, ""),
+            "g" => (1, "g"),
+            "rg" => (3, "rg"),
+            "k" => (4, "k"),
+            _ => continue,
+        };
+        if i < n {
+            continue;
+        }
+        let Some(args) = nums(&toks[i - n..i]) else { continue };
+        if op.is_empty() {
+            size = args.parse().unwrap_or(0.0);
+        } else {
+            color = format!("{args} {op}");
+        }
+    }
+    (size.max(0.0), color)
+}
+
+/// Độ rộng (pt) của `s` ở cỡ `fs`: đo theo font nhúng nếu có, không thì xấp xỉ
+/// Helvetica (~0.55 em/ký tự).
+fn text_width(s: &str, fs: f32, face: Option<&ttf_parser::Face>) -> f32 {
+    match face {
+        Some(f) => {
+            let upem = f.units_per_em().max(1) as f32;
+            s.chars()
+                .map(|c| {
+                    f.glyph_index(c)
+                        .and_then(|g| f.glyph_hor_advance(g))
+                        .map_or(fs * 0.5, |a| a as f32 / upem * fs)
+                })
+                .sum()
+        }
+        None => s.chars().count() as f32 * fs * 0.55,
+    }
+}
+
+/// Toán hạng Tj cho font Identity-H: `<gid gid …>` (2 byte/ký tự).
+fn cid_hex(s: &str, face: &ttf_parser::Face) -> String {
+    let mut out = String::from("<");
+    for c in s.chars() {
+        let g = face
+            .glyph_index(c)
+            .or_else(|| face.glyph_index('?'))
+            .unwrap_or(ttf_parser::GlyphId(0));
+        out.push_str(&format!("{:04X}", g.0));
+    }
+    out.push('>');
+    out
+}
+
+/// Toán hạng Tj cho Helvetica WinAnsi: literal `(...)`, ký tự không mã hoá được
+/// thành `?`, byte ≥ 0x80 viết dạng octal để content stream thuần ASCII.
+fn winansi_literal(s: &str) -> String {
+    let mut out = String::from("(");
+    for c in s.chars() {
+        let b = winansi_byte(c).unwrap_or(b'?');
+        match b {
+            b'(' | b')' | b'\\' => {
+                out.push('\\');
+                out.push(b as char);
+            }
+            0x20..=0x7E => out.push(b as char),
+            _ => out.push_str(&format!("\\{b:03o}")),
+        }
+    }
+    out.push(')');
+    out
+}
+
+/// Thêm Form XObject `[0 0 w h]` với content + resources, trả id.
+fn add_form_xobject(doc: &mut Document, w: f32, h: f32, resources: Dictionary, content: String) -> ObjectId {
+    let mut xd = Dictionary::new();
+    xd.set("Type", Object::Name(b"XObject".to_vec()));
+    xd.set("Subtype", Object::Name(b"Form".to_vec()));
+    xd.set("BBox", Object::Array(vec![Object::Real(0.0), Object::Real(0.0), Object::Real(w), Object::Real(h)]));
+    xd.set("Resources", Object::Dictionary(resources));
+    doc.add_object(Object::Stream(lopdf::Stream::new(xd, content.into_bytes())))
+}
+
+fn set_widget_normal_ap(doc: &mut Document, wid: ObjectId, normal: Object) {
+    if let Ok(wd) = doc.get_object_mut(wid).and_then(Object::as_dict_mut) {
+        let mut ap = Dictionary::new();
+        ap.set("N", normal);
+        wd.set("AP", Object::Dictionary(ap));
+    }
+}
+
+/// Dựng /AP /N cho widget text/combo hiển thị `value` (thay /AP cũ). Hỗ trợ
+/// /DA (cỡ chữ, màu; cỡ 0 = tự co), /Q (căn trái/giữa/phải), multiline (/Ff bit 13).
+fn build_text_ap(
+    doc: &mut Document,
+    fonts: &mut ApFonts,
+    wid: ObjectId,
+    field: &Dictionary,
+    value: &str,
+) -> Result<(), EngineError> {
+    let (w, h) = widget_size(doc, wid)
+        .ok_or_else(|| EngineError::Pdfium("form: widget không có /Rect hợp lệ".into()))?;
+    let (da_size, color) = parse_da(&effective_da(doc, wid, field));
+    let flags = field.get(b"Ff").and_then(Object::as_i64).unwrap_or(0);
+    let multiline = bit(flags, 13);
+    let widget_q = doc
+        .get_object(wid)
+        .and_then(Object::as_dict)
+        .and_then(|d| d.get(b"Q"))
+        .and_then(Object::as_i64)
+        .ok();
+    let quadding = field.get(b"Q").and_then(Object::as_i64).ok().or(widget_q).unwrap_or(0);
+
+    let use_uni = needs_unicode(value) && fonts.uni.is_some();
+    let helv_id = if use_uni { None } else { Some(fonts.helv(doc)) };
+    let uni = if use_uni { fonts.uni.as_ref() } else { None };
+    let face = uni.and_then(|u| ttf_parser::Face::parse(&u.1, 0).ok());
+    let font_id = match (uni, helv_id) {
+        (Some(u), _) => u.0,
+        (None, Some(hid)) => hid,
+        (None, None) => return Err(EngineError::Pdfium("form: không có font cho appearance".into())),
+    };
+    // Font nhúng không đọc được → không dựng (tránh Tj sai mã với Type0).
+    if use_uni && face.is_none() {
+        return Err(EngineError::Pdfium("form: không đọc được font Unicode".into()));
+    }
+
+    let lines: Vec<String> = if multiline {
+        value
+            .replace("\r\n", "\n")
+            .split(|c: char| c == '\n' || c == '\r')
+            .map(str::to_string)
+            .collect()
+    } else {
+        vec![value.replace(|c: char| c == '\r' || c == '\n', " ")]
+    };
+
+    let pad = 2.0f32;
+    let avail_w = (w - 2.0 * pad).max(1.0);
+    let mut fs = if da_size > 0.0 {
+        da_size
+    } else if multiline {
+        10.0
+    } else {
+        (h * 0.65).clamp(4.0, 12.0)
+    };
+    if da_size <= 0.0 && !multiline {
+        let tw = text_width(&lines[0], fs, face.as_ref());
+        if tw > avail_w {
+            fs = (fs * avail_w / tw).max(4.0);
+        }
+    }
+
+    let mut cs = String::from("/Tx BMC\nq\n");
+    cs.push_str(&format!("1 1 {:.2} {:.2} re W n\n", (w - 2.0).max(0.0), (h - 2.0).max(0.0)));
+    cs.push_str(&format!("BT\n/FfF0 {fs:.2} Tf\n{color}\n"));
+    let line_h = fs * 1.15;
+    let mut y = if multiline { h - pad - fs * 0.9 } else { (h - fs) / 2.0 + fs * 0.22 };
+    for line in &lines {
+        let tw = text_width(line, fs, face.as_ref());
+        let x = match quadding {
+            1 => (w - tw) / 2.0,
+            2 => w - pad - tw,
+            _ => pad,
+        }
+        .max(pad);
+        let shown = match &face {
+            Some(f) => cid_hex(line, f),
+            None => winansi_literal(line),
+        };
+        cs.push_str(&format!("1 0 0 1 {x:.2} {y:.2} Tm\n{shown} Tj\n"));
+        y -= line_h;
+    }
+    cs.push_str("ET\nQ\nEMC\n");
+
+    let mut font_res = Dictionary::new();
+    font_res.set("FfF0", Object::Reference(font_id));
+    let mut res = Dictionary::new();
+    res.set("Font", Object::Dictionary(font_res));
+    let ap_id = add_form_xobject(doc, w, h, res, cs);
+    set_widget_normal_ap(doc, wid, Object::Reference(ap_id));
+    Ok(())
+}
+
+/// Dựng /AP /N cho checkbox: trạng thái `on_name` = dấu tick (vẽ bằng path,
+/// không phụ thuộc font ZapfDingbats), `Off` = rỗng.
+fn build_checkbox_ap(doc: &mut Document, wid: ObjectId, on_name: &str) -> Result<(), EngineError> {
+    let (w, h) = widget_size(doc, wid)
+        .ok_or_else(|| EngineError::Pdfium("form: widget không có /Rect hợp lệ".into()))?;
+    let s = w.min(h);
+    let (ox, oy) = ((w - s) / 2.0, (h - s) / 2.0);
+    let lw = (s * 0.12).max(0.8);
+    let on_cs = format!(
+        "q\n0 g 0 G\n{lw:.2} w\n1 J\n1 j\n{:.2} {:.2} m\n{:.2} {:.2} l\n{:.2} {:.2} l\nS\nQ\n",
+        ox + s * 0.2,
+        oy + s * 0.52,
+        ox + s * 0.42,
+        oy + s * 0.25,
+        ox + s * 0.8,
+        oy + s * 0.78,
+    );
+    let on_id = add_form_xobject(doc, w, h, Dictionary::new(), on_cs);
+    let off_id = add_form_xobject(doc, w, h, Dictionary::new(), String::new());
+    let mut n = Dictionary::new();
+    n.set(on_name.as_bytes().to_vec(), Object::Reference(on_id));
+    if on_name != "Off" {
+        n.set("Off", Object::Reference(off_id));
+    }
+    set_widget_normal_ap(doc, wid, Object::Dictionary(n));
+    Ok(())
+}
+
+/// Dựng appearance cho widget ĐÃ có giá trị nhưng THIẾU /AP (file điền bởi
+/// công cụ khác / bản cũ chỉ bật NeedAppearances). Trả số widget đã dựng.
+fn generate_missing_appearances(doc: &mut Document) -> usize {
+    let mut jobs: Vec<(Dictionary, FieldKind, String, Vec<ObjectId>)> = Vec::new();
+    let mut all_text = String::new();
+    for (id, _name, mut dict) in collect_fields(doc) {
+        if !dict.has(b"FT") {
+            if let Some(ft) = effective_ft(doc, &dict) {
+                dict.set("FT", Object::Name(ft));
+            }
+        }
+        let (kind, _) = classify(doc, &dict);
+        if !matches!(kind, FieldKind::Text | FieldKind::Combo | FieldKind::Checkbox) {
+            continue;
+        }
+        let value = dict.get(b"V").ok().and_then(text_of).unwrap_or_default();
+        if value.is_empty() {
+            continue;
+        }
+        let missing: Vec<ObjectId> = widget_ids(&dict, id)
+            .into_iter()
+            .filter(|w| !widget_has_ap(doc, *w))
+            .collect();
+        if missing.is_empty() {
+            continue;
+        }
+        if kind != FieldKind::Checkbox {
+            all_text.push_str(&value);
+            all_text.push('\n');
+        }
+        jobs.push((dict, kind, value, missing));
+    }
+    if jobs.is_empty() {
+        return 0;
+    }
+    let mut fonts = ApFonts::new(doc, &all_text);
+    let mut built = 0usize;
+    for (dict, kind, value, missing) in jobs {
+        for wid in missing {
+            let ok = if kind == FieldKind::Checkbox {
+                // Trạng thái hiển thị = /AS của widget (thiếu thì theo /V).
+                let state = doc
+                    .get_object(wid)
+                    .and_then(Object::as_dict)
+                    .ok()
+                    .and_then(|d| d.get(b"AS").ok())
+                    .and_then(text_of)
+                    .unwrap_or_else(|| value.clone());
+                state != "Off" && build_checkbox_ap(doc, wid, &state).is_ok()
+            } else {
+                build_text_ap(doc, &mut fonts, wid, &dict, &value).is_ok()
+            };
+            if ok {
+                built += 1;
+            }
+        }
+    }
+    built
+}
+
+/// Bản tạm của `input` đã dựng appearance còn thiếu, hoặc None nếu không cần /
+/// không làm được (file mã hoá, lopdf không đọc được…) → flatten file gốc.
+fn with_generated_appearances(input: &Path) -> Option<std::path::PathBuf> {
+    let bytes = std::fs::read(input).ok()?;
+    // lopdf tự giải mã file mật khẩu rỗng rồi bỏ /Encrypt khi ghi → không đụng
+    // tới file có mã hoá để khỏi làm mất bảo vệ.
+    if bytes.windows(8).any(|w| w == b"/Encrypt") {
+        return None;
+    }
+    let mut doc = Document::load_mem(&bytes).ok()?;
+    if generate_missing_appearances(&mut doc) == 0 {
+        return None;
+    }
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    let tmp = std::env::temp_dir().join(format!("ff_flatten_ap_{}_{nanos}.pdf", std::process::id()));
+    doc.save(&tmp).ok()?;
+    Some(tmp)
 }
 
 fn set_need_appearances(doc: &mut Document, need: bool) {
@@ -413,8 +915,30 @@ fn set_need_appearances(doc: &mut Document, need: bool) {
 }
 
 /// Flatten form: "in" giá trị field vào nội dung trang, bỏ tính tương tác.
-/// Dùng flatten của PDFium (cần appearance đã dựng → chạy sau khi điền + qpdf).
+/// Dùng flatten của PDFium — nó chỉ in appearance (/AP) CÓ SẴN, nên trước đó
+/// dựng appearance cho widget có giá trị mà thiếu /AP (xem
+/// `generate_missing_appearances`; file có mật khẩu thì bỏ qua bước này).
 pub fn flatten_form(
+    pdfium: &pdfium_render::prelude::Pdfium,
+    input: &Path,
+    output: &Path,
+    password: Option<&str>,
+) -> Result<(), EngineError> {
+    // Bước phụ trợ, best-effort: lopdf lỗi/panic trên file lạ thì flatten file gốc.
+    let prepared = if password.is_none() {
+        std::panic::catch_unwind(|| with_generated_appearances(input)).ok().flatten()
+    } else {
+        None
+    };
+    let src: &Path = prepared.as_deref().unwrap_or(input);
+    let result = flatten_pdfium(pdfium, src, output, password);
+    if let Some(tmp) = &prepared {
+        let _ = std::fs::remove_file(tmp);
+    }
+    result
+}
+
+fn flatten_pdfium(
     pdfium: &pdfium_render::prelude::Pdfium,
     input: &Path,
     output: &Path,
@@ -422,14 +946,14 @@ pub fn flatten_form(
 ) -> Result<(), EngineError> {
     let document = pdfium
         .load_pdf_from_file(input, password)
-        .map_err(|e| EngineError::Pdfium(format!("form flatten load: {e}")))?;
+        .map_err(|e| EngineError::Pdfium(format!("form flatten load: {}", crate::pdfium_msg(&e))))?;
     for (i, mut page) in document.pages().iter().enumerate() {
         page.flatten()
             .map_err(|e| EngineError::Pdfium(format!("flatten trang {i}: {e}")))?;
     }
     document
         .save_to_file(output)
-        .map_err(|e| EngineError::Pdfium(format!("form flatten save: {e}")))?;
+        .map_err(|e| EngineError::Pdfium(format!("form flatten save: {}", crate::pdfium_msg(&e))))?;
     Ok(())
 }
 

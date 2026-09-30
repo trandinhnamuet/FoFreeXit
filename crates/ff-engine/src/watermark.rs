@@ -85,6 +85,26 @@ fn anchor_xy(anchor: Anchor, page_w: f32, page_h: f32, text_w: f32, text_h: f32,
     }
 }
 
+/// Ma trận `[a, b, c, d, e, f]` đổi toạ độ HIỂN THỊ của trang (gốc dưới-trái
+/// như người xem thấy, đã áp /Rotate; khổ = `width_pt` x `height_pt`) sang không
+/// gian người dùng PDF chưa xoay (gốc có thể lệch do CropBox). Áp SAU các phép
+/// xoay/dịch đã tính theo toạ độ hiển thị → watermark/header/footer đúng chỗ và
+/// đứng thẳng trên trang xoay/crop. `None` = trang thường (ma trận đơn vị).
+fn display_to_user(d: &crate::meta::PageDim) -> Option<[f32; 6]> {
+    let (l, b, w, h) = (d.box_left, d.box_bottom, d.box_width, d.box_height);
+    let m = match d.rotation {
+        90 => [0.0, 1.0, -1.0, 0.0, l + w, b],
+        180 => [-1.0, 0.0, 0.0, -1.0, l + w, b + h],
+        270 => [0.0, -1.0, 1.0, 0.0, l, b + h],
+        _ => [1.0, 0.0, 0.0, 1.0, l, b],
+    };
+    if m == [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] {
+        None
+    } else {
+        Some(m)
+    }
+}
+
 /// Thêm watermark văn bản vào `input`, ghi ra `output`.
 pub fn add_watermark(
     pdfium: &Pdfium,
@@ -93,6 +113,8 @@ pub fn add_watermark(
     output: &Path,
     password: Option<&str>,
 ) -> Result<(), EngineError> {
+    // Xoay/hộp từng trang (đọc trước khi mở document ghi).
+    let dims = crate::meta::page_dims(pdfium, input, password)?;
     let mut document = pdfium
         .load_pdf_from_file(input, password)
         .map_err(|e| EngineError::Pdfium(e.to_string()))?;
@@ -127,13 +149,16 @@ pub fn add_watermark(
             let (tw, th) = (obj.width()?.value, obj.height()?.value);
             let (x, y) = anchor_xy(spec.anchor, width.value, height.value, tw, th, 0.0);
             obj.translate(PdfPoints::new(x), PdfPoints::new(y))?;
+            if let Some(m) = dims.get(index as usize).and_then(display_to_user) {
+                obj.transform(m[0], m[1], m[2], m[3], m[4], m[5])?;
+            }
             group.push(&mut obj.into())
         })
         .map_err(err)?;
 
     document
         .save_to_file(output)
-        .map_err(|e| EngineError::Pdfium(format!("lưu file: {e}")))?;
+        .map_err(|e| EngineError::Pdfium(format!("lưu file: {}", crate::pdfium_msg(&e))))?;
     Ok(())
 }
 
@@ -146,6 +171,8 @@ pub fn add_header_footer(
     output: &Path,
     password: Option<&str>,
 ) -> Result<(), EngineError> {
+    // Xoay/hộp từng trang (đọc trước khi mở document ghi).
+    let dims = crate::meta::page_dims(pdfium, input, password)?;
     let mut document = pdfium
         .load_pdf_from_file(input, password)
         .map_err(|e| EngineError::Pdfium(e.to_string()))?;
@@ -192,6 +219,9 @@ pub fn add_header_footer(
                 let (tw, th) = (obj.width()?.value, obj.height()?.value);
                 let (x, y) = anchor_xy(anchor, width.value, height.value, tw, th, spec.margin_pt);
                 obj.translate(PdfPoints::new(x), PdfPoints::new(y))?;
+                if let Some(m) = dims.get(index as usize).and_then(display_to_user) {
+                    obj.transform(m[0], m[1], m[2], m[3], m[4], m[5])?;
+                }
                 group.push(&mut obj.into())?;
             }
             Ok(())
@@ -200,6 +230,6 @@ pub fn add_header_footer(
 
     document
         .save_to_file(output)
-        .map_err(|e| EngineError::Pdfium(format!("lưu file: {e}")))?;
+        .map_err(|e| EngineError::Pdfium(format!("lưu file: {}", crate::pdfium_msg(&e))))?;
     Ok(())
 }
