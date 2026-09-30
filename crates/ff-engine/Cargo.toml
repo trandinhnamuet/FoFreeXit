@@ -29,6 +29,10 @@ der = "0.7"
 spki = "0.7"
 signature = "2"
 const-oid = { version = "0.9", features = ["db"] }
+# Search & Redact: tìm theo biểu thức chính quy + mẫu dựng sẵn.
+regex = "1"
+# Đính kèm: /Params /CheckSum (MD5 theo chuẩn PDF).
+md-5 = "0.10"
 
 [dev-dependencies]
 # Dựng PDF fixture (Form XObject...) trong integration test.
