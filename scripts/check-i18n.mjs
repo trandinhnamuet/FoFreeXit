@@ -70,6 +70,11 @@ for (const m of html.matchAll(/data-i18n(?:-title|-placeholder|-aria)?="([^"]+)"
   used.push([m[1], `app/src/index.html:${lineOf(html, m.index)}`]);
 }
 for (const [k, where] of used) {
+  // Tiền tố động (vd. t("form.kind." + kind)): chỉ cần có ít nhất một key bắt đầu bằng nó.
+  if (k.endsWith(".")) {
+    if (![...viKeys].some((x) => x.startsWith(k))) errors.push(`tiền tố key không có key nào: ${k} — ${where}`);
+    continue;
+  }
   if (!viKeys.has(k) && !enKeys.has(k)) errors.push(`key không tồn tại: ${k} — ${where}`);
 }
 

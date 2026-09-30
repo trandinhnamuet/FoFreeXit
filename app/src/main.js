@@ -70,6 +70,8 @@ function shortName(path) {
 }
 
 async function loadDocument(path) {
+  // Mở lỗi → trả state.path về tài liệu đang hiển thị (pages vẫn là của nó).
+  const prevPath = state.path;
   try {
     state.path = path;
     state.textLayers = {};
@@ -102,7 +104,8 @@ async function loadDocument(path) {
     state.pages = meta.pages;
     buildPages();
     buildThumbnails();
-    buildOutline(meta.outline);
+    state.outline = meta.outline || [];
+    buildOutline(state.outline);
     $("status").textContent = t("viewer.docInfo", { n: meta.pageCount, name: shortName(path) });
     updatePageTotal();
     updateCurrentPage();
@@ -122,6 +125,7 @@ async function loadDocument(path) {
     state.orgThumbs = new Map();
     if (state.organizeMode) buildOrganizeGrid();
   } catch (e) {
+    state.path = prevPath;
     $("status").textContent = t("viewer.errOpen", { e });
   }
 }
@@ -2116,7 +2120,7 @@ async function openHeaderFooterDialog() {
     </div>
     <div class="row">
       <div><label>${t("orgx.hfBL")}</label><input type="text" id="hfBL"></div>
-      <div><label>${t("orgx.hfBC")}</label><input type="text" id="hfBC" value="Trang {page}/{total}"></div>
+      <div><label>${t("orgx.hfBC")}</label><input type="text" id="hfBC" value="${t("orgx.hfBCDefault", { page: "{page}", total: "{total}" })}"></div>
       <div><label>${t("orgx.hfBR")}</label><input type="text" id="hfBR"></div>
     </div>
     <p class="status">${t("orgx.hfInsertTok")}
@@ -4137,7 +4141,7 @@ function openSignDialog() {
     <label>${t("sig.signerLabel")}</label>
     <input type="text" id="sgName" placeholder="${t("sig.namePlaceholder")}">
     <label>${t("sig.reasonLabel")}</label>
-    <input type="text" id="sgReason" value="Tôi đồng ý với nội dung tài liệu">
+    <input type="text" id="sgReason" value="${t("sig.defaultReason")}">
     <label>${t("sig.idFileLabel")}</label>
     <div class="row">
       <input type="text" id="sgId" readonly placeholder="${t("sig.idNotChosen")}">

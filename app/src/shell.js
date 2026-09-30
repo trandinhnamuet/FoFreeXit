@@ -216,6 +216,27 @@
     for (const fn of langHandlers) { try { fn(); } catch (err) { console.error(err); } }
   });
 
+  // Đổi ngôn ngữ: dựng lại các phần UI bền do main.js vẽ (thông điệp tạm
+  // thời giữ nguyên đến lần hiển thị sau).
+  function docInfoIn(lang) {
+    const s = I18N.dict[lang]["viewer.docInfo"] || "";
+    return s.replace("{n}", state.pages.length).replace("{name}", state.path ? shortName(state.path) : "");
+  }
+  langHandlers.push(() => {
+    buildComments();
+    redrawAllAnnotPages();
+    if (state.outline) buildOutline(state.outline);
+    closeNotePopup();
+    closeColorPopover();
+    const other = I18N.lang === "vi" ? "en" : "vi";
+    if (state.path && $("status").textContent === docInfoIn(other)) $("status").textContent = docInfoIn(I18N.lang);
+    if (state.tool) { const tl = state.tool; setTool(tl); setTool(tl); } // setTool là toggle: tắt rồi bật để vẽ lại hint
+    if (state.formMode && state.path) refreshFormCount();
+    if (state.convMode) { toggleConvMode(); toggleConvMode(); }
+    if (state.editMode && state.editArm === "text") $("editHint").textContent = t("ev.addTextHint");
+    if (state.editMode && state.editSel != null) selectEditObject(state.editSel, state.editSelRuns);
+  });
+
   // ---------- Tài liệu ----------
   function onDocLoaded(path) {
     const name = path.split(/[\\/]/).pop();

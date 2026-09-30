@@ -49,8 +49,9 @@ I18N.add("vi", {
   "orgx.cropB": "Dưới (pt)",
   "orgx.cropThis": "Trang này",
   "orgx.cropAll": "Tất cả trang",
-  "orgx.cropNote": "Áp dụng ngay vào kế hoạch tổ chức trang — vào \"🗂 Tổ chức trang\" → \"💾 Lưu thay đổi\" để ghi ra tệp thật.",
-  "orgx.cropDone": "Đã đặt vùng cắt — vào Tổ chức trang > Lưu để ghi ra tệp thật.",
+  "orgx.cropNote": "Áp dụng ngay vào kế hoạch tổ chức trang — mở tab Trang rồi bấm Lưu để ghi ra tệp thật.",
+  "orgx.cropDone": "Đã đặt vùng cắt — mở tab Trang rồi bấm Lưu để ghi ra tệp thật.",
+  "orgx.hfBCDefault": "Trang {page}/{total}",
 });
 I18N.add("en", {
   "orgx.err": "Error: {e}",
@@ -102,6 +103,7 @@ I18N.add("en", {
   "orgx.cropB": "Bottom (pt)",
   "orgx.cropThis": "This page",
   "orgx.cropAll": "All pages",
-  "orgx.cropNote": "Applied to the page organization plan right away — go to \"🗂 Organize Pages\" → \"💾 Save Changes\" to write it to a real file.",
-  "orgx.cropDone": "Crop area set — go to Organize Pages > Save to write it to a real file.",
+  "orgx.cropNote": "Applied to the page organization plan right away — open the Page tab and click Save to write it to a real file.",
+  "orgx.cropDone": "Crop area set — open the Page tab and click Save to write it to a real file.",
+  "orgx.hfBCDefault": "Page {page}/{total}",
 });

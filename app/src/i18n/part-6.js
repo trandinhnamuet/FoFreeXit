@@ -67,6 +67,7 @@ I18N.add("vi", {
   // Sự kiện
   "ev.onlyPdf": "Chỉ mở được tệp .pdf",
   "ev.addTextHint": "Bấm lên trang để đặt chữ",
+  "sig.defaultReason": "Tôi đồng ý với nội dung tài liệu",
 });
 I18N.add("en", {
   // Redaction
@@ -136,4 +137,5 @@ I18N.add("en", {
   // Events
   "ev.onlyPdf": "Only .pdf files can be opened",
   "ev.addTextHint": "Click on the page to place text",
+  "sig.defaultReason": "I agree with the content of this document",
 });
