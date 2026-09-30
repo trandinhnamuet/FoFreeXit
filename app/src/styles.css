@@ -1114,7 +1114,6 @@ body.comparing .bb-center, body.comparing .bb-right { visibility: hidden; }
 .cmp-file button svg.ic, .cmp-swaprow button svg.ic { width: 15px; height: 15px; }
 .cmp-swaprow { margin-top: 8px; }
 .cmp-modes, .cmp-checks { display: flex; flex-wrap: wrap; gap: 4px 18px; }
-=======
 /* ===== Page Marks (features/pagex.js): nút thả xuống + hộp thoại 2 cột ===== */
 .rbtn.pm-drop > span { display: inline-flex; align-items: center; gap: 1px; }
 .rbtn.pm-drop .pm-caret svg.ic { width: 12px; height: 12px; color: var(--faint); }
@@ -1167,3 +1166,108 @@ body.comparing .bb-center, body.comparing .bb-right { visibility: hidden; }
 .modal-box .pm-set button svg.ic { width: 15px; height: 15px; }
 .modal-box .pm-set button:not(.pm-color) { display: inline-flex; align-items: center; gap: 6px; }
 @media (max-width: 860px) { .pm-dialog { grid-template-columns: 1fr; } .pm-preview { position: static; } }
+=======
+/* =====================================================================
+   docsec — Tìm và che, giao diện vùng che, làm sạch, đính kèm, thuộc tính, trợ năng
+   ===================================================================== */
+.modal-box:has(.ds-dlg) { width: min(680px, calc(100vw - 48px)); }
+.ds-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); margin-bottom: 6px; }
+.modal-box .ds-seg button { border: 0; background: transparent; padding: 5px 12px; border-radius: var(--radius-sm); color: var(--text-2); }
+.modal-box .ds-seg button:hover { background: var(--hover); }
+.modal-box .ds-seg button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-soft); font-weight: 600; }
+.ds-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.modal-box .ds-grid label { margin-top: 6px; }
+.modal-box .ds-opts, .modal-box .ds-scope { margin-top: 4px; align-items: flex-end; }
+.ds-results-head { margin-top: 10px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.ds-results { max-height: 240px; overflow: auto; margin-top: 4px; }
+.ds-rgroup { padding: 4px 0; }
+.ds-rpage { font-size: 12px; font-weight: 600; color: var(--text-2); padding: 4px 2px; position: sticky; top: 0; background: var(--surface); }
+.modal-box label.ds-hit { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 4px 6px; border-radius: var(--radius-sm); font-size: 12.5px; color: var(--text); }
+.modal-box label.ds-hit:hover { background: var(--hover); }
+.ds-ctx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.ds-ctx mark { background: var(--accent-soft-2); color: var(--text); border-radius: 3px; padding: 0 2px; font-weight: 600; }
+.ds-src { flex: none; font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; }
+
+.ds-colorbtn { display: inline-flex; align-items: center; gap: 8px; }
+.ds-colorbtn .sw { width: 16px; height: 16px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .45); }
+.ds-rs-preview {
+  height: 40px; border-radius: var(--radius-sm); display: flex; align-items: center; padding: 0 10px;
+  overflow: hidden; white-space: nowrap; font-size: 15px; font-weight: 600; box-shadow: inset 0 0 0 1px var(--border);
+}
+.ds-rs-preview.rep { font-size: 11px; white-space: normal; line-height: 1.25; }
+
+.ds-san { max-height: 52vh; overflow: auto; margin-top: 4px; }
+.ds-srow { display: flex; align-items: flex-start; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+.modal-box .ds-srow > label { flex: 1; margin: 0; }
+.ds-srow.none { opacity: .6; }
+.modal-box .ds-srow select { width: auto; flex: none; margin-top: 4px; }
+.ds-sdesc { display: block; margin-top: 2px; }
+.ds-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 0 7px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); margin-left: 4px; }
+.ds-warn { color: var(--warn); font-size: 12px; margin: 8px 0 0; }
+
+.ds-tabs { margin-bottom: 10px; }
+.ds-wrap { word-break: break-all; }
+.ds-checks { display: flex; flex-direction: column; }
+.modal-box .ds-checks label { margin-top: 4px; }
+.ds-fonts td:last-child { white-space: nowrap; }
+.ds-ok { color: var(--success); }
+.ds-bad { color: var(--danger); }
+.ds-warnc { color: var(--warn); }
+
+/* Bảng đính kèm */
+.attachments { display: flex; flex-direction: column; gap: 6px; }
+.ds-atool { display: flex; gap: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+.ds-atool .sbtn { border-radius: var(--radius-sm); color: var(--text-2); }
+.ds-atool .sbtn:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.ds-atool .sbtn:disabled { opacity: .4; }
+.ds-aitem { display: flex; gap: 8px; align-items: flex-start; padding: 7px 8px; border-radius: var(--radius); cursor: pointer; font-size: 12px; border: 1px solid transparent; }
+.ds-aitem:hover { background: var(--hover); }
+.ds-aitem.sel { background: var(--accent-soft); border-color: var(--accent-soft-2); }
+.ds-aitem:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ds-aitem svg.ic { width: 16px; height: 16px; flex: none; margin-top: 1px; color: var(--muted); }
+.ds-aitem.pending .ds-aname { font-style: italic; }
+.ds-ameta { min-width: 0; flex: 1; }
+.ds-aname { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-adesc { color: var(--text-2); margin-top: 2px; white-space: normal; word-break: break-word; }
+.ds-asave { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.ds-asave button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); }
+.ds-asave button.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-accent); font-weight: 600; }
+.ds-asave svg.ic { width: 14px; height: 14px; }
+.attachments .empty { padding: 24px 12px; text-align: center; line-height: 1.5; color: var(--muted); font-size: 12px; }
+#tabAttach.has-items::after {
+  content: attr(data-count); position: absolute; right: 1px; top: 1px; min-width: 14px; height: 14px; padding: 0 3px;
+  border-radius: 7px; background: var(--accent-fill); color: var(--on-accent); font-size: 9px; line-height: 14px; text-align: center;
+}
+
+/* Trợ năng */
+.ds-a11ysum { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.modal-box .ds-a11ysum .ds-fixall { margin-left: auto; font-weight: 400; }
+.ds-tree { max-height: 54vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.ds-cat > summary { padding: 7px 10px; cursor: pointer; background: var(--surface-2); border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: baseline; }
+.ds-chk > summary { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 22px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border); }
+.ds-chk > summary:hover { background: var(--hover); }
+.ds-chk > summary svg.ic { width: 16px; height: 16px; flex: none; }
+.ds-chk.passed > summary svg.ic { color: var(--success); }
+.ds-chk.failed > summary svg.ic { color: var(--danger); }
+.ds-chk.manual > summary svg.ic { color: var(--warn); }
+.ds-cname { flex: 1; min-width: 0; }
+.ds-cstat { font-size: 11.5px; color: var(--muted); }
+.ds-fixed { font-size: 11px; color: var(--success); font-weight: 600; }
+.ds-chk.willfix > summary .ds-cstat { text-decoration: line-through; }
+.ds-cbody { padding: 6px 12px 10px 46px; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+.ds-cbody p { margin: 0 0 6px; }
+.ds-cbody ul { margin: 0 0 6px; padding-left: 18px; color: var(--text-2); max-height: 120px; overflow: auto; }
+.ds-fixin { display: flex; gap: 6px; align-items: center; }
+.modal-box .ds-fixin input, .modal-box .ds-fixin select { flex: 1; width: auto; }
+.ds-a11ynote { margin: 8px 0 0; }
+.ds-alt { max-height: 56vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.ds-fig { display: flex; gap: 12px; align-items: flex-start; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.ds-figthumb {
+  width: 150px; min-height: 90px; flex: none; display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2); border-radius: var(--radius-sm); border: 1px solid var(--border); color: var(--muted); overflow: hidden;
+}
+.ds-figthumb img { max-width: 150px; max-height: 120px; display: block; background: #fff; }
+.ds-figmeta { flex: 1; min-width: 0; }
+.ds-figmeta textarea { margin-top: 4px; }
+.modal-box .ds-link { background: none; border: 0; padding: 2px 0; color: var(--accent); font-size: 12px; }
+.modal-box .ds-link:hover { background: none; text-decoration: underline; }

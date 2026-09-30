@@ -132,6 +132,19 @@ const ICONS = (() => {
     "shield-check": '<path d="M12 3l7.5 2.8v5.7c0 4.4-3.1 8.2-7.5 9.5-4.4-1.3-7.5-5.1-7.5-9.5V5.8z"/><path d="M8.8 12.2l2.3 2.3 4.2-4.4"/>',
     "signature": '<path d="M15.3 3.7l3 3-8.6 8.6-3.8.8.8-3.8z"/><path d="M3 20.5c1.4-1.3 2.6-1.3 3.4-.2.8 1.1 1.8 1.1 3 0 1.2-1.1 2.2-1.1 3 0"/><path d="M15.5 20.5h5.5"/>',
     "id-card": '<rect x="2.5" y="5" width="19" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="2"/><path d="M5.3 15.8a3.3 3.3 0 0 1 6.4 0"/><path d="M14.5 10h4.5M14.5 13.5h3"/>',
+    // docsec: che trang / tìm và che / giao diện vùng che / làm sạch / đính kèm / trợ năng
+    "redact-page": PAGE + bar(7.5, 10, 9, 8, 1),
+    "search-redact": bar(3, 4.5, 11, 4, 1) + '<path d="M3 12.5h6M3 16.5h4"/><circle cx="15.5" cy="14.5" r="3.6"/><path d="M18.2 17.2L21 20"/>',
+    "redact-style": bar(3, 3.5, 18, 5, 1.3) + '<path d="M5.5 20.5l3.5-9 3.5 9M6.8 17.3h4.4"/><path d="M15 20.5h6M18 12.5v8"/>',
+    "sanitize": '<path d="M15 3l-3.6 8"/><path d="M6.5 11.5h9.5l1.5 9H5z"/><path d="M9 15.5l-.6 5M13 15.5l.2 5"/><path d="M19.5 3.5v3M18 5h3"/>',
+    "attach": '<path d="M20 11.5l-8 8a5 5 0 0 1-7.1-7.1l8.4-8.4a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.6 1.6 0 0 1-2.3-2.3L15 7"/>',
+    "attach-add": '<path d="M13 12.8l-4.4 4.4a3.2 3.2 0 0 1-4.5-4.5l6.8-6.8a2.2 2.2 0 0 1 3.1 3.1L7.7 15.3a1.1 1.1 0 0 1-1.6-1.6l5.2-5.2"/><path d="M18 13.5v7M14.5 17h7"/>',
+    "a11y": '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="7.3" r="1.3"/><path d="M7.5 9.8h9M12 9.8v4M12 13.8l-2.6 4M12 13.8l2.6 4"/>',
+    "a11y-check": '<circle cx="9.5" cy="4.6" r="1.5"/><path d="M3.5 7.8h12M9.5 7.8v5.2M9.5 13l-3.2 7M9.5 13l2.4 4.8"/><path d="M14.5 18l2.2 2.2 4.3-4.7"/>',
+    "alt-text": FRAME_B + '<path d="M14.5 16h7M14.5 19.5h5"/>',
+    "check-circle": '<circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7 5.3-5.6"/>',
+    "x-circle": '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
+    "help-circle": '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7"/>' + dot(12, 16.9, 1),
 
     // ---- Theme / hệ thống ----
     "theme-light": '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',

@@ -24,6 +24,12 @@ pub mod ocr;
 pub mod organize;
 pub mod qpdf;
 pub mod redact;
+pub mod redact_search;
+pub mod sanitize;
+pub mod attachments;
+pub mod docprops;
+pub mod a11y;
+pub(crate) mod pdfobj;
 pub mod render;
 pub mod sign;
 pub mod split;
@@ -66,7 +72,18 @@ pub use form::{
     list_form_fields, parse_fdf, FieldKind, FieldValue, FormField, NewField,
 };
 pub use ocr::{find_tesseract, ocr_add_text_layer, ocr_page_words, OcrWord};
-pub use redact::redact_areas;
+pub use redact::{redact_areas, redact_areas_styled, RedactAlign, RedactStyle};
+pub use redact_search::{iban_valid, luhn_valid, search_redact, RedactHit, RedactPattern, RedactSearchSpec};
+pub use sanitize::{examine_document, sanitize_document, FormAction, SanitizeOptions, SanitizeReport};
+pub use attachments::{
+    apply_attachment_ops, extract_attachment, is_risky_file_name, list_attachments, Attachment, AttachmentOp,
+};
+pub use docprops::{
+    read_properties, write_properties, DocProperties, DocPropsUpdate, FontInfo, InitialView, SecurityInfo,
+};
+pub use a11y::{
+    check_accessibility, fix_accessibility, list_figures, set_alt_texts, A11yCheck, A11yFixes, CheckStatus, FigureInfo,
+};
 pub use sign::{generate_self_signed_id, sign_pdf, verify_signatures, SignatureCheck};
 pub use render::{bind_pdfium, page_count, page_render_mismatch, render_page_png, PageImage};
 pub use text::{extract_text, page_char_boxes, search, CharBox, Rect, SearchHit};

@@ -55,6 +55,8 @@
     if (orgDirty()) parts.push(t("shell.dirtyPages"));
     if (state.redactMarks.length > 0) parts.push(t("shell.dirtyRedact", { n: state.redactMarks.length }));
     if (window.Bookmarks && Bookmarks.isDirty()) parts.push(t("bm.dirtyPart"));
+    const ds = window.DocSec && DocSec.dirtyPart(); // đính kèm chưa lưu (features/docsec.js)
+    if (ds) parts.push(ds);
     return parts;
   }
   // true = không có gì chưa lưu, hoặc người dùng đồng ý bỏ (một hộp xác nhận duy nhất).
@@ -286,7 +288,7 @@
   }
   $("sidebarToggle").addEventListener("click", () =>
     setSidebarCollapsed(!document.body.classList.contains("sb-collapsed")));
-  for (const id of ["tabThumbs", "tabOutline", "tabComments"]) {
+  for (const id of ["tabThumbs", "tabOutline", "tabComments", "tabAttach"]) {
     $(id).addEventListener("click", () => setSidebarCollapsed(false));
   }
 
