@@ -133,14 +133,50 @@
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
-          <button class="rbtn atool" data-tool="square" data-i18n-title="ribbon.annotate.squareTip"><i data-icon="square"></i><span data-i18n="ribbon.annotate.square"></span></button>
           <button class="rbtn atool" data-tool="freetext" data-i18n-title="ribbon.annotate.textboxTip"><i data-icon="textbox"></i><span data-i18n="ribbon.annotate.textbox"></span></button>
           <button class="rbtn atool" data-tool="note" data-i18n-title="ribbon.annotate.noteTip"><i data-icon="note"></i><span data-i18n="ribbon.annotate.note"></span></button>
+          <button class="rbtn ax-split" id="axStampBtn"data-i18n-title="annx.stampTip" aria-haspopup="menu"><i data-icon="stamp"></i><span><span data-i18n="annx.stamp"></span><i class="ax-caret" data-icon="chevron-down"></i></span></button>
           <button class="rbtn atool" data-tool="crop" data-i18n-title="ribbon.home.cropTip"><i data-icon="crop"></i><span data-i18n="ribbon.home.crop"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <!-- Vẽ (Drawing): icon nhỏ dạng lưới như Foxit -->
+        <div class="rgroup rgroup-stack ax-draw">
+          <div class="rrow">
+            <button class="sq atool" data-tool="ink" data-i18n-title="annx.inkTip"><i data-icon="pencil"></i></button>
+            <button class="sq atool" data-tool="line" data-i18n-title="annx.lineTip"><i data-icon="line"></i></button>
+            <button class="sq atool" data-tool="arrow" data-i18n-title="annx.arrowTip"><i data-icon="arrow"></i></button>
+            <button class="sq atool" data-tool="square" data-i18n-title="ribbon.annotate.squareTip"><i data-icon="square"></i></button>
+          </div>
+          <div class="rrow">
+            <button class="sq atool" data-tool="oval" data-i18n-title="annx.ovalTip"><i data-icon="oval"></i></button>
+            <button class="sq atool" data-tool="polygon" data-i18n-title="annx.polygonTip"><i data-icon="polygon"></i></button>
+            <button class="sq atool" data-tool="polyline" data-i18n-title="annx.polylineTip"><i data-icon="polyline"></i></button>
+            <button class="sq atool" data-tool="cloud" data-i18n-title="annx.cloudTip"><i data-icon="cloud"></i></button>
+          </div>
+          <span class="rgroup-label" data-i18n="annx.drawing"></span>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
           <button id="annotColorBtn" class="rbtn" data-i18n-title="ribbon.annotate.colorTip"><span class="sw-big"><span class="sw" id="annotSw"></span></span><span data-i18n="common.color"></span></button>
+        </div>
+        <div class="rgroup rgroup-stack ax-props">
+          <div class="rrow">
+            <button class="sq-wide" id="axFillBtn" data-i18n-title="annx.fillTip"><span class="ax-fillsw" id="axFillSw"></span><span data-i18n="annx.fill"></span></button>
+            <select id="axWidth" class="rfield ax-sel" data-i18n-title="annx.widthTip">
+              <option value="0.5">0.5 pt</option><option value="1">1 pt</option><option value="2">2 pt</option><option value="3">3 pt</option>
+              <option value="4">4 pt</option><option value="6">6 pt</option><option value="8">8 pt</option><option value="12">12 pt</option>
+            </select>
+          </div>
+          <div class="rrow">
+            <span class="ax-lbl" data-i18n="annx.opacity"></span>
+            <select id="axOpacity" class="rfield ax-sel" data-i18n-title="annx.opacityTip">
+              <option value="1">100%</option><option value="0.75">75%</option><option value="0.5">50%</option><option value="0.25">25%</option>
+            </select>
+          </div>
+          <span class="rgroup-label" data-i18n="annx.props"></span>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
           <button id="saveAnnots" class="rbtn primary" data-i18n-title="ribbon.annotate.saveTip" disabled><i data-icon="save"></i><span><span data-i18n="ribbon.annotate.save"></span> (<span id="annotCount">0</span>)</span></button>
         </div>
         <span class="spacer"></span>
@@ -402,9 +438,11 @@
     <script src="i18n/part-5.js"></script>
     <script src="i18n/part-6.js"></script>
     <script src="i18n/part-7.js"></script>
+    <script src="i18n/part-annot.js"></script>
     <script src="icons.js"></script>
     <script src="main.js"></script>
     <script src="shell.js"></script>
     <script src="shell-extras.js"></script>
+    <script src="features/annot.js"></script>
   </body>
 </html>

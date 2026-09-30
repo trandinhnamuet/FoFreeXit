@@ -6,8 +6,8 @@
 use std::path::{Path, PathBuf};
 
 use ff_engine::{
-    AnnotKind, AnnotMeta, AnnotRef, AnnotSaveRequest, AnnotSpec, AnnotUpdate, Rect, ShapeKind,
-    ShapeSpec, StampSpec,
+    AnnotKind, AnnotMeta, AnnotRef, AnnotSaveRequest, AnnotSpec, AnnotUpdate, Rect, ReplySpec,
+    ShapeKind, ShapeSpec, StampSpec,
 };
 use pdfium_render::prelude::*;
 
@@ -364,6 +364,7 @@ fn save_annotations_combined() {
         shapes: vec![ink],
         updates: vec![u],
         deletes: vec![AnnotRef { page_index: 0, annot_index: 1, nm: None }],
+        replies: vec![ReplySpec { target: AnnotRef { page_index: 0, annot_index: 0, nm: None }, contents: "Đồng ý".into() }],
         meta: meta(),
     };
     let out = tmp("ff_annot_ext_comb.pdf");
@@ -374,8 +375,11 @@ fn save_annotations_combined() {
     let p0: Vec<_> = d.iter().filter(|a| a.page_index == 0).collect();
     let p1: Vec<_> = d.iter().filter(|a| a.page_index == 1).collect();
     let k0: Vec<&str> = p0.iter().map(|a| a.subtype.as_str()).collect();
-    assert_eq!(k0, vec!["Square", "Highlight"], "trang 0: Circle bị xoá, thêm Highlight");
+    assert_eq!(k0, vec!["Square", "Text", "Highlight"], "trang 0: Circle bị xoá, thêm trả lời + Highlight");
     assert_eq!(p0[0].contents.as_deref(), Some("Ghi chú mới"));
+    // Trả lời: /IRT trỏ về Square (chỉ số 0), có tác giả, không vẽ gì lên trang.
+    assert_eq!(p0[1].in_reply_to, Some(0));
+    assert_eq!(p0[1].contents.as_deref(), Some("Đồng ý"));
     assert!(p1.iter().any(|a| a.subtype == "Text" && a.contents.as_deref() == Some("Ghi chú")));
     assert!(p1.iter().any(|a| a.subtype == "Ink"));
     // Mọi annotation MỚI đều có tác giả + NM.
@@ -383,7 +387,10 @@ fn save_annotations_combined() {
         assert_eq!(a.author.as_deref(), Some("Nguyễn Tester"), "{} thiếu /T", a.subtype);
         assert!(a.nm.is_some(), "{} thiếu /NM", a.subtype);
     }
-    assert_eq!(pdfium_annots(&pdf, &out, 0).len(), 2);
+    assert_eq!(pdfium_annots(&pdf, &out, 0).len(), 3);
+    // AP rỗng của trả lời: vùng góc Square không bị PDFium vẽ thêm icon ghi chú.
+    let icon_px = color_pixels(&pdf, &out, 0, Rect { left: 103.0, bottom: 280.0, right: 125.0, top: 297.0 }, [255, 223, 0]);
+    assert_eq!(icon_px, 0, "trả lời không được hiện icon trên trang");
 }
 
 /// Render ẩn annotation đang sửa (UI vẽ preview thay) — pixel của nó biến mất.

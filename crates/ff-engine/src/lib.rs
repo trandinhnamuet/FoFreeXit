@@ -30,7 +30,7 @@ pub use annot::{
 pub use annot_ext::{
     apply_shape_annotations, delete_annotations, list_annotations_detailed, render_page_hiding,
     save_annotations, update_annotations, AnnotDetail, AnnotMeta, AnnotRef, AnnotSaveRequest,
-    AnnotUpdate, ShapeKind, ShapeSpec, StampSpec,
+    AnnotUpdate, ReplySpec, ShapeKind, ShapeSpec, StampSpec,
 };
 pub use edit::{apply_edits, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
 pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};

@@ -202,6 +202,7 @@ async function loadDocument(path) {
     updateUndoRedoButtons();
     setTool(null);
     updateAnnotCount();
+    if (window.AnnotExt) AnnotExt.onDocLoaded(); // đọc chú thích có sẵn trong file
     buildComments();
     $("searchBox").value = "";
     $("searchCount").textContent = "—";
@@ -348,7 +349,12 @@ async function renderSlot(idx) {
   const p = state.pages[idx];
   const renderWidth = Math.round(p.widthPt * PT_PER_PX * state.zoom * DPR);
   try {
-    const dataUrl = await invoke("render_page", {
+    // Chú thích có sẵn đang sửa/xoá: render ẩn chúng (lớp preview vẽ thay).
+    const hide = window.AnnotExt ? AnnotExt.hiddenIndices(idx) : [];
+    slot.dataset.hideKey = hide.join(",");
+    const dataUrl = hide.length
+      ? await invoke("annot_render_page", { path: state.path, page: idx, width: renderWidth, hide })
+      : await invoke("render_page", {
       path: state.path,
       page: idx,
       width: renderWidth,
@@ -974,7 +980,8 @@ function updateAnnotCount() {
 // dữ liệu của 1 tài liệu, không cần theo dõi diff từng trường. 1 stack DUY
 // NHẤT cho cả Annotate và Organize → Ctrl+Z hoạt động xuyên cả 2 chế độ.
 function snapshot() {
-  return JSON.parse(JSON.stringify({ annotSpecs: state.annotSpecs, pagePlan: state.pagePlan }));
+  // annotExisting: chú thích CÓ SẴN trong file (sửa/xoá) — features/annot.js.
+  return JSON.parse(JSON.stringify({ annotSpecs: state.annotSpecs, pagePlan: state.pagePlan, annotExisting: state.annotExisting }));
 }
 function pushUndo(snap) {
   state.undoStack.push(snap || snapshot());
@@ -996,6 +1003,7 @@ function applySnapshot(snap) {
   closeNotePopup();
   state.annotSpecs = snap.annotSpecs;
   state.pagePlan = snap.pagePlan;
+  if (snap.annotExisting) state.annotExisting = snap.annotExisting;
   state.selectedId = null;
   state.orgSelected = new Set();
   redrawAllAnnotPages();
@@ -1039,6 +1047,7 @@ function drawAnnotsForPage(idx) {
 
   for (const s of state.annotSpecs) {
     if (s.pageIndex !== idx) continue;
+    if (s.ext) continue; // hình vẽ/con dấu: features/annot.js tự vẽ
     if (editing && editing.id === s.id) continue; // đang sửa thì bỏ qua preview
     const col = rgbCss(s.color);
 
@@ -1670,6 +1679,7 @@ function onPagesMouseUp() {
 }
 
 async function saveAnnots() {
+  if (window.AnnotExt) return AnnotExt.save(); // lưu gộp cả hình vẽ + sửa/xoá chú thích có sẵn
   if (!state.annotSpecs.length) return;
   finishEditing();
   const out = await invoke("pick_save_pdf");
@@ -4611,6 +4621,7 @@ $("annotColorBtn").addEventListener("click", () => {
     if (state.selectedId != null) {
       const s = state.annotSpecs.find((x) => x.id === state.selectedId);
       if (s) { pushUndo(); s.color = rgb.slice(); drawAnnotsForPage(s.pageIndex); buildComments(); }
+      else if (window.AnnotExt) AnnotExt.setSelectedProp({ color: rgb.slice() });
     }
   });
 });

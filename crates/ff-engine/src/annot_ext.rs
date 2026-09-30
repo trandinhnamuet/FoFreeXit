@@ -190,7 +190,16 @@ pub struct AnnotSaveRequest {
     pub shapes: Vec<ShapeSpec>,
     pub updates: Vec<AnnotUpdate>,
     pub deletes: Vec<AnnotRef>,
+    /// Trả lời (reply) cho chú thích có sẵn.
+    pub replies: Vec<ReplySpec>,
     pub meta: AnnotMeta,
+}
+
+/// Trả lời 1 chú thích có sẵn (luồng thảo luận như Foxit/Acrobat).
+#[derive(Clone, Debug)]
+pub struct ReplySpec {
+    pub target: AnnotRef,
+    pub contents: String,
 }
 
 // ======================= Tiện ích chung =======================
@@ -1064,7 +1073,7 @@ fn text_stamp_ap(doc: &mut LoDoc, st: &StampSpec, color: [u8; 3], w: f32, h: f32
     let cap = 0.72;
     match st.sub.as_deref().filter(|x| !x.is_empty()) {
         None => {
-            let fs = fit(&st.label, h * 0.58);
+            let fs = fit(&st.label, h * 0.5);
             let tw = font.width(&st.label, fs);
             let y = (h - fs * cap) / 2.0;
             s.push_str(&format!("BT\n/F1 {} Tf\n{} {} Td\n", fmt(fs), fmt((w - tw) / 2.0), fmt(y)));
@@ -1072,8 +1081,9 @@ fn text_stamp_ap(doc: &mut LoDoc, st: &StampSpec, color: [u8; 3], w: f32, h: f32
             s.push_str("ET\n");
         }
         Some(sub) => {
-            let lf = fit(&st.label, h * 0.44);
-            let sf = fit(sub, h * 0.2);
+            // Chừa chỗ cho dấu tiếng Việt phía trên chữ hoa (Ệ, Ặ...).
+            let lf = fit(&st.label, h * 0.38);
+            let sf = fit(sub, h * 0.19);
             let gap = h * 0.1;
             let total = lf * cap + gap + sf * cap;
             let y0 = (h - total) / 2.0;
@@ -1614,6 +1624,46 @@ fn apply_update(doc: &mut LoDoc, id: ObjectId, u: &AnnotUpdate, date: &str) -> R
 
 /// Áp các thay đổi + xoá lên `doc` đã mở. Mọi đích được phân giải thành
 /// object id TRƯỚC khi sửa/xoá để chỉ số trong /Annots không lệch.
+/// Thêm trả lời: /Text với /IRT → annotation cha, /RT /R, cùng /Rect với cha và
+/// AP RỖNG — mọi viewer không vẽ thêm icon lên trang, còn danh sách Comments
+/// (Foxit/Acrobat/FoFreeXit) hiện nó thành luồng dưới chú thích cha.
+fn add_replies(doc: &mut LoDoc, replies: &[ReplySpec], meta: &AnnotMeta, date: &str) -> Result<(), EngineError> {
+    let mut targets = Vec::with_capacity(replies.len());
+    for r in replies {
+        targets.push(resolve_ref(doc, &r.target)?);
+    }
+    for (r, parent) in replies.iter().zip(targets) {
+        let pid = page_id(doc, r.target.page_index)?;
+        let (rect, subj) = {
+            let d = doc.get_dictionary(parent).map_err(perr("đọc annotation cha"))?;
+            (
+                rect_of(&dict_nums(doc, d, b"Rect")).unwrap_or(Rect { left: 0.0, bottom: 0.0, right: 0.0, top: 0.0 }),
+                dict_text(doc, d, b"Subj"),
+            )
+        };
+        let mut d = Dictionary::new();
+        d.set("Type", name("Annot"));
+        d.set("Subtype", name("Text"));
+        d.set("Rect", rect_obj(&rect));
+        d.set("P", LoObj::Reference(pid));
+        d.set("IRT", LoObj::Reference(parent));
+        d.set("RT", name("R"));
+        d.set("F", LoObj::Integer(4 | 8 | 16)); // Print | NoZoom | NoRotate
+        d.set("Name", name("Comment"));
+        d.set("Open", LoObj::Boolean(false));
+        d.set("Contents", pdf_text_string(&r.contents));
+        if let Some(s) = subj {
+            d.set("Subj", pdf_text_string(&s));
+        }
+        stamp_meta(&mut d, meta, date);
+        let ap_id = write_ap(doc, Ap::new(Rect { left: rect.left, bottom: rect.bottom, right: rect.left + 1.0, top: rect.bottom + 1.0 }, 1.0));
+        let id = doc.add_object(LoObj::Dictionary(d));
+        set_ap(doc, id, ap_id);
+        attach_annot(doc, pid, id)?;
+    }
+    Ok(())
+}
+
 fn modify_doc(doc: &mut LoDoc, updates: &[AnnotUpdate], deletes: &[AnnotRef], date: &str) -> Result<(), EngineError> {
     let mut upd_ids = Vec::with_capacity(updates.len());
     for u in updates {
@@ -1722,8 +1772,10 @@ pub fn save_annotations(
     let tmp = output.with_extension("ffannot.tmp.pdf");
     let result = (|| {
         let mut src: &Path = input;
-        if !req.updates.is_empty() || !req.deletes.is_empty() {
+        if !req.updates.is_empty() || !req.deletes.is_empty() || !req.replies.is_empty() {
             let mut doc = load_lo(pdfium, input)?;
+            // Trả lời thêm vào CUỐI /Annots → chỉ số các annotation có sẵn không đổi.
+            add_replies(&mut doc, &req.replies, &req.meta, &date)?;
             modify_doc(&mut doc, &req.updates, &req.deletes, &date)?;
             doc.save(&tmp).map_err(perr("lopdf save"))?;
             src = &tmp;
