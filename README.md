@@ -14,6 +14,7 @@
 | [docs/04-architecture.md](docs/04-architecture.md) | Kiến trúc kỹ thuật chi tiết (sẽ chi tiết hóa dần) |
 | [docs/14-foxit-gap-analysis.md](docs/14-foxit-gap-analysis.md) | Đánh giá định hướng/công nghệ/tiến độ so với tham vọng thay Foxit; các khoảng cách còn lại + giải pháp |
 | [docs/17-phase6-summary.md](docs/17-phase6-summary.md) | Tổng kết Phase 6 (Form/AcroForm) |
+| [docs/21-foxit-parity.md](docs/21-foxit-parity.md) | **Đối chiếu tính năng với Foxit** sau đợt hoàn thiện (so sánh, AI, Bates, làm sạch, trợ năng, hàng loạt…) |
 
 ## Trạng thái hiện tại
 
@@ -62,6 +63,9 @@
   - [x] UI thanh "🔁 Chuyển đổi": OCR (chọn ngôn ngữ), Xuất PNG/TXT/Word (tự chọn engine), Office→PDF; báo thiếu công cụ ngoài
   - [ ] Follow-up: tiền xử lý ảnh scan (deskew), OCR theo vùng, PDF→Excel — xem [docs/19-phase7-summary.md](docs/19-phase7-summary.md)
   - **Checklist test cho bạn**: [docs/20-phase7-user-tests.md](docs/20-phase7-user-tests.md)
+- [x] **Đợt hoàn thiện ngang Foxit** (nhánh `feat/foxit-parity`) — xem [docs/21-foxit-parity.md](docs/21-foxit-parity.md)
+  - [x] Chú thích vẽ/hình/con dấu + sửa chú thích có sẵn; bookmark/liên kết; Page Marks (hình mờ ảnh, nền, Bates, gỡ); tạo PDF (ảnh/web/máy quét/văn bản) + xuất Excel/PPT/TIFF/HTML; so sánh PDF; tìm-và-che, làm sạch, đính kèm, thuộc tính, trợ năng; form điền trên trang + 8 loại trường + nhận diện; sửa đối tượng (xoay/cắt ảnh, hình, sắp lớp); Điền & Ký, PFX + chữ ký hiển thị, In, Xử lý hàng loạt; Trợ lý AI (Claude API)
+  - Test: `powershell -File scripts/docker-test/run.ps1` (Docker Linux)
 - [ ] **Phase 8 — Hoàn thiện & Phát hành** (kế tiếp) — xem [docs/03-roadmap.md](docs/03-roadmap.md)
 
 Build & chạy: xem [docs/05-dev-setup.md](docs/05-dev-setup.md).
