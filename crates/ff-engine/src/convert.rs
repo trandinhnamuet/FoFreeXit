@@ -44,10 +44,12 @@ pub fn export_text(
     let mut all = String::new();
     for d in &dims {
         let t = crate::text::extract_text(pdfium, input, d.index, password)?;
-        all.push_str(&t);
+        // PDFium ngắt dòng bằng "\r\n" còn ngăn trang dùng "\n" → chuẩn hoá về
+        // "\n" trước, rồi ghi ra MỘT kiểu duy nhất (CRLF — Notepad đọc đúng).
+        all.push_str(&t.replace("\r\n", "\n").replace('\r', "\n"));
         all.push_str("\n\n");
     }
-    std::fs::write(output, all)?;
+    std::fs::write(output, all.replace('\n', "\r\n"))?;
     Ok(())
 }
 

@@ -466,7 +466,7 @@ pub fn flatten_form_xobjects(
     if flattened > 0 {
         document
             .save_to_file(output)
-            .map_err(|e| EngineError::Pdfium(format!("lưu file: {e}")))?;
+            .map_err(|e| EngineError::Pdfium(format!("lưu file: {}", crate::pdfium_msg(&e))))?;
     }
     Ok(flattened)
 }
@@ -2110,7 +2110,7 @@ pub fn apply_edits(
 
     document
         .save_to_file(output)
-        .map_err(|e| EngineError::Pdfium(format!("lưu file: {e}")))?;
+        .map_err(|e| EngineError::Pdfium(format!("lưu file: {}", crate::pdfium_msg(&e))))?;
 
     // ---- CỔNG AN TOÀN cho sửa-trong-form: mọi thay đổi pixel phải nằm
     // TRONG vùng khối sửa; phần còn lại của trang phải y nguyên. Lệch → huỷ

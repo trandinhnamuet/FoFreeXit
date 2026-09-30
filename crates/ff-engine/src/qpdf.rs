@@ -193,7 +193,8 @@ pub fn ensure_openable(
     }
     let repaired = std::env::temp_dir().join(format!(
         "ff_repaired_{}.pdf",
-        input.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+        // file_stem (không phải file_name) để khỏi thành "x.pdf.pdf".
+        input.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
     ));
     repair(input, &repaired)?;
     pdfium

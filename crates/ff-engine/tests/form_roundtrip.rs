@@ -188,3 +188,90 @@ fn flatten_removes_interactive_fields() {
     let fields = ff_engine::list_form_fields(&flat).expect("list flat");
     assert!(fields.is_empty(), "flatten phải bỏ hết field tương tác, còn: {:?}", fields.iter().map(|f| &f.name).collect::<Vec<_>>());
 }
+
+/// Điền → flatten → giá trị đã điền phải còn là CONTENT của trang (trước đây
+/// fill xoá /AP còn Flatten của PDFium chỉ in /AP có sẵn → giá trị biến mất).
+#[test]
+fn flatten_after_fill_keeps_text_and_combo_values() {
+    let pdf = pdfium();
+    let fx = tmp("ff_form_keep_fx.pdf");
+    let filled = tmp("ff_form_keep_filled.pdf");
+    let flat = tmp("ff_form_keep_flat.pdf");
+    make_form_fixture(&fx);
+    let values = vec![
+        FieldValue { name: "hoTen".into(), value: "Nguyen Van A".into() },
+        FieldValue { name: "dongY".into(), value: "on".into() },
+        FieldValue { name: "gioiTinh".into(), value: "Nam".into() },
+    ];
+    ff_engine::fill_form_fields(&fx, &values, &filled).expect("fill");
+    ff_engine::flatten_form(&pdf, &filled, &flat, None).expect("flatten");
+
+    let text = ff_engine::extract_text(&pdf, &flat, 0, None).expect("text");
+    assert!(text.contains("Nguyen Van A"), "giá trị text phải còn sau flatten: {text:?}");
+    assert!(text.contains("Nam"), "giá trị combo phải còn sau flatten: {text:?}");
+    assert!(ff_engine::list_form_fields(&flat).expect("list").is_empty(), "flatten phải bỏ field tương tác");
+}
+
+#[test]
+fn flatten_after_fill_keeps_vietnamese_values() {
+    let pdf = pdfium();
+    let fx = tmp("ff_form_keep_vi_fx.pdf");
+    let filled = tmp("ff_form_keep_vi_filled.pdf");
+    let flat = tmp("ff_form_keep_vi_flat.pdf");
+    make_form_fixture(&fx);
+    let values = vec![
+        FieldValue { name: "hoTen".into(), value: "Nguyễn Văn A".into() },
+        FieldValue { name: "gioiTinh".into(), value: "Nữ".into() },
+    ];
+    ff_engine::fill_form_fields(&fx, &values, &filled).expect("fill");
+    // Giá trị /V vẫn round-trip đúng (appearance không làm hỏng dữ liệu field).
+    let fields = ff_engine::list_form_fields(&filled).expect("list filled");
+    assert_eq!(
+        fields.iter().find(|f| f.name == "hoTen").and_then(|f| f.value.clone()).as_deref(),
+        Some("Nguyễn Văn A")
+    );
+    ff_engine::flatten_form(&pdf, &filled, &flat, None).expect("flatten");
+
+    let text = ff_engine::extract_text(&pdf, &flat, 0, None).expect("text");
+    assert!(text.contains("Nguyễn Văn A"), "giá trị tiếng Việt phải còn sau flatten: {text:?}");
+    assert!(text.contains("Nữ"), "combo tiếng Việt phải còn sau flatten: {text:?}");
+}
+
+/// Số pixel tối trong ô checkbox của fixture (rect [80,660,96,676] điểm PDF,
+/// render đúng 612px = 1px/pt trên trang Letter).
+fn dark_pixels_in_checkbox(pdf: &pdfium_render::prelude::Pdfium, path: &std::path::Path) -> usize {
+    let img = ff_engine::render::render_page(pdf, path, 0, 612, None).expect("render").image.to_luma8();
+    let mut n = 0;
+    for y in (792 - 676)..(792 - 660) {
+        for x in 80..96 {
+            if x < img.width() && y < img.height() && img.get_pixel(x, y)[0] < 128 {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+#[test]
+fn flatten_after_fill_keeps_checkbox_mark() {
+    let pdf = pdfium();
+    let fx = tmp("ff_form_cb_fx.pdf");
+    let on = tmp("ff_form_cb_on.pdf");
+    let off = tmp("ff_form_cb_off.pdf");
+    let flat_on = tmp("ff_form_cb_flat_on.pdf");
+    let flat_off = tmp("ff_form_cb_flat_off.pdf");
+    make_form_fixture(&fx);
+    ff_engine::fill_form_fields(&fx, &[FieldValue { name: "dongY".into(), value: "on".into() }], &on)
+        .expect("fill on");
+    ff_engine::fill_form_fields(&fx, &[FieldValue { name: "dongY".into(), value: "off".into() }], &off)
+        .expect("fill off");
+    ff_engine::flatten_form(&pdf, &on, &flat_on, None).expect("flatten on");
+    ff_engine::flatten_form(&pdf, &off, &flat_off, None).expect("flatten off");
+
+    let dark_on = dark_pixels_in_checkbox(&pdf, &flat_on);
+    let dark_off = dark_pixels_in_checkbox(&pdf, &flat_off);
+    assert!(
+        dark_on > dark_off + 10,
+        "checkbox đã tick phải còn dấu tick sau flatten (tối: on={dark_on}, off={dark_off})"
+    );
+}

@@ -92,7 +92,7 @@ pub fn build_document(
                 let pw = if path == main_input { password } else { None };
                 let doc = pdfium
                     .load_pdf_from_file(&path, pw)
-                    .map_err(|e| EngineError::Pdfium(format!("mở {}: {e}", path.display())))?;
+                    .map_err(|e| EngineError::Pdfium(format!("mở {}: {}", path.display(), crate::pdfium_msg(&e))))?;
                 cache.insert(path, doc);
             }
         }
@@ -149,7 +149,7 @@ pub fn build_document(
     }
 
     dest.save_to_file(output)
-        .map_err(|e| EngineError::Pdfium(format!("lưu file: {e}")))?;
+        .map_err(|e| EngineError::Pdfium(format!("lưu file: {}", crate::pdfium_msg(&e))))?;
     Ok(())
 }
 
@@ -251,7 +251,7 @@ pub fn split_by_page_count(
     // như khi gọi build_document mỗi phần — quan trọng với file nhiều trang).
     let src = pdfium
         .load_pdf_from_file(input, password)
-        .map_err(|e| EngineError::Pdfium(format!("mở {}: {e}", input.display())))?;
+        .map_err(|e| EngineError::Pdfium(format!("mở {}: {}", input.display(), crate::pdfium_msg(&e))))?;
     let count = src.pages().len();
     let mut outputs = Vec::new();
     let mut start = 0u16;
@@ -268,7 +268,7 @@ pub fn split_by_page_count(
         }
         let out = out_dir.join(format!("{base_name}_part{part}.pdf"));
         dest.save_to_file(&out)
-            .map_err(|e| EngineError::Pdfium(format!("lưu {}: {e}", out.display())))?;
+            .map_err(|e| EngineError::Pdfium(format!("lưu {}: {}", out.display(), crate::pdfium_msg(&e))))?;
         outputs.push(out);
         start = end;
         part += 1;

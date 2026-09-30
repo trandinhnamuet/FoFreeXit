@@ -232,7 +232,7 @@ pub fn apply_annotations(
 
         document
             .save_to_file(output)
-            .map_err(|e| EngineError::Pdfium(format!("lưu file: {e}")))?;
+            .map_err(|e| EngineError::Pdfium(format!("lưu file: {}", crate::pdfium_msg(&e))))?;
     }
 
     // ----- Pass 2: lopdf ghi FreeText/Note với định dạng đầy đủ -----

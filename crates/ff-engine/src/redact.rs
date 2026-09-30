@@ -206,7 +206,7 @@ pub fn redact_areas(
     }
     document
         .save_to_file(output)
-        .map_err(|e| EngineError::Pdfium(format!("lưu file: {e}")))?;
+        .map_err(|e| EngineError::Pdfium(format!("lưu file: {}", crate::pdfium_msg(&e))))?;
     Ok(touched)
 }
 

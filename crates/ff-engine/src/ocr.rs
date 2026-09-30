@@ -34,7 +34,7 @@ pub fn find_tesseract() -> Result<PathBuf, EngineError> {
     if Command::new(exe).arg("--version").output().is_ok() {
         return Ok(PathBuf::from(exe));
     }
-    Err(EngineError::Pdfium(
+    Err(EngineError::Ocr(
         "không tìm thấy tesseract. Cài Tesseract OCR (kèm gói ngôn ngữ vie) và/hoặc đặt FOFREEXIT_TESSERACT_PATH".into(),
     ))
 }
@@ -74,10 +74,10 @@ pub fn ocr_page_words(
         .arg(&out_base)
         .args(["-l", lang, "--psm", "3", "tsv"])
         .output()
-        .map_err(|e| EngineError::Pdfium(format!("chạy tesseract: {e}")))?;
+        .map_err(|e| EngineError::Ocr(format!("chạy tesseract: {e}")))?;
     let _ = std::fs::remove_file(&png);
     if !output.status.success() {
-        return Err(EngineError::Pdfium(format!(
+        return Err(EngineError::Ocr(format!(
             "tesseract lỗi (exit {:?}): {}",
             output.status.code(),
             String::from_utf8_lossy(&output.stderr)
@@ -158,7 +158,7 @@ pub fn ocr_add_text_layer(
         .load_pdf_from_file(input, password)
         .map_err(|e| EngineError::Pdfium(e.to_string()))?;
     let bytes = find_font_bytes(false, false)
-        .ok_or_else(|| EngineError::Pdfium("không tìm được font hệ thống cho lớp OCR".into()))?;
+        .ok_or_else(|| EngineError::Ocr("không tìm được font hệ thống cho lớp OCR".into()))?;
     let token = document
         .fonts_mut()
         .load_true_type_from_bytes(&bytes, true)
@@ -193,6 +193,6 @@ pub fn ocr_add_text_layer(
 
     document
         .save_to_file(output)
-        .map_err(|e| EngineError::Pdfium(format!("lưu file OCR: {e}")))?;
+        .map_err(|e| EngineError::Pdfium(format!("lưu file OCR: {}", crate::pdfium_msg(&e))))?;
     Ok(total)
 }

@@ -64,6 +64,16 @@ pub use render::{bind_pdfium, page_count, page_render_mismatch, render_page_png,
 pub use text::{extract_text, page_char_boxes, search, CharBox, Rect, SearchHit};
 pub use watermark::{add_header_footer, add_watermark, Anchor, HeaderFooterSpec, WatermarkSpec};
 
+/// Chuỗi lỗi PDFium dễ đọc. `PdfiumError` của pdfium-render in Display bằng
+/// Debug (vd `IoError(Os { code: 3, kind: NotFound, ... })`); lỗi IO thì dùng
+/// Display của `std::io::Error` ("The system cannot find the path…").
+pub(crate) fn pdfium_msg(e: &pdfium_render::prelude::PdfiumError) -> String {
+    match e {
+        pdfium_render::prelude::PdfiumError::IoError(io) => io.to_string(),
+        other => other.to_string(),
+    }
+}
+
 /// Lỗi cấp engine.
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -72,6 +82,10 @@ pub enum EngineError {
 
     #[error("lỗi PDFium: {0}")]
     Pdfium(String),
+
+    /// Lỗi OCR (Tesseract) — tách khỏi `Pdfium` để thông báo không bị gắn nhầm nhãn.
+    #[error("lỗi OCR: {0}")]
+    Ocr(String),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
