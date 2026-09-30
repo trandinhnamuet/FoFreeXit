@@ -77,6 +77,11 @@ I18N.add("vi", {
   "shell.booting": "Đang khởi động…",
   "shell.confirmLeaveEdit": "Bạn có thay đổi nội dung chưa lưu. Rời chế độ Chỉnh sửa sẽ bỏ các thay đổi này. Tiếp tục?",
   "shell.nothingToSave": "Không có thay đổi nào cần lưu",
+  "shell.confirmDiscard": "Tài liệu đang mở còn thay đổi chưa lưu:\n{list}\n\nNếu tiếp tục, các thay đổi này sẽ bị bỏ. Tiếp tục?",
+  "shell.dirtyEdit": "Nội dung đã chỉnh sửa (chế độ Chỉnh sửa)",
+  "shell.dirtyAnnots": "{n} chú thích chưa lưu",
+  "shell.dirtyPages": "Thay đổi tổ chức trang (thêm/xoá/sắp xếp/xoay/cắt trang)",
+  "shell.dirtyRedact": "{n} vùng bôi đen chưa áp dụng",
   "shell.noDocument": "Hãy mở một tệp PDF trước",
   "shell.exitReading": "Thoát chế độ đọc (Esc)",
 
@@ -320,6 +325,11 @@ I18N.add("en", {
   "shell.booting": "Starting…",
   "shell.confirmLeaveEdit": "You have unsaved content edits. Leaving Edit mode will discard them. Continue?",
   "shell.nothingToSave": "There are no changes to save",
+  "shell.confirmDiscard": "The open document has unsaved changes:\n{list}\n\nIf you continue, these changes will be lost. Continue?",
+  "shell.dirtyEdit": "Content edits (Edit mode)",
+  "shell.dirtyAnnots": "{n} unsaved annotation(s)",
+  "shell.dirtyPages": "Page organization changes (insert/delete/reorder/rotate/crop)",
+  "shell.dirtyRedact": "{n} redaction area(s) not yet applied",
   "shell.noDocument": "Please open a PDF file first",
   "shell.exitReading": "Exit reading mode (Esc)",
 

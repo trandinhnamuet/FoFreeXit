@@ -69,6 +69,95 @@ function shortName(path) {
   return path.split(/[\\/]/).pop();
 }
 
+// Phân loại lỗi mở tệp từ backend (chuỗi lỗi PDFium / IO / qpdf).
+// Không tìm thấy / không đọc được tệp → sửa qua QPDF cũng vô ích (và tốn vài giây).
+function isNotFoundError(e) {
+  return /os error [23]\b|code:\s*[23]\b|NotFound|not found|No such file|kh\u00f4ng t\u00ecm th\u1ea5y|FileError/i.test(String(e));
+}
+function isPasswordError(e) {
+  return /PasswordError|invalid password/i.test(String(e));
+}
+
+// Đường dẫn file tạm trong thư mục temp của hệ thống.
+async function tempFilePath(name) {
+  const P = window.__TAURI__.path;
+  return P.join(await P.tempDir(), name);
+}
+
+// Hộp thoại nhập mật khẩu cho tệp PDF có mã hoá. Đúng mật khẩu → giải mã ra
+// 1 file tạm và trả đường dẫn file đó; Huỷ/đóng hộp thoại → null.
+function askPasswordAndDecrypt(path) {
+  return new Promise((resolve) => {
+    const box = openModal(t("viewer.pwTitle"), `
+      <p class="muted">${t("viewer.pwIntro", { name: escapeHtml(shortName(path)) })}</p>
+      <label for="openPwInput">${t("viewer.pwLabel")}</label>
+      <input type="password" id="openPwInput" autocomplete="current-password">
+      <div class="err" id="openPwErr"></div>
+      <div class="foot"><button id="openPwCancel">${t("common.cancel")}</button><button id="openPwOk" class="primary">${t("common.ok")}</button></div>
+    `);
+    const inp = box.querySelector("#openPwInput");
+    const err = box.querySelector("#openPwErr");
+    const ok = box.querySelector("#openPwOk");
+    let done = false;
+    let busy = false;
+    const finish = (v) => {
+      if (done) return;
+      done = true;
+      obs.disconnect();
+      if (ok.isConnected) closeModal();
+      resolve(v);
+    };
+    // Hộp thoại bị đóng bằng Esc / bấm nền / modal khác thay thế → coi như Huỷ.
+    const obs = new MutationObserver(() => {
+      if (!ok.isConnected || $("modalOverlay").classList.contains("hidden")) finish(null);
+    });
+    obs.observe($("modalOverlay"), { attributes: true, attributeFilter: ["class"] });
+    obs.observe(box, { childList: true });
+    const fail = (e) => {
+      busy = false;
+      ok.disabled = false;
+      if (done) return;
+      err.textContent = isPasswordError(e) ? t("viewer.pwWrong") : t("viewer.pwErr", { e });
+      inp.focus();
+      inp.select();
+    };
+    const submit = async () => {
+      if (busy || done) return;
+      const pw = inp.value;
+      if (!pw) { err.textContent = t("viewer.pwEmpty"); inp.focus(); return; }
+      busy = true;
+      ok.disabled = true;
+      err.textContent = t("viewer.pwChecking");
+      try {
+        // Kiểm tra nhanh bằng PDFium (sai mật khẩu → PasswordError tức thì,
+        // không phải chờ qpdf thử hết các kiểu mã hoá mật khẩu).
+        await invoke("organize_identity_plan", { path, password: pw });
+      } catch (e) {
+        fail(e);
+        return;
+      }
+      try {
+        // ensure_openable chỉ xác nhận mở được (trả lại CHÍNH tệp đã mã hoá) —
+        // các lệnh khác mở tệp không kèm mật khẩu nên cần 1 bản đã giải mã.
+        const out = await tempFilePath(`ff_decrypted_${Date.now()}.pdf`);
+        await invoke("security_decrypt", { input: path, password: pw, output: out });
+        const usable = await invoke("ensure_openable", { path: out, password: null });
+        if (done) return;
+        busy = false;
+        finish(usable);
+      } catch (e) {
+        fail(e);
+      }
+    };
+    ok.addEventListener("click", submit);
+    box.querySelector("#openPwCancel").addEventListener("click", () => finish(null));
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); submit(); }
+    });
+  });
+}
+
+// Trả về "ok" | "cancelled" (huỷ nhập mật khẩu) | "missing" (không tìm thấy tệp) | "error".
 async function loadDocument(path) {
   // Mở tệp TRƯỚC, chỉ khi thành công mới xoá trạng thái tài liệu cũ — mở lỗi
   // (tệp gần đây đã bị xoá…) không được làm mất chú thích chưa lưu.
@@ -80,11 +169,24 @@ async function loadDocument(path) {
     try {
       meta = await invoke("open_document", { path });
     } catch (e) {
-      // File hỏng (xref/trailer sai) — tự sửa qua QPDF rồi mở lại (Phase 3).
-      const usable = await invoke("ensure_openable", { path, password: null });
-      if (usable === path) throw e;
-      openedPath = usable;
-      meta = await invoke("open_document", { path: usable });
+      if (isNotFoundError(e)) throw e;
+      if (isPasswordError(e)) {
+        // Tệp có mật khẩu → hỏi mật khẩu, mở bản đã giải mã (file tạm) nhưng
+        // vẫn hiển thị/ghi "gần đây" theo đường dẫn GỐC.
+        const usable = await askPasswordAndDecrypt(path);
+        if (!usable) {
+          $("status").textContent = t("viewer.pwCancelled", { name: shortName(path) });
+          return "cancelled"; // Huỷ → giữ nguyên tài liệu đang mở
+        }
+        openedPath = usable;
+        meta = await invoke("open_document", { path: usable });
+      } else {
+        // File hỏng (xref/trailer sai) — tự sửa qua QPDF rồi mở lại (Phase 3).
+        const usable = await invoke("ensure_openable", { path, password: null });
+        if (usable === path) throw e;
+        openedPath = usable;
+        meta = await invoke("open_document", { path: usable });
+      }
     }
     state.path = openedPath;
     state.textLayers = {};
@@ -118,19 +220,33 @@ async function loadDocument(path) {
 
     // Khởi tạo plan mặc định ngay (tất cả trang theo thứ tự gốc).
     // Load plan thực tế ở background để không block UI khi mở file.
-    state.pagePlan = state.pages.map((p) => ({ page: p.index, rotate: 0 }));
-    invoke("organize_identity_plan", { path: state.path, password: null })
+    // Cùng dạng khe với organize_identity_plan (buildOrganizeGrid/organize_apply dùng).
+    const tmpPlan = state.pages.map((p) => ({
+      kind: "existing", source: null, srcIndex: p.index,
+      widthPt: null, heightPt: null, rotationDelta: 0, crop: null,
+    }));
+    const tmpJson = JSON.stringify(tmpPlan);
+    state.pagePlan = tmpPlan;
+    invoke("organize_identity_plan", { path: openedPath, password: null })
       .then((plan) => {
+        // Chỉ thay khi vẫn là tài liệu này và plan tạm chưa bị người dùng sửa.
+        if (state.path !== openedPath || JSON.stringify(state.pagePlan) !== tmpJson) return;
         state.pagePlan = plan;
+        if (state.organizeMode && JSON.stringify(plan) !== tmpJson) buildOrganizeGrid();
       })
       .catch(() => {});
     state.orgSelected = new Set();
     state.orgAnchor = null;
     state.orgThumbs = new Map();
     if (state.organizeMode) buildOrganizeGrid();
+    if (state.formMode) refreshFormCount();
+    return "ok";
   } catch (e) {
     if (!loaded) state.path = prevPath;
-    $("status").textContent = t("viewer.errOpen", { e });
+    $("status").textContent = !loaded && isNotFoundError(e)
+      ? t("viewer.errNotFound", { name: shortName(path) })
+      : t("viewer.errOpen", { e });
+    return loaded ? "ok" : isNotFoundError(e) ? "missing" : "error";
   }
 }
 
@@ -330,6 +446,9 @@ async function buildTextLayer(idx) {
 
 function updateCurrentPage() {
   const vp = $("viewport");
+  // Viewer đang ẩn (tab Trang / chế độ sửa): offsetTop của slot vô nghĩa →
+  // giữ nguyên trang hiện tại thay vì nhảy về trang cuối.
+  if (vp.classList.contains("hidden") || vp.offsetParent === null) return;
   const probe = vp.scrollTop + vp.clientHeight * 0.35;
   let cur = 0;
   for (const slot of state.slots) {
@@ -782,8 +901,11 @@ function clearAllHighlights() {
 function drawHighlightsForVisible() {
   clearAllHighlights();
   for (const idx of state.visible) drawHighlightsForPage(idx);
-  // luôn vẽ trang chứa hit hiện tại
-  if (state.hitIdx >= 0) drawHighlightsForPage(state.hits[state.hitIdx].pageIndex);
+  // luôn vẽ trang chứa hit hiện tại (nếu chưa vẽ ở vòng trên — tránh vẽ trùng)
+  if (state.hitIdx >= 0) {
+    const pg = state.hits[state.hitIdx].pageIndex;
+    if (!state.visible.has(pg)) drawHighlightsForPage(pg);
+  }
 }
 
 function drawHighlightsForPage(pageIdx) {
@@ -854,8 +976,8 @@ function updateAnnotCount() {
 function snapshot() {
   return JSON.parse(JSON.stringify({ annotSpecs: state.annotSpecs, pagePlan: state.pagePlan }));
 }
-function pushUndo() {
-  state.undoStack.push(snapshot());
+function pushUndo(snap) {
+  state.undoStack.push(snap || snapshot());
   if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
   state.redoStack = [];
   updateUndoRedoButtons();
@@ -883,12 +1005,18 @@ function applySnapshot(snap) {
   if (state.organizeMode) buildOrganizeGrid();
 }
 function undo() {
+  // Chốt ô sửa text box / popup ghi chú đang mở TRƯỚC (có thể ghi thêm 1 bước
+  // undo cho thay đổi vừa gõ) rồi mới lùi.
+  finishEditing();
+  closeNotePopup();
   if (!state.undoStack.length) return;
   const prev = state.undoStack.pop();
   state.redoStack.push(snapshot());
   applySnapshot(prev);
 }
 function redo() {
+  finishEditing();
+  closeNotePopup();
   if (!state.redoStack.length) return;
   const next = state.redoStack.pop();
   state.undoStack.push(snapshot());
@@ -901,6 +1029,9 @@ function drawAnnotsForPage(idx) {
   if (!slot) return;
   const layer = slot.querySelector(".annotlayer");
   if (!layer) return;
+  // Giữ ô sửa text box đang mở (nằm cùng layer) qua lần vẽ lại.
+  const keepEd = editing && editing.el && editing.el.parentNode === layer ? editing.el : null;
+  const edFocused = keepEd && document.activeElement === keepEd;
   layer.innerHTML = "";
   const p = state.pages[idx];
   const scale = PT_PER_PX * state.zoom;
@@ -1016,6 +1147,10 @@ function drawAnnotsForPage(idx) {
     });
     layer.appendChild(el);
   }
+  if (keepEd) {
+    layer.appendChild(keepEd);
+    if (edFocused) keepEd.focus();
+  }
 }
 
 function selectAnnot(id) {
@@ -1052,9 +1187,13 @@ function cssToPdf(idx, cssX, cssY) {
 // ===== Sửa Text box tại chỗ (in-place) + thanh Format =====
 let editing = null; // { id, el, bar }
 
-function editTextBox(spec) {
+// Các trường của text box mà 1 lượt sửa có thể đổi (so sánh để quyết định ghi undo).
+const TEXTBOX_FIELDS = ["contents", "fontSize", "bold", "italic", "underline", "color", "bottom"];
+const textBoxKey = (s) => JSON.stringify([s.contents || "", s.fontSize || 14, !!s.bold, !!s.italic, !!s.underline, s.color]);
+
+// `fresh`: text box VỪA tạo (bước undo đã ghi lúc tạo) → không ghi thêm.
+function editTextBox(spec, fresh) {
   finishEditing();
-  pushUndo(); // ghi lại trạng thái TRƯỚC khi sửa nội dung/định dạng text box
   state.selectedId = null;
   state.tool = null;
   document.querySelectorAll(".atool").forEach((b) => b.classList.remove("active"));
@@ -1080,10 +1219,12 @@ function editTextBox(spec) {
     fontStyle: spec.italic ? "italic" : "normal",
     textDecoration: spec.underline ? "underline" : "none",
   });
+  // Đặt `editing` rồi vẽ lại TRƯỚC (ẩn preview của spec đang sửa), sau đó mới
+  // gắn editor — vẽ lại xoá sạch layer nên gắn trước sẽ bị xoá mất.
+  const orig = JSON.parse(JSON.stringify(TEXTBOX_FIELDS.reduce((o, k) => ((o[k] = spec[k] === undefined ? null : spec[k]), o), {})));
+  editing = { id: spec.id, el: ed, fresh: !!fresh, orig, origKey: textBoxKey(spec) };
+  drawAnnotsForPage(spec.pageIndex);
   layer.appendChild(ed);
-  drawAnnotsForPage(spec.pageIndex); // ẩn preview của spec đang sửa
-
-  editing = { id: spec.id, el: ed };
   showFmtBar(spec, ed);
   ed.focus();
   // đặt con trỏ cuối
@@ -1098,17 +1239,26 @@ function editTextBox(spec) {
 
 function finishEditing() {
   if (!editing) return;
-  const spec = state.annotSpecs.find((s) => s.id === editing.id);
-  const ed = editing.el;
+  const ctx = editing;
+  const spec = state.annotSpecs.find((s) => s.id === ctx.id);
+  const ed = ctx.el;
   if (spec && ed) {
     spec.contents = ed.innerText.trim();
     // mở rộng rect theo chiều cao thực tế của editor
     const scale = PT_PER_PX * state.zoom;
     const realH = ed.offsetHeight / scale;
     spec.bottom = spec.top - Math.max(realH, 14);
+    // Sửa text box có sẵn: chỉ ghi undo khi nội dung/định dạng thực sự đổi —
+    // snapshot hiện tại với text box được trả về giá trị trước khi sửa.
+    if (!ctx.fresh && ctx.origKey !== textBoxKey(spec)) {
+      const snap = snapshot();
+      const s0 = snap.annotSpecs.find((s) => s.id === spec.id);
+      if (s0) Object.assign(s0, ctx.orig);
+      pushUndo(snap);
+    }
   }
   if (ed && ed.parentNode) ed.remove();
-  if (editing.bar && editing.bar.parentNode) editing.bar.remove();
+  if (ctx.bar && ctx.bar.parentNode) ctx.bar.remove();
   const pg = spec ? spec.pageIndex : null;
   editing = null;
   // Xoá text box rỗng (không nhập gì).
@@ -1189,7 +1339,18 @@ function showFmtBar(spec, editorEl) {
 let notePopupEl = null;
 function openNotePopup(spec) {
   closeNotePopup();
-  pushUndo(); // ghi lại trạng thái TRƯỚC khi sửa nội dung/màu ghi chú
+  // Chỉ ghi undo ở thay đổi THỰC SỰ đầu tiên (mở xem rồi đóng không tạo bước
+  // undo rỗng): snapshot lúc đó với ghi chú được trả về giá trị lúc mở.
+  const orig = { contents: spec.contents, color: spec.color.slice() };
+  let recorded = false;
+  const recordUndo = () => {
+    if (recorded) return;
+    recorded = true;
+    const snap = snapshot();
+    const s0 = snap.annotSpecs.find((s) => s.id === spec.id);
+    if (s0) { s0.contents = orig.contents; s0.color = orig.color.slice(); }
+    pushUndo(snap);
+  };
   const slot = state.slots[spec.pageIndex];
   const layer = slot.querySelector(".annotlayer");
   const icon = layer.querySelector(`.a-note[data-id="${spec.id}"]`);
@@ -1212,6 +1373,8 @@ function openNotePopup(spec) {
 
   const ta = pop.querySelector(".np-text");
   ta.addEventListener("input", () => {
+    if (ta.value === (spec.contents || "")) return;
+    recordUndo();
     spec.contents = ta.value;
     buildComments();
   });
@@ -1222,6 +1385,8 @@ function openNotePopup(spec) {
   });
   pop.querySelector(".np-color").addEventListener("click", (e) => {
     openColorPopover(e.currentTarget, spec.color, (rgb) => {
+      if (rgb[0] === spec.color[0] && rgb[1] === spec.color[1] && rgb[2] === spec.color[2]) return;
+      recordUndo();
       spec.color = rgb;
       pop.querySelector(".np-color .sw").style.background = rgbCss(rgb);
       drawAnnotsForPage(spec.pageIndex);
@@ -1500,7 +1665,7 @@ function onPagesMouseUp() {
   updateAnnotCount();
   buildComments();
 
-  if (tool === "freetext") editTextBox(spec);
+  if (tool === "freetext") editTextBox(spec, true);
   else if (tool === "note") openNotePopup(spec);
 }
 
@@ -1625,6 +1790,7 @@ function enterOrganizeMode() {
 }
 function exitOrganizeMode() {
   state.organizeMode = false;
+  disconnectOrgThumbObserver();
   $("annobar").classList.remove("hidden");
   $("organizeBar").classList.add("hidden");
   $("viewport").classList.remove("hidden");
@@ -1667,11 +1833,23 @@ function refreshOrgSelection() {
 // pagePlan có khác trạng thái gốc của file đang mở không (đã chèn/xoá/đảo/xoay/
 // crop)? Watermark/Header-Footer cần biết để áp đúng lên trạng thái đang xem,
 // không phải file gốc còn trên đĩa (xem materializeBaseInput).
+// Chấp nhận cả dạng plan tạm {page, rotate} (dựng ngay khi mở file, trước khi
+// organize_identity_plan trả về) lẫn dạng đầy đủ {kind, source, srcIndex, ...}.
 function planIsDirty() {
   if (state.pagePlan.length !== state.pages.length) return true;
-  return state.pagePlan.some((e, i) =>
-    e.kind !== "existing" || e.source || e.srcIndex !== i ||
-    (e.rotationDelta || 0) !== 0 || e.crop);
+  return state.pagePlan.some((e, i) => {
+    const kind = e.kind || "existing";
+    const src = e.srcIndex != null ? e.srcIndex : e.page;
+    const rot = e.rotationDelta != null ? e.rotationDelta : (e.rotate || 0);
+    return kind !== "existing" || !!e.source || src !== i || (rot % 360) !== 0 || !!e.crop;
+  });
+}
+
+// Nút Lưu (Page) chỉ bật khi plan thật sự khác trạng thái gốc của file đang
+// mở — mở xong / lưu xong / undo về gốc → tắt (Ctrl+S báo "không có gì để lưu").
+function updateOrgSaveState() {
+  const btn = $("orgSave");
+  if (btn) btn.disabled = !state.pagePlan.length || !planIsDirty();
 }
 
 // Trả về đường dẫn file nên dùng làm "input" cho Watermark/Header-Footer:
@@ -1712,9 +1890,53 @@ function orgThumbKey(entry) {
 // Dựng lại toàn bộ lưới (chỉ gọi khi CẤU TRÚC plan đổi: chèn/xoá/đảo). Thumbnail
 // lấy từ cache nếu có; chỉ render trang chưa từng render → click chọn/xoay không
 // còn kéo theo render lại toàn bộ.
+// Thumbnail lưới nạp LƯỜI: chỉ render card gần khung nhìn (IntersectionObserver
+// gốc là #organizeGrid) — file 1000 trang không còn bắn cả nghìn render_page
+// một lúc. Cache vẫn theo "source#srcIndex"; request đang chạy được dùng chung.
+let orgThumbObserver = null;
+let orgThumbPending = new Map(); // key → Promise<dataURL> (của đúng cache hiện tại)
+let orgThumbPendingCache = null;
+function disconnectOrgThumbObserver() {
+  if (orgThumbObserver) { orgThumbObserver.disconnect(); orgThumbObserver = null; }
+}
+function loadOrgThumb(img) {
+  const key = img.dataset.thumbKey;
+  if (key == null || img.dataset.thumbLoaded) return;
+  img.dataset.thumbLoaded = "1";
+  const cache = state.orgThumbs;
+  const cached = cache.get(key);
+  if (cached) { img.src = cached; return; }
+  if (orgThumbPendingCache !== cache) { orgThumbPending = new Map(); orgThumbPendingCache = cache; }
+  let pr = orgThumbPending.get(key);
+  if (!pr) {
+    pr = invoke("render_page", { path: img.dataset.thumbPath, page: Number(img.dataset.thumbPage), width: 160 })
+      .then((url) => { cache.set(key, url); return url; })
+      .finally(() => { if (orgThumbPendingCache === cache) orgThumbPending.delete(key); });
+    orgThumbPending.set(key, pr);
+  }
+  pr.then((url) => { img.src = url; }).catch(() => { delete img.dataset.thumbLoaded; });
+}
+
 function buildOrganizeGrid() {
   const box = $("organizeGrid");
+  disconnectOrgThumbObserver();
+  // Plan tạm {page, rotate} (organize_identity_plan chưa về) → chuẩn hoá sang
+  // dạng đầy đủ để thumbnail/lưu dùng được ngay.
+  state.pagePlan = state.pagePlan.map((e) => (e && !e.kind && e.page != null)
+    ? { kind: "existing", source: null, srcIndex: e.page, rotationDelta: e.rotate || 0, crop: null }
+    : e);
   box.innerHTML = "";
+  const observer = typeof IntersectionObserver === "function"
+    ? new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        observer.unobserve(en.target);
+        const im = en.target.querySelector("img");
+        if (im) loadOrgThumb(im);
+      }
+    }, { root: box, rootMargin: "600px 0px" })
+    : null;
+  orgThumbObserver = observer;
   state.pagePlan.forEach((entry, i) => {
     const dims = (!entry.source && state.pages[entry.srcIndex])
       ? state.pages[entry.srcIndex]
@@ -1735,16 +1957,11 @@ function buildOrganizeGrid() {
     if (img) {
       const rot = entry.rotationDelta || 0;
       if (rot) img.style.transform = `rotate(${rot}deg)`;
-      const key = orgThumbKey(entry);
-      const cached = state.orgThumbs.get(key);
-      if (cached) {
-        img.src = cached;
-      } else {
-        const path = entry.source || state.path;
-        invoke("render_page", { path, page: entry.srcIndex, width: 160 })
-          .then((url) => { state.orgThumbs.set(key, url); img.src = url; })
-          .catch(() => {});
-      }
+      img.dataset.thumbKey = orgThumbKey(entry);
+      img.dataset.thumbPath = entry.source || state.path;
+      img.dataset.thumbPage = String(entry.srcIndex);
+      if (state.orgThumbs.has(img.dataset.thumbKey) || !observer) loadOrgThumb(img);
+      else observer.observe(card);
     }
     card.addEventListener("click", (e) => orgSelectCard(i, e));
     card.addEventListener("dragstart", (e) => e.dataTransfer.setData("text/plain", String(i)));
@@ -1758,7 +1975,7 @@ function buildOrganizeGrid() {
     });
     box.appendChild(card);
   });
-  $("orgSave").disabled = state.pagePlan.length === 0;
+  updateOrgSaveState();
 }
 
 function orgDeleteSelected() {
@@ -1783,6 +2000,7 @@ function orgRotateSelected(delta) {
     const img = cards[i] && cards[i].querySelector("img");
     if (img) img.style.transform = entry.rotationDelta ? `rotate(${entry.rotationDelta}deg)` : "";
   }
+  updateOrgSaveState();
 }
 
 async function orgSaveChanges() {
@@ -1791,6 +2009,7 @@ async function orgSaveChanges() {
   try {
     await invoke("organize_apply", { mainInput: state.path, plan: state.pagePlan, output: out, password: null });
     $("status").textContent = t("org.savedTo", { name: shortName(out) });
+    $("orgSave").disabled = true; // đã lưu — plan của file mới là trạng thái gốc
     exitOrganizeMode();
     loadDocument(out);
   } catch (e) {
@@ -2024,7 +2243,8 @@ function openSplitDialog() {
     const outDir = await invoke("pick_dir");
     if (!outDir) return;
     try {
-      const base = shortName(state.path).replace(/\.pdf$/i, "");
+      // Tên gốc người dùng mở (không phải file tạm ff_repaired_*.pdf sau khi sửa lỗi).
+      const base = shortName(state.origPath || state.path).replace(/(\.pdf)+$/i, "");
       const outs = await invoke("organize_split", {
         input: state.path, pagesPerFile: n, outDir, baseName: base, password: null,
       });
@@ -2170,7 +2390,7 @@ async function openHeaderFooterDialog() {
       fontSize: Number(box.querySelector("#hfSize").value) || 10,
       color: [r, g, b, 255],
       marginPt: Number(box.querySelector("#hfMargin").value) || 20,
-      date: new Date().toLocaleDateString("vi-VN"),
+      date: new Date().toLocaleDateString(I18N.lang === "vi" ? "vi-VN" : "en-US"),
       pages: box.querySelector("#hfPages").value.trim()
         ? parsePageRange(box.querySelector("#hfPages").value.trim(), base.pageCount)
         : [],
@@ -2256,6 +2476,7 @@ function openCropDialog(pageIdx, rectPdf) {
     closeModal();
     setTool(null);
     drawAnnotsForPage(pageIdx);
+    updateOrgSaveState();
     $("status").textContent = window.t("orgx.cropDone");
   });
 }
@@ -2383,7 +2604,8 @@ async function loadEditPage() {
     buildEditOverlay();
     $("pageInput").value = state.editPage + 1;
     updateZoomLabel();
-    $("editHint").textContent = t("edit.pageInfo", { page: state.editPage + 1, count: objs.length });
+    // Đang "armed" (Thêm chữ/ảnh) → giữ gợi ý "bấm lên trang để đặt", không ghi đè.
+    $("editHint").textContent = editArmedHint() || t("edit.pageInfo", { page: state.editPage + 1, count: objs.length });
   } catch (e) {
     $("editHint").textContent = t("edit.errLoadPage", { e });
   }
@@ -2526,6 +2748,13 @@ function refreshEditSelection() {
 
 // Chọn 1 khung. `runIndices`: mọi run thuộc khung (dòng text = nhiều run) —
 // thao tác xoá/kéo/đổi thuộc tính áp cho TẤT CẢ.
+// Gợi ý của công cụ đang "armed" (null nếu không armed).
+function editArmedHint() {
+  if (state.editArm === "image") return t("edit.clickToPlaceImage");
+  if (state.editArm === "text") return t("ev.addTextHint");
+  return null;
+}
+
 function selectEditObject(index, runIndices) {
   state.editSel = index != null && index >= 0 ? index : null;
   state.editSelRuns = state.editSel != null ? (runIndices || [state.editSel]) : [];
@@ -2550,7 +2779,7 @@ function selectEditObject(index, runIndices) {
     $("edBold").classList.toggle("on", !!o.fontBold);
     $("edItalic").classList.toggle("on", !!o.fontItalic);
     const emb = o.fontEmbedded == null ? "" : o.fontEmbedded ? " · " + t("edit.fontEmbedded") : " · " + t("edit.fontSystem");
-    $("editHint").textContent =
+    $("editHint").textContent = editArmedHint() ||
       `${o.fontFamily || o.fontName || "?"} · ${Math.round(o.fontSize || 0)}pt${emb}`;
   } else {
     $("edFontFamily").options[0].textContent = t("edit.fontKeep");
@@ -3656,7 +3885,7 @@ async function armAddImage() {
   state.editArm = "image";
   $("edAddImage").classList.add("armed");
   $("editOverlay").classList.add("armed");
-  $("editHint").textContent = t("edit.clickToPlaceImage");
+  $("editHint").textContent = editArmedHint();
 }
 
 async function replaceSelectedImage() {
@@ -3699,6 +3928,24 @@ async function saveEdits() {
 
 // ---------- Phase 7: OCR & Chuyển đổi ----------
 
+// Thông báo kết quả/lỗi của thao tác: ghi vào hint của thanh công cụ riêng VÀ
+// thanh trạng thái — thao tác có thể được gọi từ tab khác (Công cụ, menu Tệp)
+// khi thanh hint của nó đang ẩn, nên #status luôn phải nhận được thông báo.
+function actionMsg(hintId, msg) {
+  const h = $(hintId);
+  if (h) h.textContent = msg;
+  $("status").textContent = msg;
+}
+
+// Bật/tắt nút phụ thuộc công cụ ngoài; khi tắt, tooltip giải thích lý do
+// (cập nhật cả dataset.i18nTitle để đổi ngôn ngữ vẫn giữ đúng nội dung).
+function setConvToolState(id, ok, tipKey, missingKey) {
+  const b = $(id);
+  b.disabled = !ok;
+  b.dataset.i18nTitle = ok ? tipKey : missingKey;
+  b.title = t(b.dataset.i18nTitle);
+}
+
 async function toggleConvMode() {
   state.convMode = !state.convMode;
   $("convBar").classList.toggle("hidden", !state.convMode);
@@ -3712,8 +3959,8 @@ async function toggleConvMode() {
       $("convHint").textContent = miss.length
         ? t("conv.missingTools", { list: miss.join(", ") })
         : "";
-      $("cvOcr").disabled = !st.tesseract;
-      $("cvOffice").disabled = !st.soffice;
+      setConvToolState("cvOcr", st.tesseract, "ribbon.convert.ocrTip", "conv.ocrMissingTip");
+      setConvToolState("cvOffice", st.soffice, "ribbon.convert.officeTip", "conv.officeMissingTip");
     } catch (_) { /* trạng thái chỉ để gợi ý */ }
   } else {
     $("convHint").textContent = "";
@@ -3731,7 +3978,7 @@ async function runOcrAction() {
     $("convHint").textContent = "";
     loadDocument(out);
   } catch (e) {
-    $("convHint").textContent = t("conv.errOcr", { e });
+    actionMsg("convHint", t("conv.errOcr", { e }));
   }
 }
 
@@ -3742,7 +3989,7 @@ async function exportPngAction() {
     const files = await invoke("convert_images", { input: state.path, outDir: dir, dpi: 150 });
     $("status").textContent = t("conv.pngDone", { n: files.length, dir });
   } catch (e) {
-    $("convHint").textContent = t("conv.errPng", { e });
+    actionMsg("convHint", t("conv.errPng", { e }));
   }
 }
 
@@ -3754,7 +4001,7 @@ async function exportTxtAction() {
     await invoke("convert_txt", { input: state.path, output: out });
     $("status").textContent = t("conv.txtDone", { file: shortName(out) });
   } catch (e) {
-    $("convHint").textContent = t("conv.errTxt", { e });
+    actionMsg("convHint", t("conv.errTxt", { e }));
   }
 }
 
@@ -3762,14 +4009,14 @@ async function exportDocxAction() {
   const base = shortName(state.path).replace(/\.pdf$/i, "");
   const out = await invoke("pick_save_as", { ext: "docx", name: base + ".docx" });
   if (!out) return;
-  $("convHint").textContent = t("conv.docxRunning");
+  actionMsg("convHint", t("conv.docxRunning"));
   try {
     const engine = await invoke("convert_docx", { input: state.path, output: out });
     const note = engine === "libreoffice" ? t("conv.engineLibreOffice") : t("conv.engineBasic");
     $("status").textContent = t("conv.docxDone", { engine: note, file: shortName(out) });
     $("convHint").textContent = "";
   } catch (e) {
-    $("convHint").textContent = t("conv.errDocx", { e });
+    actionMsg("convHint", t("conv.errDocx", { e }));
   }
 }
 
@@ -3785,7 +4032,7 @@ async function officeToPdfAction() {
     $("convHint").textContent = "";
     loadDocument(out);
   } catch (e) {
-    $("convHint").textContent = t("conv.errOffice", { e });
+    actionMsg("convHint", t("conv.errOffice", { e }));
   }
 }
 
@@ -3808,7 +4055,7 @@ async function refreshFormCount() {
       ? t("form.countHint", { n: fields.length })
       : t("form.noFieldsHint");
   } catch (e) {
-    $("formHint").textContent = t("form.errRead", { e });
+    actionMsg("formHint", t("form.errRead", { e }));
   }
 }
 
@@ -3824,7 +4071,7 @@ async function openFillForm() {
   try {
     fields = await invoke("form_list", { path: state.path });
   } catch (e) {
-    $("formHint").textContent = t("form.errRead", { e });
+    actionMsg("formHint", t("form.errRead", { e }));
     return;
   }
   if (!fields.length) {
@@ -3945,7 +4192,7 @@ async function flattenFormAction() {
     $("status").textContent = t("form.flattenDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("formHint").textContent = t("form.errFlatten", { e });
+    actionMsg("formHint", t("form.errFlatten", { e }));
   }
 }
 
@@ -3958,9 +4205,9 @@ async function exportFormData(kind) {
   if (kind === "fdf" && !/\.fdf$/i.test(target)) target = target.replace(/\.[^.]*$/, "") + ".fdf";
   try {
     await invoke("form_export", { input: state.path, output: target });
-    $("formHint").textContent = t("form.exportDone", { file: shortName(target) });
+    actionMsg("formHint", t("form.exportDone", { file: shortName(target) }));
   } catch (e) {
-    $("formHint").textContent = t("form.errExport", { e });
+    actionMsg("formHint", t("form.errExport", { e }));
   }
 }
 
@@ -3974,7 +4221,7 @@ async function importFormFdf() {
     $("status").textContent = t("form.importDone", { n, file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("formHint").textContent = t("form.errImport", { e });
+    actionMsg("formHint", t("form.errImport", { e }));
   }
 }
 
@@ -4021,7 +4268,7 @@ async function applyRedactions() {
     $("status").textContent = t("sec.redactDone", { n, file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = t("sec.errRedact", { e });
+    actionMsg("secHint", t("sec.errRedact", { e }));
   }
 }
 
@@ -4110,7 +4357,7 @@ async function stripMetadataAction() {
     $("status").textContent = t("sec.stripDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = t("sec.errStrip", { e });
+    actionMsg("secHint", t("sec.errStrip", { e }));
   }
 }
 
@@ -4122,7 +4369,7 @@ async function optimizeSaveAction() {
     $("status").textContent = t("sec.optimizeDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = t("sec.errOptimize", { e });
+    actionMsg("secHint", t("sec.errOptimize", { e }));
   }
 }
 
@@ -4145,7 +4392,7 @@ function openCreateIdDialog() {
     try {
       await invoke("sig_create_id", { commonName: cn, output: out });
       closeModal();
-      $("secHint").textContent = t("sig.idDone", { file: shortName(out) });
+      actionMsg("secHint", t("sig.idDone", { file: shortName(out) }));
     } catch (e) {
       box.querySelector("#idErr").textContent = t("sig.err", { e });
     }
@@ -4199,15 +4446,15 @@ async function verifySignaturesAction(pathOverride) {
   try {
     checks = await invoke("sig_verify", { input: target });
   } catch (e) {
-    $("secHint").textContent = t("sig.errVerify", { e });
+    actionMsg("secHint", t("sig.errVerify", { e }));
     return;
   }
   const rows = checks.length
     ? checks
         .map((c, i) => {
           const badge = c.valid
-            ? `<span class="sig-ok">✓ ${t("sig.valid")}</span>`
-            : `<span class="sig-bad">✗ ${t("sig.invalid")}</span>`;
+            ? `<span class="sig-ok"><i data-icon="shield-check"></i> ${t("sig.valid")}</span>`
+            : `<span class="sig-bad"><i data-icon="win-close"></i> ${t("sig.invalid")}</span>`;
           const detail = [];
           if (!c.cryptoValid) detail.push(t("sig.detailCrypto"));
           if (!c.digestMatches) detail.push(t("sig.detailDigest"));
@@ -4246,6 +4493,7 @@ if (window.__TAURI__.event) {
       if (paths.length) $("status").textContent = t("ev.onlyPdf");
       return;
     }
+    if (window.Shell && Shell.confirmDiscardChanges && !Shell.confirmDiscardChanges()) return;
     if (state.editMode) exitEditMode();
     if (state.organizeMode) exitOrganizeMode();
     loadDocument(pdf);
@@ -4549,8 +4797,8 @@ window.addEventListener("keydown", (e) => {
     $("searchBox").select();
     return;
   }
-  if (e.ctrlKey && (e.key === "=" || e.key === "+")) { e.preventDefault(); setZoom(state.zoom * 1.25); return; }
-  if (e.ctrlKey && e.key === "-") { e.preventDefault(); setZoom(state.zoom / 1.25); return; }
+  if (e.ctrlKey && (e.key === "=" || e.key === "+")) { e.preventDefault(); setZoom((state.editMode ? state.editZoom : state.zoom) * 1.25); return; }
+  if (e.ctrlKey && e.key === "-") { e.preventDefault(); setZoom((state.editMode ? state.editZoom : state.zoom) / 1.25); return; }
   if (e.ctrlKey && e.key === "0") { e.preventDefault(); setZoom(1); return; }
   // Ctrl+Z hoàn tác / Ctrl+Y hoặc Ctrl+Shift+Z làm lại — không chặn khi đang gõ
   // trong ô text (để trình duyệt tự xử lý undo cấp ký tự trong contenteditable).
