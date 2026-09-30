@@ -1943,19 +1943,19 @@ function openReplaceDialog() {
 
 function openMergeDialog() {
   let files = [];
-  const box = openModal("Trộn file PDF", `
-    <button id="mrgAdd" type="button">➕ Thêm file…</button>
+  const box = openModal(t("orgx.mergeTitle"), `
+    <button id="mrgAdd" type="button">➕ ${t("orgx.addFile")}</button>
     <div id="mrgList" style="margin-top:8px;"></div>
     <div class="err" id="mrgErr"></div>
-    <div class="foot"><button id="mrgCancel">Huỷ</button><button id="mrgOk" class="primary">Trộn…</button></div>
+    <div class="foot"><button id="mrgCancel">${t("common.cancel")}</button><button id="mrgOk" class="primary">${t("orgx.mergeOk")}</button></div>
   `);
   function renderList() {
     box.querySelector("#mrgList").innerHTML = files.map((f, i) =>
       `<div class="row" style="margin-bottom:4px;align-items:center;">` +
       `<span style="flex:3">${i + 1}. ${shortName(f)}</span>` +
-      `<button data-up="${i}" type="button" ${i === 0 ? "disabled" : ""}>↑</button>` +
-      `<button data-down="${i}" type="button" ${i === files.length - 1 ? "disabled" : ""}>↓</button>` +
-      `<button data-rm="${i}" type="button">✕</button></div>`
+      `<button data-up="${i}" type="button" title="${t("orgx.moveUp")}" ${i === 0 ? "disabled" : ""}>↑</button>` +
+      `<button data-down="${i}" type="button" title="${t("orgx.moveDown")}" ${i === files.length - 1 ? "disabled" : ""}>↓</button>` +
+      `<button data-rm="${i}" type="button" title="${t("orgx.remove")}">✕</button></div>`
     ).join("");
   }
   box.querySelector("#mrgAdd").addEventListener("click", async () => {
@@ -1979,26 +1979,26 @@ function openMergeDialog() {
   });
   box.querySelector("#mrgCancel").addEventListener("click", closeModal);
   box.querySelector("#mrgOk").addEventListener("click", async () => {
-    if (files.length < 1) { box.querySelector("#mrgErr").textContent = "Hãy thêm ít nhất 1 file."; return; }
+    if (files.length < 1) { box.querySelector("#mrgErr").textContent = t("orgx.mergeNeedFile"); return; }
     const out = await invoke("pick_save_pdf");
     if (!out) return;
     try {
       await invoke("organize_merge", { files, output: out });
-      $("status").textContent = `Đã trộn ${files.length} file → ${shortName(out)}`;
+      $("status").textContent = t("orgx.mergeDone", { n: files.length, name: shortName(out) });
       closeModal();
     } catch (e) {
-      box.querySelector("#mrgErr").textContent = "Lỗi: " + e;
+      box.querySelector("#mrgErr").textContent = t("orgx.err", { e });
     }
   });
   renderList();
 }
 
 function openSplitDialog() {
-  const box = openModal("Tách file PDF", `
-    <label>Mỗi file tối đa (số trang)</label>
+  const box = openModal(t("orgx.splitTitle"), `
+    <label>${t("orgx.splitPerFile")}</label>
     <input type="number" id="splitN" value="1" min="1">
     <div class="err" id="splitErr"></div>
-    <div class="foot"><button id="splitCancel">Huỷ</button><button id="splitOk" class="primary">Tách…</button></div>
+    <div class="foot"><button id="splitCancel">${t("common.cancel")}</button><button id="splitOk" class="primary">${t("orgx.splitOk")}</button></div>
   `);
   box.querySelector("#splitCancel").addEventListener("click", closeModal);
   box.querySelector("#splitOk").addEventListener("click", async () => {
@@ -2010,10 +2010,10 @@ function openSplitDialog() {
       const outs = await invoke("organize_split", {
         input: state.path, pagesPerFile: n, outDir, baseName: base, password: null,
       });
-      $("status").textContent = `Đã tách thành ${outs.length} file vào ${outDir}`;
+      $("status").textContent = t("orgx.splitDone", { n: outs.length, dir: outDir });
       closeModal();
     } catch (e) {
-      box.querySelector("#splitErr").textContent = "Lỗi: " + e;
+      box.querySelector("#splitErr").textContent = t("orgx.err", { e });
     }
   });
 }
@@ -2021,31 +2021,31 @@ function openSplitDialog() {
 async function openWatermarkDialog() {
   const base = await materializeBaseInput();
   const previewPage = base.isTemp ? (state.orgSelected.size ? Math.min(...state.orgSelected) : 0) : state.current;
-  const box = openModal("Watermark", `
+  const box = openModal(t("orgx.wmTitle"), `
     ${base.isTemp ? MATERIALIZED_NOTE : ""}
-    <label>Nội dung</label>
+    <label>${t("orgx.wmText")}</label>
     <input type="text" id="wmText" value="CONFIDENTIAL">
     <div class="row">
-      <div><label>Cỡ chữ</label><input type="number" id="wmSize" value="36"></div>
-      <div><label>Màu (r,g,b)</label><input type="text" id="wmColor" value="200,0,0"></div>
-      <div><label>Độ mờ (0-255)</label><input type="number" id="wmAlpha" value="120" min="0" max="255"></div>
+      <div><label>${t("orgx.fontSize")}</label><input type="number" id="wmSize" value="36"></div>
+      <div><label>${t("orgx.colorRgb")}</label><input type="text" id="wmColor" value="200,0,0"></div>
+      <div><label>${t("orgx.wmAlpha")}</label><input type="number" id="wmAlpha" value="120" min="0" max="255"></div>
     </div>
     <div class="row">
-      <label><input type="checkbox" id="wmBold"> Đậm</label>
-      <label><input type="checkbox" id="wmItalic"> Nghiêng</label>
+      <label><input type="checkbox" id="wmBold"> ${t("orgx.bold")}</label>
+      <label><input type="checkbox" id="wmItalic"> ${t("orgx.italic")}</label>
     </div>
-    <label>Góc xoay (độ)</label>
+    <label>${t("orgx.wmRotate")}</label>
     <input type="number" id="wmRotate" value="45">
-    <label>Vị trí</label>
+    <label>${t("common.position")}</label>
     <div class="anchor9" id="wmAnchor">
       ${["top-left", "top-center", "top-right", "middle-left", "center", "middle-right", "bottom-left", "bottom-center", "bottom-right"]
         .map((a) => `<button type="button" data-a="${a}" class="${a === "center" ? "cur" : ""}">●</button>`).join("")}
     </div>
-    <label>Trang áp dụng (rỗng = tất cả, vd 1-3,5)</label>
-    <input type="text" id="wmPages" placeholder="tất cả">
+    <label>${t("orgx.wmPages")}</label>
+    <input type="text" id="wmPages" placeholder="${t("orgx.pagesAll")}">
     <div class="foot">
-      <button id="wmPreview" type="button">👁 Xem trước</button>
-      <button id="wmCancel">Huỷ</button><button id="wmOk" class="primary">Áp dụng</button>
+      <button id="wmPreview" type="button">👁 ${t("orgx.preview")}</button>
+      <button id="wmCancel">${t("common.cancel")}</button><button id="wmOk" class="primary">${t("common.apply")}</button>
     </div>
     <div class="err" id="wmErr"></div>
   `);
@@ -2084,7 +2084,7 @@ async function openWatermarkDialog() {
       }
       img.src = url;
     } catch (e) {
-      box.querySelector("#wmErr").textContent = "Lỗi xem trước: " + e;
+      box.querySelector("#wmErr").textContent = t("orgx.previewErr", { e });
     }
   });
   box.querySelector("#wmCancel").addEventListener("click", closeModal);
@@ -2093,11 +2093,11 @@ async function openWatermarkDialog() {
     if (!out) return;
     try {
       await invoke("watermark_add", { input: base.path, spec: buildSpec(), output: out, password: null });
-      $("status").textContent = `Đã thêm watermark → ${shortName(out)}`;
+      $("status").textContent = t("orgx.wmDone", { name: shortName(out) });
       closeModal();
       loadDocument(out);
     } catch (e) {
-      box.querySelector("#wmErr").textContent = "Lỗi: " + e;
+      box.querySelector("#wmErr").textContent = t("orgx.err", { e });
     }
   });
 }
@@ -2105,33 +2105,33 @@ async function openWatermarkDialog() {
 async function openHeaderFooterDialog() {
   const base = await materializeBaseInput();
   const previewPage = base.isTemp ? (state.orgSelected.size ? Math.min(...state.orgSelected) : 0) : state.current;
-  const box = openModal("Header / Footer", `
+  const box = openModal(t("orgx.hfTitle"), `
     ${base.isTemp ? MATERIALIZED_NOTE : ""}
     <div class="row">
-      <div><label>Trên-trái</label><input type="text" id="hfTL"></div>
-      <div><label>Trên-giữa</label><input type="text" id="hfTC"></div>
-      <div><label>Trên-phải</label><input type="text" id="hfTR"></div>
+      <div><label>${t("orgx.hfTL")}</label><input type="text" id="hfTL"></div>
+      <div><label>${t("orgx.hfTC")}</label><input type="text" id="hfTC"></div>
+      <div><label>${t("orgx.hfTR")}</label><input type="text" id="hfTR"></div>
     </div>
     <div class="row">
-      <div><label>Dưới-trái</label><input type="text" id="hfBL"></div>
-      <div><label>Dưới-giữa</label><input type="text" id="hfBC" value="Trang {page}/{total}"></div>
-      <div><label>Dưới-phải</label><input type="text" id="hfBR"></div>
+      <div><label>${t("orgx.hfBL")}</label><input type="text" id="hfBL"></div>
+      <div><label>${t("orgx.hfBC")}</label><input type="text" id="hfBC" value="Trang {page}/{total}"></div>
+      <div><label>${t("orgx.hfBR")}</label><input type="text" id="hfBR"></div>
     </div>
-    <p class="status">Chèn vào ô đang focus:
+    <p class="status">${t("orgx.hfInsertTok")}
       <button type="button" data-tok="{page}">{page}</button>
       <button type="button" data-tok="{total}">{total}</button>
       <button type="button" data-tok="{date}">{date}</button>
     </p>
     <div class="row">
-      <div><label>Cỡ chữ</label><input type="number" id="hfSize" value="10"></div>
-      <div><label>Lề (pt)</label><input type="number" id="hfMargin" value="20"></div>
-      <div><label>Màu (r,g,b)</label><input type="text" id="hfColor" value="0,0,0"></div>
+      <div><label>${t("orgx.fontSize")}</label><input type="number" id="hfSize" value="10"></div>
+      <div><label>${t("orgx.hfMargin")}</label><input type="number" id="hfMargin" value="20"></div>
+      <div><label>${t("orgx.colorRgb")}</label><input type="text" id="hfColor" value="0,0,0"></div>
     </div>
-    <label>Trang áp dụng (rỗng = tất cả)</label>
-    <input type="text" id="hfPages" placeholder="tất cả">
+    <label>${t("orgx.hfPages")}</label>
+    <input type="text" id="hfPages" placeholder="${t("orgx.pagesAll")}">
     <div class="foot">
-      <button id="hfPreview" type="button">👁 Xem trước</button>
-      <button id="hfCancel">Huỷ</button><button id="hfOk" class="primary">Áp dụng</button>
+      <button id="hfPreview" type="button">👁 ${t("orgx.preview")}</button>
+      <button id="hfCancel">${t("common.cancel")}</button><button id="hfOk" class="primary">${t("common.apply")}</button>
     </div>
     <div class="err" id="hfErr"></div>
   `);
@@ -2171,7 +2171,7 @@ async function openHeaderFooterDialog() {
       }
       img.src = url;
     } catch (e) {
-      box.querySelector("#hfErr").textContent = "Lỗi xem trước: " + e;
+      box.querySelector("#hfErr").textContent = t("orgx.previewErr", { e });
     }
   });
   box.querySelector("#hfCancel").addEventListener("click", closeModal);
@@ -2180,11 +2180,11 @@ async function openHeaderFooterDialog() {
     if (!out) return;
     try {
       await invoke("header_footer_add", { input: base.path, spec: buildSpec(), output: out, password: null });
-      $("status").textContent = `Đã thêm header/footer → ${shortName(out)}`;
+      $("status").textContent = t("orgx.hfDone", { name: shortName(out) });
       closeModal();
       loadDocument(out);
     } catch (e) {
-      box.querySelector("#hfErr").textContent = "Lỗi: " + e;
+      box.querySelector("#hfErr").textContent = t("orgx.err", { e });
     }
   });
 }
@@ -2201,21 +2201,21 @@ function openCropDialog(pageIdx, rectPdf) {
     right: p.widthPt - rectPdf.right,
     top: p.heightPt - rectPdf.top,
   };
-  const box = openModal("Crop trang", `
+  const box = openModal(t("orgx.cropTitle"), `
     <div class="row">
-      <div><label>Trái (pt)</label><input type="number" id="cropL" value="${m.left.toFixed(1)}"></div>
-      <div><label>Phải (pt)</label><input type="number" id="cropR" value="${m.right.toFixed(1)}"></div>
+      <div><label>${t("orgx.cropL")}</label><input type="number" id="cropL" value="${m.left.toFixed(1)}"></div>
+      <div><label>${t("orgx.cropR")}</label><input type="number" id="cropR" value="${m.right.toFixed(1)}"></div>
     </div>
     <div class="row">
-      <div><label>Trên (pt)</label><input type="number" id="cropT" value="${m.top.toFixed(1)}"></div>
-      <div><label>Dưới (pt)</label><input type="number" id="cropB" value="${m.bottom.toFixed(1)}"></div>
+      <div><label>${t("orgx.cropT")}</label><input type="number" id="cropT" value="${m.top.toFixed(1)}"></div>
+      <div><label>${t("orgx.cropB")}</label><input type="number" id="cropB" value="${m.bottom.toFixed(1)}"></div>
     </div>
     <div class="radiorow">
-      <label><input type="radio" name="cropScope" value="this" checked> Trang này</label>
-      <label><input type="radio" name="cropScope" value="all"> Tất cả trang</label>
+      <label><input type="radio" name="cropScope" value="this" checked> ${t("orgx.cropThis")}</label>
+      <label><input type="radio" name="cropScope" value="all"> ${t("orgx.cropAll")}</label>
     </div>
-    <p class="status">Áp dụng ngay vào kế hoạch tổ chức trang — vào "🗂 Tổ chức trang" → "💾 Lưu thay đổi" để ghi ra file thật.</p>
-    <div class="foot"><button id="cropCancel">Huỷ</button><button id="cropOk" class="primary">Áp dụng</button></div>
+    <p class="status">${t("orgx.cropNote")}</p>
+    <div class="foot"><button id="cropCancel">${t("common.cancel")}</button><button id="cropOk" class="primary">${t("common.apply")}</button></div>
   `);
   box.querySelector("#cropCancel").addEventListener("click", () => {
     closeModal();
@@ -2238,7 +2238,7 @@ function openCropDialog(pageIdx, rectPdf) {
     closeModal();
     setTool(null);
     drawAnnotsForPage(pageIdx);
-    $("status").textContent = "Đã đặt vùng crop — vào Tổ chức trang > Lưu để ghi ra file thật.";
+    $("status").textContent = window.t("orgx.cropDone");
   });
 }
 
