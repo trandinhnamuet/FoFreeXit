@@ -8,6 +8,8 @@ use base64::Engine as _;
 use serde::Serialize;
 use tauri_plugin_dialog::DialogExt;
 
+mod cmd_bookmarks;
+
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -22,7 +24,9 @@ fn ensure_pdfium_env() {
     }
 }
 
-fn pdfium() -> Result<pdfium_render::prelude::Pdfium, String> {
+mod cmd_annot;
+
+pub(crate) fn pdfium() -> Result<pdfium_render::prelude::Pdfium, String> {
     ensure_pdfium_env();
     ff_engine::bind_pdfium().map_err(|e| e.to_string())
 }
@@ -1596,7 +1600,21 @@ fn main() {
             pick_save_pem,
             pick_save_data,
             pick_fdf,
-            pick_image
+            pick_image,
+            cmd_bookmarks::bm_get_tree,
+            cmd_bookmarks::bm_auto_generate,
+            cmd_bookmarks::bm_save,
+            cmd_bookmarks::link_list,
+            cmd_bookmarks::open_url,
+            cmd_bookmarks::split_by_ranges,
+            cmd_bookmarks::split_by_bookmarks,
+            cmd_bookmarks::split_by_size,
+            cmd_annot::annot_list_detailed,
+            cmd_annot::annot_save,
+            cmd_annot::annot_render_page,
+            cmd_annot::annot_default_author,
+            cmd_annot::annot_pick_stamp_image,
+            cmd_annot::annot_image_preview,
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");

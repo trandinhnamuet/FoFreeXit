@@ -14,7 +14,11 @@ const known = new Set();
 const html = read(path.join(SRC, "index.html"));
 for (const m of html.matchAll(/\bid="([^"]+)"/g)) known.add(m[1]);
 
-const jsFiles = fs.readdirSync(SRC).filter((f) => f.endsWith(".js"));
+const FEAT = path.join(SRC, "features");
+const jsFiles = [
+  ...fs.readdirSync(SRC).filter((f) => f.endsWith(".js")),
+  ...(fs.existsSync(FEAT) ? fs.readdirSync(FEAT).filter((f) => f.endsWith(".js")).map((f) => "features/" + f) : []),
+];
 const sources = jsFiles.map((f) => [f, read(path.join(SRC, f))]);
 for (const [, src] of sources) {
   for (const m of src.matchAll(/\bid=\\?["']([\w-]+)\\?["']/g)) known.add(m[1]);           // id="x" trong template HTML

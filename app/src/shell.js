@@ -54,6 +54,7 @@
     if (state.annotSpecs.length > 0 && !$("saveAnnots").disabled) parts.push(t("shell.dirtyAnnots", { n: state.annotSpecs.length }));
     if (orgDirty()) parts.push(t("shell.dirtyPages"));
     if (state.redactMarks.length > 0) parts.push(t("shell.dirtyRedact", { n: state.redactMarks.length }));
+    if (window.Bookmarks && Bookmarks.isDirty()) parts.push(t("bm.dirtyPart"));
     return parts;
   }
   // true = không có gì chưa lưu, hoặc người dùng đồng ý bỏ (một hộp xác nhận duy nhất).
@@ -122,6 +123,8 @@
       : (current === "protect" || state.secMode) && redactReady ? "secRedactApply"
       // Không có chú thích nào nhưng còn vùng bôi đen chờ áp dụng → áp dụng chúng.
       : $("saveAnnots").disabled && redactReady ? "secRedactApply"
+      // Chỉ còn bookmark/liên kết chưa lưu → lưu chúng (features/bookmarks.js).
+      : $("saveAnnots").disabled && window.Bookmarks && Bookmarks.isDirty() ? "bmSave"
       : "saveAnnots";
     const btn = $(id);
     if (btn && !btn.disabled) btn.click();

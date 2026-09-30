@@ -90,6 +90,17 @@ const ICONS = (() => {
     "strikeout": '<path d="M16.5 7.3C15.9 5.8 14.2 5 12 5 9.4 5 7.5 6.3 7.5 8.4c0 1.5 1 2.5 3.1 3.1"/><path d="M4 12h16"/><path d="M15.8 14.6c.5.5.7 1.1.7 1.9 0 2.1-1.9 3.5-4.6 3.5-2.4 0-4.1-.9-4.8-2.6"/>',
     "square": '<rect x="4" y="5" width="16" height="14" rx="2"/>',
     "note": '<path d="M5 3h14a2 2 0 0 1 2 2v9l-7 7H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 21v-5a2 2 0 0 1 2-2h5"/><path d="M7 8h10M7 11.5h6"/>',
+    // Vẽ (Drawing) + con dấu — features/annot.js
+    "pencil": '<path d="M16.3 3.8l3.9 3.9L8.4 19.5 3.5 20.5l1-4.9z"/><path d="M13.8 6.3l3.9 3.9"/>',
+    "line": '<path d="M4.5 19.5l15-15"/>',
+    "arrow": '<path d="M4.5 19.5l15-15"/><path d="M11 4.5h8.5V13"/>',
+    "oval": '<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>',
+    "polygon": '<path d="M12 3.5l8 6-3 9.5H7l-3-9.5z"/>',
+    "polyline": '<path d="M3.5 17.5l5-9 5 6 7-9"/>' + dot(3.5, 17.5, 1.3) + dot(8.5, 8.5, 1.3) + dot(13.5, 14.5, 1.3) + dot(20.5, 5.5, 1.3),
+    "cloud": '<path d="M7 18.5a4 4 0 0 1-.6-7.95A5.5 5.5 0 0 1 17 8.6a4.5 4.5 0 0 1 .5 8.9z"/>',
+    "stamp": '<path d="M9.5 11.5V9.2A3.5 3.5 0 1 1 14.5 9.2v2.3"/><path d="M4 14.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v2H4z"/><path d="M5.5 20.5h13"/>',
+    "reply": '<path d="M9.5 6L4 11.5 9.5 17"/><path d="M4.5 11.5H14a6 6 0 0 1 6 6v1"/>',
+    "pencil-edit": '<path d="M15.5 4.5l4 4L9 19l-5 1 1-5z"/>',
     "eraser": '<path d="M7.5 20.5l-4-4a2 2 0 0 1 0-2.8L13.2 4a2 2 0 0 1 2.8 0l4 4a2 2 0 0 1 0 2.8l-9.7 9.7"/><path d="M7.5 20.5H20.5"/><path d="M8.5 8.7l6.8 6.8"/>',
 
     // ---- Biểu mẫu ----
@@ -117,6 +128,19 @@ const ICONS = (() => {
     "keyboard": '<rect x="2.5" y="6" width="19" height="12" rx="2"/>' + dot(6.5, 10) + dot(10, 10) + dot(14, 10) + dot(17.5, 10) + dot(6.5, 14) + dot(17.5, 14) + '<path d="M9.5 14h5"/>',
     "info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/>' + dot(12, 7.8, 1),
     "clock": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+
+    // ---- Bookmark / liên kết ----
+    "bookmark": '<path d="M7 3.5h10a1 1 0 0 1 1 1V20.5l-6-4-6 4V4.5a1 1 0 0 1 1-1z"/>',
+    "bookmark-add": '<path d="M13 3.5H7a1 1 0 0 0-1 1V20.5l6-4 6 4V12"/><path d="M18.5 3v6M15.5 6h6"/>',
+    "bookmark-child": '<path d="M4 4v6a2 2 0 0 0 2 2h4"/><path d="M13 8.5h6a1 1 0 0 1 1 1v11l-4-2.7-4 2.7v-11a1 1 0 0 1 1-1z"/>',
+    "bookmark-auto": '<path d="M7 3.5h6M6 4.5V20.5l6-4 6 4V13"/>' + '<path d="M18 2.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>',
+    "rename": '<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14.5 7.5l3 3"/><path d="M13 20h7"/>',
+    "outdent": '<path d="M11 6h9M11 12h9M4 18h16"/><path d="M8 9.5L4.5 12 8 14.5"/>',
+    "indent": '<path d="M11 6h9M11 12h9M4 18h16"/><path d="M4.5 9.5L8 12l-3.5 2.5"/>',
+    "link": '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/>',
+    "more": dot(6, 12, 1.4) + dot(12, 12, 1.4) + dot(18, 12, 1.4),
+    "expand-all": '<path d="M7 9l5-5 5 5M7 15l5 5 5-5"/>',
+    "collapse-all": '<path d="M7 4l5 5 5-5M7 20l5-5 5 5"/>',
   };
 })();
 function icon(name) {
