@@ -147,6 +147,19 @@ const ICONS = (() => {
     // ---- Biểu mẫu ----
     "form-fill": '<rect x="3.5" y="4.5" width="6" height="6" rx="1.3"/><path d="M5 7.6l1.3 1.3L8.2 6.6"/><path d="M12.5 7.5h8"/><rect x="3.5" y="13.5" width="6" height="6" rx="1.3"/><path d="M12.5 16.5h8"/>',
     "field-add": '<rect x="2.5" y="7" width="11" height="10" rx="2"/><path d="M6 10v4"/><path d="M18 8.5v7M14.5 12h7"/>',
+    // ---- Form: công cụ tạo trường (features/formx.js) ----
+    "field-text": '<rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M6.5 9.5h5M9 9.5v5"/><path d="M15 9v6"/>',
+    "field-check": '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12.3l2.7 2.7L16.2 9.5"/>',
+    "field-radio": '<circle cx="12" cy="12" r="8.5"/>' + dot(12, 12, 3.6),
+    "field-combo": '<rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M15 6.5v11"/><path d="M17 11l1.5 1.6L20 11"/><path d="M6 12h5.5"/>',
+    "field-list": '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M7 8h10M7 16h7"/>' + bar(6, 10.6, 12, 2.8, 0.8),
+    "field-button": '<rect x="2.5" y="7" width="19" height="10" rx="3"/><path d="M8 12h8"/>',
+    "field-date": '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>' + dot(8, 13.5) + dot(12, 13.5) + dot(16, 13.5) + dot(8, 17) + dot(12, 17),
+    "field-sig": '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 14.5c1.2-2.5 2.4-3.5 3.2-2.4.7 1-.2 2.4.8 2.4s1.6-1.8 2.6-1.8.6 1.8 1.6 1.8"/><path d="M15.5 15h3"/>',
+    "field-highlight": '<rect x="3" y="6.5" width="18" height="11" rx="2"/>' + bar(5.5, 9, 13, 6, 1),
+    "field-edit": '<rect x="3" y="4" width="13" height="9" rx="1.8" stroke-dasharray="2.4 2"/><path d="M12 11l7.5 3.2-3.1 1.2-1.2 3.1z"/>',
+    "wand": '<path d="M4 20L15 9"/><path d="M13.5 7.5l3 3"/><path d="M18 3v3M16.5 4.5h3M20.5 10v2.5M19.2 11.2h2.6M9 3v2.5M7.8 4.2h2.5"/>',
+    "reset": '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/>',
     "table": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9.5h18M3 14.8h18M9.5 4v16"/>',
 
     // ---- Chuyển đổi ----
@@ -201,7 +214,6 @@ const ICONS = (() => {
     "key-points": dot(5, 6.5, 1.3) + dot(5, 12, 1.3) + dot(5, 17.5, 1.3) + '<path d="M9 6.5h11M9 12h11M9 17.5h7"/>',
     "translate": '<path d="M3.5 5.5h9M8 3.5v2M5.5 5.5c.8 3 2.9 5.6 5.8 7M10.5 5.5c-.8 3.6-3.2 6.5-6.5 8"/><path d="M12.5 20.5l3.8-9 3.7 9M13.8 17.5h5"/>',
     "explain": '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.6 2.3c-.7.3-1.2 1-1.2 1.8v.5"/>' + dot(12, 17, 1),
-    "wand": '<path d="M4 20l10.5-10.5"/><path d="M13 8l3 3"/><path d="M17.5 3v3.5M15.75 4.75h3.5M20 10v2.5M18.75 11.25h2.5M9 3.5V6M7.75 4.75h2.5"/>',
     "spellcheck": '<path d="M3.5 15l3.5-9.5 3.5 9.5M4.8 11.5h4.4"/><path d="M13 5.5h3.2a2.2 2.2 0 0 1 0 4.4H13zM13 9.9h3.8a2.3 2.3 0 0 1 0 4.6H13z"/><path d="M12 18.5l2.5 2.5 6-6"/>',
     "speaker": '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
     "gear": '<circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 0 0-2.6-1.5L14 2.5h-4l-.5 2.5a7.5 7.5 0 0 0-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 0 0 2.6 1.5l.5 2.5h4l.5-2.5a7.5 7.5 0 0 0 2.6-1.5l2.3.9 2-3.4z"/>',

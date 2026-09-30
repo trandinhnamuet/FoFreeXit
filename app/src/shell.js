@@ -57,6 +57,7 @@
     if (window.Bookmarks && Bookmarks.isDirty()) parts.push(t("bm.dirtyPart"));
     const ds = window.DocSec && DocSec.dirtyPart(); // đính kèm chưa lưu (features/docsec.js)
     if (ds) parts.push(ds);
+    if (window.FormX && FormX.dirtyCount()) parts.push(t("fx.dirty", { n: FormX.dirtyCount() }));
     return parts;
   }
   // true = không có gì chưa lưu, hoặc người dùng đồng ý bỏ (một hộp xác nhận duy nhất).

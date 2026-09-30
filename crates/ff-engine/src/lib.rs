@@ -22,6 +22,10 @@ mod tounicode;
 pub(crate) mod fontmatch;
 pub mod form;
 pub mod links;
+mod formap;
+pub mod formdata;
+pub mod formrecog;
+pub mod formx;
 pub mod meta;
 pub mod ocr;
 pub mod organize;
@@ -102,6 +106,12 @@ pub use docprops::{
 };
 pub use a11y::{
     check_accessibility, fix_accessibility, list_figures, set_alt_texts, A11yCheck, A11yFixes, CheckStatus, FigureInfo,
+};
+pub use formdata::{export_form_data, import_form_data, parse_xfdf, read_form_data};
+pub use formrecog::{recognize_fields, FieldProposal};
+pub use formx::{
+    apply_form_changes, create_fields, fill_form, list_widgets, reset_form, ButtonAction, FieldEdit,
+    FieldSpec, FillValue, WidgetInfo,
 };
 pub use sign::{generate_self_signed_id, sign_pdf, verify_signatures, SignatureCheck};
 pub use render::{bind_pdfium, page_count, page_render_mismatch, render_page_png, PageImage};

@@ -24,8 +24,9 @@ fn le<E: std::fmt::Display>(ctx: &str) -> impl Fn(E) -> EngineError + '_ {
 }
 
 /// Loại field rút gọn cho UI.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum FieldKind {
+    #[default]
     Text,
     Checkbox,
     Radio,
@@ -70,12 +71,12 @@ pub struct FormField {
     pub read_only: bool,
 }
 
-fn bit(flags: i64, i: u32) -> bool {
+pub(crate) fn bit(flags: i64, i: u32) -> bool {
     flags & (1 << (i - 1)) != 0
 }
 
 /// Bản đồ ObjectId của widget → chỉ số trang (0-based), dựng từ /Annots mỗi trang.
-fn widget_page_map(doc: &Document) -> BTreeMap<ObjectId, u16> {
+pub(crate) fn widget_page_map(doc: &Document) -> BTreeMap<ObjectId, u16> {
     let mut map = BTreeMap::new();
     for (page_no, page_id) in doc.get_pages() {
         if let Ok(page) = doc.get_object(page_id).and_then(Object::as_dict) {
@@ -91,7 +92,7 @@ fn widget_page_map(doc: &Document) -> BTreeMap<ObjectId, u16> {
     map
 }
 
-fn text_of(obj: &Object) -> Option<String> {
+pub(crate) fn text_of(obj: &Object) -> Option<String> {
     match obj {
         Object::String(bytes, _) => Some(decode_pdf_text(bytes)),
         Object::Name(bytes) => Some(String::from_utf8_lossy(bytes).into_owned()),
@@ -100,7 +101,7 @@ fn text_of(obj: &Object) -> Option<String> {
 }
 
 /// Giải mã chuỗi text PDF: UTF-16BE (BOM FE FF) hoặc PDFDocEncoding≈Latin-1.
-fn decode_pdf_text(bytes: &[u8]) -> String {
+pub(crate) fn decode_pdf_text(bytes: &[u8]) -> String {
     if bytes.len() >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF {
         let u16s: Vec<u16> = bytes[2..]
             .chunks_exact(2)
@@ -114,7 +115,7 @@ fn decode_pdf_text(bytes: &[u8]) -> String {
 
 /// Mã hoá chuỗi thành text PDF: ASCII → literal; có ký tự ngoài Latin-1 →
 /// UTF-16BE (để tiếng Việt/CJK đúng).
-fn encode_pdf_text(s: &str) -> Object {
+pub(crate) fn encode_pdf_text(s: &str) -> Object {
     if s.chars().all(|c| (c as u32) < 128) {
         Object::string_literal(s.to_string())
     } else {
@@ -155,7 +156,7 @@ fn classify(doc: &Document, dict: &Dictionary) -> (FieldKind, Option<String>) {
 }
 
 /// Tên trạng thái BẬT của checkbox/radio: khoá khác "Off" trong /AP /N.
-fn on_state(doc: &Document, dict: &Dictionary) -> Option<String> {
+pub(crate) fn on_state(doc: &Document, dict: &Dictionary) -> Option<String> {
     // Widget có thể là chính field, hoặc nằm trong /Kids.
     let widget = if dict.has(b"AP") {
         Some(dict)
@@ -282,7 +283,7 @@ fn acroform_fields(doc: &Document) -> Option<Vec<Object>> {
 }
 
 /// Kế thừa /FT từ cha nếu field lá không tự khai (radio/checkbox thường vậy).
-fn effective_ft(doc: &Document, dict: &Dictionary) -> Option<Vec<u8>> {
+pub(crate) fn effective_ft(doc: &Document, dict: &Dictionary) -> Option<Vec<u8>> {
     if let Ok(ft) = dict.get(b"FT").and_then(Object::as_name) {
         return Some(ft.to_vec());
     }
@@ -347,36 +348,16 @@ pub struct FieldValue {
 /// Điền các field theo tên. Với checkbox/radio: value="on"/"true"/"yes"/"1" →
 /// bật (dùng on-state của field); "off"/rỗng → tắt. Text/combo/list: đặt /V.
 pub fn fill_form_fields(input: &Path, values: &[FieldValue], output: &Path) -> Result<usize, EngineError> {
-    let mut doc = Document::load(input).map_err(le("load"))?;
-    let lookup: BTreeMap<&str, &str> = values.iter().map(|v| (v.name.as_str(), v.value.as_str())).collect();
-
-    let fields = collect_fields(&doc);
-    let mut filled = 0usize;
-    for (id, name, dict) in fields {
-        let Some(&val) = lookup.get(name.as_str()) else { continue };
-        let ft = effective_ft(&doc, &dict);
-        let is_btn = ft.as_deref() == Some(b"Btn");
-        if is_btn {
-            let on = on_state(&doc, &dict).unwrap_or_else(|| "Yes".into());
-            let turn_on = matches!(val.to_ascii_lowercase().as_str(), "on" | "true" | "yes" | "1" | "checked");
-            let state = if turn_on { on.as_str() } else { "Off" };
-            set_button_state(&mut doc, id, &dict, state);
-        } else {
-            if let Ok(f) = doc.get_object_mut(id).and_then(Object::as_dict_mut) {
-                f.set("V", encode_pdf_text(val));
-                f.remove(b"AP"); // buộc dựng lại appearance
-            }
-        }
-        filled += 1;
-    }
-
-    if filled > 0 {
-        set_need_appearances(&mut doc, true);
-    }
-    doc.save(output).map_err(le("save"))?;
-    Ok(filled)
+    // Điền kèm dựng lại appearance (formx) — hiển thị đúng mọi viewer, tiếng Việt
+    // dùng font nhúng thay vì trông vào NeedAppearances.
+    let vals: Vec<crate::formx::FillValue> = values
+        .iter()
+        .map(|v| crate::formx::FillValue { name: v.name.clone(), value: v.value.clone(), values: vec![] })
+        .collect();
+    crate::formx::fill_form(input, &vals, output)
 }
 
+#[allow(dead_code)]
 /// Đặt /V của field + /AS của mọi widget (field hoặc /Kids) về `state`.
 fn set_button_state(doc: &mut Document, id: ObjectId, dict: &Dictionary, state: &str) {
     let state_name = Object::Name(state.as_bytes().to_vec());
@@ -403,6 +384,7 @@ fn set_button_state(doc: &mut Document, id: ObjectId, dict: &Dictionary, state: 
     }
 }
 
+#[allow(dead_code)]
 fn set_need_appearances(doc: &mut Document, need: bool) {
     let acro_id = doc.catalog().ok().and_then(|c| c.get(b"AcroForm").ok()).and_then(|o| o.as_reference().ok());
     if let Some(id) = acro_id {
@@ -459,7 +441,7 @@ pub fn export_fdf(input: &Path, output: &Path) -> Result<(), EngineError> {
 
 /// Chuỗi text PDF cho FDF: ASCII → literal `(...)`; có ký tự Unicode → hex
 /// UTF-16BE `<FEFF...>` (portable, Acrobat đọc được, round-trip tiếng Việt).
-fn serialize_pdf_text(s: &str) -> String {
+pub(crate) fn serialize_pdf_text(s: &str) -> String {
     if s.chars().all(|c| (c as u32) < 128) {
         let mut out = String::from("(");
         for c in s.chars() {
@@ -676,113 +658,22 @@ pub struct NewField {
 /// Tạo các field mới, ghi ra `output`. Widget cơ bản (viền mảnh) + appearance
 /// nhờ NeedAppearances. Text/checkbox/combo.
 pub fn create_form_fields(input: &Path, fields: &[NewField], output: &Path) -> Result<(), EngineError> {
-    let mut doc = Document::load(input).map_err(le("load"))?;
-    let pages: BTreeMap<u32, ObjectId> = doc.get_pages();
-
-    let mut new_field_ids: Vec<ObjectId> = Vec::new();
-    for nf in fields {
-        let Some(&page_id) = pages.get(&(nf.page_index as u32 + 1)) else { continue };
-        let rect = Object::Array(vec![
-            nf.rect[0].into(),
-            nf.rect[1].into(),
-            nf.rect[2].into(),
-            nf.rect[3].into(),
-        ]);
-        let mut d = Dictionary::new();
-        d.set("Type", Object::Name(b"Annot".to_vec()));
-        d.set("Subtype", Object::Name(b"Widget".to_vec()));
-        d.set("T", encode_pdf_text(&nf.name));
-        d.set("Rect", rect);
-        d.set("P", Object::Reference(page_id));
-        d.set("F", Object::Integer(4)); // Print
-        // Viền + nền nhạt cho dễ thấy.
-        let mut mk = Dictionary::new();
-        mk.set("BC", Object::Array(vec![0.into(), 0.into(), 0.into()]));
-        mk.set("BG", Object::Array(vec![0.95.into(), 0.95.into(), 0.95.into()]));
-        d.set("MK", Object::Dictionary(mk));
-
-        match nf.kind {
-            FieldKind::Text => {
-                d.set("FT", Object::Name(b"Tx".to_vec()));
-                if !nf.value.is_empty() {
-                    d.set("V", encode_pdf_text(&nf.value));
-                }
-                d.set("DA", Object::string_literal("/Helv 0 Tf 0 g"));
-            }
-            FieldKind::Checkbox => {
-                d.set("FT", Object::Name(b"Btn".to_vec()));
-                let on = matches!(nf.value.to_ascii_lowercase().as_str(), "on" | "true" | "yes" | "1" | "checked");
-                d.set("V", Object::Name(if on { b"Yes".to_vec() } else { b"Off".to_vec() }));
-                d.set("AS", Object::Name(if on { b"Yes".to_vec() } else { b"Off".to_vec() }));
-                // /AP /N với 2 trạng thái rỗng (viewer dựng qua NeedAppearances).
-                d.set("DA", Object::string_literal("/ZaDb 0 Tf 0 g"));
-            }
-            FieldKind::Combo => {
-                d.set("FT", Object::Name(b"Ch".to_vec()));
-                d.set("Ff", Object::Integer(1 << 17)); // Combo flag (bit 18)
-                let opts: Vec<Object> = nf.options.iter().map(|o| encode_pdf_text(o)).collect();
-                d.set("Opt", Object::Array(opts));
-                if !nf.value.is_empty() {
-                    d.set("V", encode_pdf_text(&nf.value));
-                }
-                d.set("DA", Object::string_literal("/Helv 0 Tf 0 g"));
-            }
-            _ => {
-                // Loại chưa hỗ trợ tạo → bỏ qua an toàn.
-                continue;
-            }
-        }
-
-        let fid = doc.add_object(Object::Dictionary(d));
-        new_field_ids.push(fid);
-
-        // Gắn widget vào /Annots của trang.
-        if let Ok(page) = doc.get_object_mut(page_id).and_then(Object::as_dict_mut) {
-            match page.get(b"Annots").and_then(Object::as_array).cloned() {
-                Ok(mut arr) => {
-                    arr.push(Object::Reference(fid));
-                    page.set("Annots", Object::Array(arr));
-                }
-                Err(_) => {
-                    page.set("Annots", Object::Array(vec![Object::Reference(fid)]));
-                }
-            }
-        }
-    }
-
-    ensure_acroform(&mut doc, &new_field_ids)?;
-    set_need_appearances(&mut doc, true);
-    doc.save(output).map_err(le("save"))?;
-    Ok(())
-}
-
-/// Đảm bảo có /AcroForm với /Fields chứa các field mới + /DR font cơ bản.
-fn ensure_acroform(doc: &mut Document, new_ids: &[ObjectId]) -> Result<(), EngineError> {
-    let root_id = doc.trailer.get(b"Root").and_then(Object::as_reference).map_err(le("root"))?;
-    let existing = doc
-        .catalog()
-        .ok()
-        .and_then(|c| c.get(b"AcroForm").ok())
-        .and_then(|o| o.as_reference().ok());
-
-    let acro_id = match existing {
-        Some(id) => id,
-        None => {
-            let mut acro = Dictionary::new();
-            acro.set("Fields", Object::Array(Vec::new()));
-            let id = doc.add_object(Object::Dictionary(acro));
-            if let Ok(cat) = doc.get_object_mut(root_id).and_then(Object::as_dict_mut) {
-                cat.set("AcroForm", Object::Reference(id));
-            }
-            id
-        }
-    };
-    if let Ok(acro) = doc.get_object_mut(acro_id).and_then(Object::as_dict_mut) {
-        let mut fields = acro.get(b"Fields").and_then(Object::as_array).cloned().unwrap_or_default();
-        for id in new_ids {
-            fields.push(Object::Reference(*id));
-        }
-        acro.set("Fields", Object::Array(fields));
-    }
+    // Dùng bộ tạo field đầy đủ (formx): có /AP thật cho mọi loại field.
+    let specs: Vec<crate::formx::FieldSpec> = fields
+        .iter()
+        .filter(|nf| !matches!(nf.kind, FieldKind::Unknown))
+        .map(|nf| crate::formx::FieldSpec {
+            name: nf.name.clone(),
+            kind: nf.kind,
+            page_index: nf.page_index,
+            rect: nf.rect,
+            value: if matches!(nf.kind, FieldKind::Checkbox | FieldKind::Radio) { String::new() } else { nf.value.clone() },
+            checked: matches!(nf.value.to_ascii_lowercase().as_str(), "on" | "true" | "yes" | "1" | "checked"),
+            options: nf.options.clone(),
+            fill_color: Some([0.95, 0.95, 0.95]),
+            ..Default::default()
+        })
+        .collect();
+    crate::formx::create_fields(input, &specs, output)?;
     Ok(())
 }
