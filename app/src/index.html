@@ -84,8 +84,25 @@
         <div class="rgroup">
           <button class="rbtn" id="edAddText" data-i18n-title="ribbon.edit.addTextTip"><i data-icon="text-add"></i><span data-i18n="ribbon.edit.addText"></span></button>
           <button class="rbtn" id="edAddImage" data-i18n-title="ribbon.edit.addImageTip"><i data-icon="image-add"></i><span data-i18n="ribbon.edit.addImage"></span></button>
+          <button class="rbtn rbtn-dd" id="edAddShape" data-i18n-title="editx.addShapeTip"><i data-icon="shapes"></i><span data-i18n="editx.addShape"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <!-- Ảnh / đối tượng (editx): thay, xoay, lật, cắt, trích ảnh -->
+        <div class="rgroup">
           <button class="rbtn" id="edReplaceImage" data-i18n-title="ribbon.edit.replaceImageTip" disabled><i data-icon="image-replace"></i><span data-i18n="ribbon.edit.replaceImage"></span></button>
-          <button class="rbtn" id="edDelete" data-i18n-title="ribbon.edit.deleteTip" disabled><i data-icon="trash"></i><span data-i18n="ribbon.edit.delete"></span></button>
+        </div>
+        <div class="rgroup rgroup-stack">
+          <div class="rrow">
+            <button id="edRotL" class="sq" data-i18n-title="editx.rotLTip" disabled><i data-icon="rotate-left"></i></button>
+            <button id="edRotR" class="sq" data-i18n-title="editx.rotRTip" disabled><i data-icon="rotate-right"></i></button>
+            <button id="edFlipH" class="sq" data-i18n-title="editx.flipHTip" disabled><i data-icon="flip-h"></i></button>
+            <button id="edFlipV" class="sq" data-i18n-title="editx.flipVTip" disabled><i data-icon="flip-v"></i></button>
+          </div>
+          <div class="rrow">
+            <button id="edCrop" class="sq-wide" data-i18n-title="editx.cropTip" disabled><i data-icon="crop"></i><span data-i18n="editx.crop"></span></button>
+            <button id="edExtractImage" class="sq-wide" data-i18n-title="editx.extractTip" disabled><i data-icon="image-export"></i><span data-i18n="editx.extract"></span></button>
+          </div>
+          <span class="rgroup-label" data-i18n="editx.objGroup"></span>
         </div>
         <span class="rsep"></span>
         <div class="rgroup rgroup-stack">
@@ -108,8 +125,39 @@
             <button id="edBold" class="sq ed-style" data-i18n-title="ribbon.edit.boldTip" disabled><b>B</b></button>
             <button id="edItalic" class="sq ed-style" data-i18n-title="ribbon.edit.italicTip" disabled><i class="it">I</i></button>
             <button id="edColorBtn" class="sq-wide" data-i18n-title="ribbon.edit.colorTip" disabled><span class="sw" id="edSw"></span><span data-i18n="common.color"></span></button>
+            <button id="edAlignL" class="sq" data-i18n-title="editx.alignLTip" disabled><i data-icon="align-text-left"></i></button>
+            <button id="edAlignC" class="sq" data-i18n-title="editx.alignCTip" disabled><i data-icon="align-text-center"></i></button>
+            <button id="edAlignR" class="sq" data-i18n-title="editx.alignRTip" disabled><i data-icon="align-text-right"></i></button>
           </div>
           <span class="rgroup-label" data-i18n="ribbon.edit.fontGroup"></span>
+        </div>
+        <span class="rsep"></span>
+        <!-- Định dạng đối tượng (editx): viền, nền, nét, độ dày, độ mờ, góc xoay -->
+        <div class="rgroup rgroup-stack">
+          <div class="rrow">
+            <button id="edStroke" class="sq-wide" data-i18n-title="editx.strokeTip" disabled><span class="sw" id="edStrokeSw"></span><span data-i18n="editx.stroke"></span></button>
+            <button id="edFill" class="sq-wide" data-i18n-title="editx.fillTip" disabled><span class="sw" id="edFillSw"></span><span data-i18n="editx.fill"></span></button>
+            <select id="edDash" class="rfield ex-dash" data-i18n-title="editx.dashTip" disabled>
+              <option value="solid" data-i18n="editx.dashSolid"></option>
+              <option value="dash" data-i18n="editx.dashDash"></option>
+              <option value="dot" data-i18n="editx.dashDot"></option>
+            </select>
+          </div>
+          <div class="rrow">
+            <label class="ex-num" data-i18n-title="editx.widthTip"><span data-i18n="editx.widthShort"></span><input id="edWidth" class="rfield" type="number" min="0" max="72" step="0.5" disabled></label>
+            <label class="ex-num" data-i18n-title="editx.opacityTip"><span data-i18n="editx.opacityShort"></span><input id="edOpacity" class="rfield" type="number" min="0" max="100" step="5" disabled></label>
+            <label class="ex-num" data-i18n-title="editx.angleTip"><span data-i18n="editx.angleShort"></span><input id="edAngle" class="rfield" type="number" min="-360" max="360" step="1" disabled></label>
+          </div>
+          <span class="rgroup-label" data-i18n="editx.formatGroup"></span>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn rbtn-dd" id="edArrange" data-i18n-title="editx.arrangeTip" disabled><i data-icon="arrange"></i><span data-i18n="editx.arrange"></span></button>
+          <button class="rbtn rbtn-dd" id="edAlignObj" data-i18n-title="editx.alignObjTip" disabled><i data-icon="align-objects"></i><span data-i18n="editx.alignObj"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="edDelete" data-i18n-title="ribbon.edit.deleteTip" disabled><i data-icon="trash"></i><span data-i18n="ribbon.edit.delete"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
@@ -402,9 +450,11 @@
     <script src="i18n/part-5.js"></script>
     <script src="i18n/part-6.js"></script>
     <script src="i18n/part-7.js"></script>
+    <script src="i18n/part-editx.js"></script>
     <script src="icons.js"></script>
     <script src="main.js"></script>
     <script src="shell.js"></script>
     <script src="shell-extras.js"></script>
+    <script src="features/editx.js"></script>
   </body>
 </html>

@@ -2737,6 +2737,7 @@ function buildEditOverlay() {
     });
     ov.appendChild(box);
   });
+  if (window.editx) editx.decorateOverlay(ov); // khung hình vẽ (path) — features/editx.js
   refreshEditSelection();
 }
 
@@ -2745,11 +2746,12 @@ function buildEditOverlay() {
 function refreshEditSelection() {
   const ov = $("editOverlay");
   ov.querySelectorAll(".edit-box").forEach((box) => {
-    const isSel = Number(box.dataset.index) === state.editSel;
+    const isSel = Number(box.dataset.index) === state.editSel ||
+      !!(window.editx && editx.isSelected(Number(box.dataset.index)));
     box.classList.toggle("selected", isSel);
     const existing = box.querySelector(".ed-handle");
     const o = state.editObjects.find((x) => x.index === Number(box.dataset.index));
-    const resizable = o && (o.kind === "image" || o.kind === "form");
+    const resizable = o && (o.kind === "image" || o.kind === "form" || o.kind === "path");
     if (isSel && resizable && !existing) {
       const h = document.createElement("div");
       h.className = "ed-handle";
@@ -2771,6 +2773,7 @@ function editArmedHint() {
 }
 
 function selectEditObject(index, runIndices) {
+  if (window.editx && editx.beforeSelect(index, runIndices)) return; // Shift+click: chọn nhiều
   state.editSel = index != null && index >= 0 ? index : null;
   state.editSelRuns = state.editSel != null ? (runIndices || [state.editSel]) : [];
   const o = state.editObjects.find((x) => x.index === state.editSel);
@@ -2801,6 +2804,7 @@ function selectEditObject(index, runIndices) {
     $("edBold").classList.remove("on");
     $("edItalic").classList.remove("on");
   }
+  if (window.editx) editx.afterSelect(o);
   refreshEditSelection();
 }
 
@@ -3792,6 +3796,10 @@ function promptAddText(pdfX, pdfY) {
   inp.style.fontSize = Math.max(10, size * s) + "px";
   inp.style.fontFamily = cssFontStack(family);
   inp.style.color = rgbCss(state.editColor);
+  if (window.editx) {
+    inp.style.fontWeight = editx.addTextStyle.bold ? "700" : "400";
+    inp.style.fontStyle = editx.addTextStyle.italic ? "italic" : "normal";
+  }
   ov.appendChild(inp);
   inp.focus();
   let done = false;
@@ -3804,7 +3812,8 @@ function promptAddText(pdfX, pdfY) {
         op: "addText", x: pdfX, y: pdfY, text,
         fontSize: size, color: [state.editColor[0], state.editColor[1], state.editColor[2], 255],
         fontFamily: family,
-        bold: null, italic: null,
+        bold: window.editx ? editx.addTextStyle.bold : null,
+        italic: window.editx ? editx.addTextStyle.italic : null,
       });
     }
   };
@@ -3832,28 +3841,34 @@ function onEditBoxMouseDown(e, o, runs) {
     return;
   }
   const box = e.currentTarget;
+  // Đang chọn NHIỀU (Shift+click / quét chọn) và bấm vào 1 khung trong nhóm →
+  // kéo cả nhóm (editx trả mọi khung + mọi run của nhóm).
+  const group = (window.editx && editx.dragGroup(box)) || { boxes: [box], runs: runIndices };
   const startX = e.clientX, startY = e.clientY;
-  const left0 = parseFloat(box.style.left), top0 = parseFloat(box.style.top);
+  const pos0 = group.boxes.map((b) => [parseFloat(b.style.left), parseFloat(b.style.top)]);
   let moved = false;
   const onMove = (ev) => {
     const dx = ev.clientX - startX, dy = ev.clientY - startY;
     if (!moved && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
       moved = true;
-      box.classList.add("dragging");
+      group.boxes.forEach((b) => b.classList.add("dragging"));
     }
     if (moved) {
-      box.style.left = left0 + dx + "px";
-      box.style.top = top0 + dy + "px";
+      group.boxes.forEach((b, k) => {
+        b.style.left = pos0[k][0] + dx + "px";
+        b.style.top = pos0[k][1] + dy + "px";
+      });
     }
   };
   const onUp = (ev) => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
-    box.classList.remove("dragging");
+    group.boxes.forEach((b) => b.classList.remove("dragging"));
     if (!moved) return;
     const dx = (ev.clientX - startX) / state.editScale;
     const dy = -(ev.clientY - startY) / state.editScale; // CSS y xuống = PDF y giảm
-    stageEditOps(runIndices.map((i) => ({ op: "transform", index: i, dx, dy, sx: 1, sy: 1 })));
+    const ops = group.runs.map((i) => ({ op: "transform", index: i, dx, dy, sx: 1, sy: 1 }));
+    if (window.editx) editx.stageKeep(ops, dx, dy); else stageEditOps(ops);
   };
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);

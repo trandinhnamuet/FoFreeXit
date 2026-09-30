@@ -7,6 +7,7 @@
 pub mod annot;
 pub mod convert;
 pub mod edit;
+pub mod editobj;
 mod cffwrap;
 mod fontfix;
 mod formsurgery;
@@ -26,7 +27,8 @@ pub mod watermark;
 pub use annot::{
     apply_annotations, count_annotations, list_annotations, AnnotInfo, AnnotKind, AnnotSpec,
 };
-pub use edit::{apply_edits, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
+pub use edit::{apply_edits, extract_image, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
+pub use editobj::{ArrangeMode, PathStyle, ShapeKind, ShapeSpec};
 pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};
 pub use organize::{
     build_document, delete_pages, extract_pages, identity_plan, merge_files, rotate_pages,

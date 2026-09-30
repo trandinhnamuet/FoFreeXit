@@ -30,6 +30,7 @@ use std::path::Path;
 use pdfium_render::prelude::*;
 
 use crate::annot::find_font_bytes;
+use crate::editobj::{self, ArrangeMode, PathStyle, ShapeSpec};
 use crate::fontmatch;
 use crate::text::Rect;
 use crate::EngineError;
@@ -100,6 +101,17 @@ pub struct ObjectInfo {
     pub font_size: Option<f32>,
     /// Chỉ với text: màu chữ RGBA.
     pub color: Option<[u8; 4]>,
+    /// Path: màu viền (None = không viền) / màu nền (None = không nền) / độ
+    /// dày nét — cho panel Format (Foxit) của object đang chọn.
+    pub stroke_color: Option<[u8; 4]>,
+    pub fill_color: Option<[u8; 4]>,
+    pub stroke_width: Option<f32>,
+    /// Độ mờ 0..1 (text/path theo alpha màu tô; ảnh: None = không biết).
+    pub opacity: Option<f32>,
+    /// Góc xoay (độ, ngược chiều kim đồng hồ) suy từ ma trận object.
+    pub rotation: Option<f32>,
+    /// Ảnh: kích thước điểm ảnh gốc (rộng, cao).
+    pub image_px: Option<(u32, u32)>,
 }
 
 /// Một thao tác sửa nội dung. UI dàn dựng danh sách op rồi áp 1 lần khi lưu.
@@ -147,6 +159,29 @@ pub enum EditOp {
     /// dòng cứng là danh sách đoạn (text, run mang style); engine giữ đúng
     /// font/cỡ/màu TỪNG ĐOẠN khi vẽ lại. None = cả khối 1 style như cũ.
     ReflowText { indices: Vec<u16>, text: String, rich: Option<Vec<Vec<RichSeg>>> },
+    // ---- Edit Object chuẩn Foxit (editobj.rs) ----
+    /// Xoay object `degrees` độ ngược chiều kim đồng hồ quanh `center` (điểm
+    /// PDF; None = tâm khung bao của chính object). Xoay trái = +90, xoay phải
+    /// = −90; góc tuỳ ý từ panel Format. Dòng chữ nhiều run: UI truyền tâm
+    /// CHUNG của dòng để cả dòng xoay như 1 khối.
+    Rotate { index: u16, degrees: f32, center: Option<(f32, f32)> },
+    /// Lật object quanh `center` (None = tâm khung bao): `horizontal` = trái↔phải,
+    /// ngược lại trên↔dưới.
+    Flip { index: u16, horizontal: bool, center: Option<(f32, f32)> },
+    /// Cắt ảnh: chỉ giữ phần ảnh nằm trong `keep` (điểm PDF của trang).
+    CropImage { index: u16, keep: Rect },
+    /// Độ mờ 0..1 của object (text / path / ảnh).
+    SetOpacity { index: u16, opacity: f32 },
+    /// Đổi viền / nền / độ dày / nét đứt của path object.
+    SetPathStyle { index: u16, style: PathStyle },
+    /// Vẽ hình mới (chữ nhật, bo góc, elip, đường thẳng, mũi tên).
+    AddShape(ShapeSpec),
+    /// Nhân bản object `index` của trang `src_page` (None = trang đang sửa)
+    /// sang trang đang sửa, dịch (dx,dy) — Ctrl+D / Copy-Paste.
+    Duplicate { index: u16, src_page: Option<u16>, dx: f32, dy: f32 },
+    /// Sắp lớp các object `indices` (lên trên cùng / xuống dưới cùng / lên-
+    /// xuống 1 lớp). Áp SAU mọi op khác của lô.
+    Arrange { indices: Vec<u16>, mode: ArrangeMode },
 }
 
 /// 1 đoạn chữ CÙNG STYLE trong 1 dòng cứng của reflow nhiều-style.
@@ -553,6 +588,31 @@ pub fn font_data(
     Ok(crate::fontfix::web_compatible_font(&data, bold, italic, mapping.as_ref()))
 }
 
+/// Ghi ảnh gốc (điểm ảnh thô) của image object `object_index` (index PHẲNG)
+/// ra file PNG `output` — Foxit "Lưu ảnh thành...". Trả về (rộng, cao) px.
+pub fn extract_image(
+    pdfium: &Pdfium,
+    input: &Path,
+    page_index: u16,
+    object_index: u16,
+    output: &Path,
+    password: Option<&str>,
+) -> Result<(u32, u32), EngineError> {
+    let document = pdfium
+        .load_pdf_from_file(input, password)
+        .map_err(|e| EngineError::Pdfium(e.to_string()))?;
+    let page = document
+        .pages()
+        .get(page_index)
+        .map_err(|e| EngineError::Pdfium(format!("không lấy được trang {page_index}: {e}")))?;
+    let entries = collect_flat(&page);
+    let entry = entries
+        .get(object_index as usize)
+        .ok_or_else(|| EngineError::Pdfium(format!("object {object_index} ngoài phạm vi")))?;
+    let obj = object_at_path(&page, &entry.path)?;
+    editobj::save_image_png(&obj, output)
+}
+
 pub fn list_objects(
     pdfium: &Pdfium,
     input: &Path,
@@ -581,6 +641,7 @@ pub fn list_objects(
     // Cache kiểu chữ theo tên font: fallback đậm/nghiêng phải đọc bytes font
     // nhúng — file Word xuất hay có 200+ run chung vài font, không đọc lại.
     let mut style_cache: HashMap<String, (String, bool, bool)> = HashMap::new();
+    let n_images = entries.iter().filter(|e| e.kind == ObjectKind::Image).count();
     for (flat, entry) in entries.iter().enumerate() {
         let mut info = ObjectInfo {
             index: flat as u16,
@@ -596,6 +657,12 @@ pub fn list_objects(
             font_embedded: None,
             font_size: None,
             color: None,
+            stroke_color: None,
+            fill_color: None,
+            stroke_width: None,
+            opacity: None,
+            rotation: None,
+            image_px: None,
         };
         // Không resolve được vẫn giữ 1 chỗ trong list — index phải khớp vị trí.
         let Ok(object) = object_at_path(&page, &entry.path) else {
@@ -604,6 +671,17 @@ pub fn list_objects(
         };
         if let Ok(q) = object.bounds() {
             info.rect = mat_rect(entry.acc, &quad_to_rect(&q));
+        }
+        if matches!(entry.kind, ObjectKind::Text | ObjectKind::Image | ObjectKind::Path) {
+            // Đo độ đục ảnh cần render ảnh — chỉ làm với trang ít ảnh (≤ 12).
+            let doc_for_style = if n_images <= 12 { Some(&document) } else { None };
+            let st = editobj::object_style(&object, entry.acc, doc_for_style);
+            info.stroke_color = st.stroke_color;
+            info.fill_color = st.fill_color;
+            info.stroke_width = st.stroke_width;
+            info.opacity = st.opacity;
+            info.rotation = st.rotation;
+            info.image_px = st.image_px;
         }
         if let Some(t) = object.as_text_object() {
             let raw_name = t.font().name();
@@ -715,6 +793,9 @@ struct ReflowPlan {
     width: f32,
     /// Khối gốc căn giữa → dòng mới đặt x = tâm khối − w/2.
     centered: bool,
+    /// Khối gốc căn PHẢI (mọi dòng thẳng mép phải, có dòng thụt trái) → dòng
+    /// mới đặt x = mép phải − w (giữ căn phải sau khi sửa, như Foxit).
+    right_aligned: bool,
     /// Baseline dòng đầu (y của gốc text) + khoảng cách baseline giữa các dòng.
     first_baseline: f32,
     line_advance: f32,
@@ -817,6 +898,17 @@ fn resolve_substitute_font(
     Ok(((String::new(), bold, italic), bytes))
 }
 
+/// File tạm tự xoá khi ra khỏi phạm vi (kể cả đường lỗi `?`).
+struct TempFile(Option<std::path::PathBuf>);
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        if let Some(p) = &self.0 {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+}
+
 /// Áp danh sách `ops` lên trang `page_index` của `input`, ghi ra `output`.
 /// Không sửa `input`.
 ///
@@ -833,6 +925,21 @@ pub fn apply_edits(
     output: &Path,
     password: Option<&str>,
 ) -> Result<(), EngineError> {
+    // Sắp lớp (Arrange) trên trang NHIỀU content stream: PDFium ghi lại object
+    // theo thứ tự danh sách nhưng TRONG từng stream → gộp về 1 stream trước
+    // (file tạm, ngữ nghĩa y hệt), nếu không object ở stream sau luôn nằm trên.
+    let merged = TempFile(if ops.iter().any(|o| matches!(o, EditOp::Arrange { .. })) {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let tmp = std::env::temp_dir()
+            .join(format!("ff_zorder_{}_{nanos}.pdf", std::process::id()));
+        if editobj::merge_page_contents(input, page_index, &tmp)? { Some(tmp) } else { None }
+    } else {
+        None
+    });
+    let input: &Path = merged.0.as_deref().unwrap_or(input);
     let mut document = pdfium
         .load_pdf_from_file(input, password)
         .map_err(|e| EngineError::Pdfium(e.to_string()))?;
@@ -1186,6 +1293,30 @@ pub fn apply_edits(
                         }
                         all_centered && any_indented
                     };
+                    let right_aligned = !centered && {
+                        let tol = (width * 0.02).max(2.0);
+                        let mut any_indented = false;
+                        let mut all_right = true;
+                        let mut n_lines = 0;
+                        for &bl in &baselines {
+                            let (mut l, mut r) = (f32::INFINITY, f32::NEG_INFINITY);
+                            for g in geos.iter().filter(|g| (g.f - bl).abs() <= 1.0) {
+                                l = l.min(g.left);
+                                r = r.max(g.right);
+                            }
+                            if !l.is_finite() || r - l < 1.0 {
+                                continue;
+                            }
+                            n_lines += 1;
+                            if (right - r).abs() > tol {
+                                all_right = false;
+                            }
+                            if l - left > tol {
+                                any_indented = true;
+                            }
+                        }
+                        n_lines >= 2 && all_right && any_indented
+                    };
 
                     // Cỡ chữ TỪNG DÒNG gốc (theo baseline, trên→dưới): dòng cứng
                     // thứ i của text mới giữ đúng cỡ dòng gốc thứ i (tiêu đề
@@ -1419,6 +1550,7 @@ pub fn apply_edits(
                             left,
                             width,
                             centered,
+                            right_aligned,
                             first_baseline,
                             line_advance,
                             linear: (mc.0, mc.1, mc.2, mc.3),
@@ -1541,6 +1673,64 @@ pub fn apply_edits(
             }
         }
 
+        // (1b) Thao tác object TẠI CHỖ (không đổi index): xoay / lật / cắt ảnh
+        // / độ mờ / viền-nền path. Object trong form: bỏ qua như Transform.
+        for op in ops {
+            let index = match op {
+                EditOp::Rotate { index, .. }
+                | EditOp::Flip { index, .. }
+                | EditOp::CropImage { index, .. }
+                | EditOp::SetOpacity { index, .. }
+                | EditOp::SetPathStyle { index, .. } => *index,
+                _ => continue,
+            };
+            if !valid(index) || is_nested(index) {
+                continue;
+            }
+            let mut obj = object_at_path(&page, &entries[index as usize].path)?;
+            match op {
+                EditOp::Rotate { degrees, center, .. } => {
+                    editobj::rotate_object(&mut obj, *degrees, *center)?
+                }
+                EditOp::Flip { horizontal, center, .. } => {
+                    editobj::flip_object(&mut obj, *horizontal, *center)?
+                }
+                EditOp::CropImage { keep, .. } => editobj::crop_image(&mut obj, keep, &document)?,
+                EditOp::SetOpacity { opacity, .. } => editobj::set_opacity(&mut obj, *opacity)?,
+                EditOp::SetPathStyle { style, .. } => editobj::set_path_style(&mut obj, style)?,
+                _ => {}
+            }
+        }
+
+        // (1c) Nhân bản: chụp object nguồn (trang này hoặc trang khác) rồi tạo
+        // bản sao ở CUỐI trang — không làm lệch index các op phía sau.
+        for op in ops {
+            let EditOp::Duplicate { index, src_page, dx, dy } = op else { continue };
+            let spec = match src_page.filter(|&sp| sp != page_index) {
+                None => {
+                    if !valid(*index) {
+                        continue;
+                    }
+                    let entry = &entries[*index as usize];
+                    let obj = object_at_path(&page, &entry.path)?;
+                    editobj::capture_clone(&obj, entry.acc)?
+                }
+                Some(sp) => {
+                    let src = document
+                        .pages()
+                        .get(sp)
+                        .map_err(|e| EngineError::Pdfium(format!("không lấy được trang {sp}: {e}")))?;
+                    let src_entries = collect_flat(&src);
+                    let entry = src_entries
+                        .get(*index as usize)
+                        .ok_or_else(|| EngineError::Pdfium(format!("object {index} ngoài phạm vi")))?;
+                    let obj = object_at_path(&src, &entry.path)?;
+                    editobj::capture_clone(&obj, entry.acc)?
+                }
+            };
+            editobj::create_clone(&document, &mut page, &spec, *dx, *dy)?;
+        }
+
         // (2) SetText IN-PLACE — giữ nguyên font gốc (chuẩn Foxit). Đổi cỡ chữ
         // = scale matrix quanh gốc text (giữ điểm neo baseline e,f).
         for (opi, op) in ops.iter().enumerate() {
@@ -1661,6 +1851,7 @@ pub fn apply_edits(
             .collect();
         page_idxs.sort_unstable();
         page_idxs.dedup();
+        let removed_page_idxs = page_idxs.clone();
         for idx in page_idxs.into_iter().rev() {
             let removed = page.objects_mut().remove_object_at_index(idx as usize).map_err(err)?;
             // BẪY PDFium: object vừa tách khỏi trang bị đánh dấu "unowned" → Drop
@@ -1758,6 +1949,10 @@ pub fn apply_edits(
                     obj.set_fill_color(PdfColor::new(color[0], color[1], color[2], color[3]))
                         .map_err(err)?;
                 }
+                EditOp::AddShape(spec) => {
+                    let path = editobj::build_shape(&document, spec)?;
+                    page.objects_mut().add_path_object(path).map_err(err)?;
+                }
                 EditOp::AddImage { x, y, width_pt, height_pt, image_path } => {
                     let img = image::open(image_path)
                         .map_err(|e| EngineError::Pdfium(format!("đọc ảnh {image_path}: {e}")))?;
@@ -1798,6 +1993,8 @@ pub fn apply_edits(
                     let avail = if plan.centered {
                         let c = plan.left + plan.width / 2.0;
                         2.0 * (c.min(page_w - c) - 8.0).max(0.0)
+                    } else if plan.right_aligned {
+                        (plan.left + plan.width - 8.0).max(0.0)
                     } else {
                         (page_w - plan.left - 8.0).max(0.0)
                     };
@@ -1925,6 +2122,8 @@ pub fn apply_edits(
                                     .sum();
                                 let mut x = if plan.centered {
                                     (plan.left + plan.width / 2.0 - total / 2.0).max(8.0)
+                                } else if plan.right_aligned {
+                                    (plan.left + plan.width - total).max(8.0)
                                 } else {
                                     plan.left
                                 };
@@ -2043,6 +2242,8 @@ pub fn apply_edits(
                         let x = if plan.centered {
                             let x = plan.left + plan.width / 2.0 - line_w / 2.0;
                             x.max(8.0) // căn giữa nở đều 2 phía, không tràn mép trang
+                        } else if plan.right_aligned {
+                            (plan.left + plan.width - line_w).max(8.0)
                         } else {
                             plan.left
                         };
@@ -2103,6 +2304,25 @@ pub fn apply_edits(
                 }
                 _ => {}
             }
+        }
+
+        // (7) Sắp lớp — SAU mọi thêm/xoá: quy index gốc về vị trí hiện tại
+        // (trừ số object cấp trang đã xoá đứng trước; object bị xoá thì bỏ).
+        for op in ops {
+            let EditOp::Arrange { indices, mode } = op else { continue };
+            let mut sel: Vec<usize> = Vec::new();
+            for &i in indices {
+                if !valid(i) || is_nested(i) {
+                    continue;
+                }
+                let p = entries[i as usize].path[0];
+                if removed_page_idxs.contains(&p) {
+                    continue;
+                }
+                let before = removed_page_idxs.iter().filter(|&&r| r < p).count();
+                sel.push(p as usize - before);
+            }
+            editobj::arrange(&mut page, &sel, *mode)?;
         }
 
         page.regenerate_content().map_err(err)?;
