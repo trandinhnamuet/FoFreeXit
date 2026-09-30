@@ -139,6 +139,8 @@ I18N.add("en", {
     if (!it) return;
     e.stopPropagation();
     Shell.closeMenus();
+    // Còn thay đổi chưa lưu → hỏi trước khi mở tệp khác.
+    if (!Shell.confirmDiscardChanges()) return;
     const path = it.dataset.path;
     const prev = lastLoaded;
     lastLoaded = null;
@@ -240,6 +242,7 @@ I18N.add("en", {
   // ---------- Thoát ----------
   $("quitItem").addEventListener("click", () => {
     Shell.closeMenus();
+    // close() phát CloseRequested → guard "thay đổi chưa lưu" trong shell.js.
     if (appWin) appWin.close();
   });
 })();

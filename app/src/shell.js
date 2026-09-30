@@ -41,6 +41,27 @@
     return !editDirty() || confirm(t("shell.confirmLeaveEdit"));
   }
 
+  // Thay đổi CHƯA LƯU của tài liệu đang mở mà việc mở tệp khác / đóng cửa sổ
+  // sẽ làm mất: sửa nội dung, chú thích, tổ chức trang, vùng bôi đen.
+  function orgDirty() {
+    // Plan tạm (trước khi organize_identity_plan trả về) chưa có 'kind' → chưa đổi gì.
+    return typeof planIsDirty === "function" && state.pages.length > 0 &&
+      Array.isArray(state.pagePlan) && !state.pagePlan.some((e) => e.kind === undefined) && planIsDirty();
+  }
+  function dirtyParts() {
+    const parts = [];
+    if (editDirty()) parts.push(t("shell.dirtyEdit"));
+    if (state.annotSpecs.length > 0 && !$("saveAnnots").disabled) parts.push(t("shell.dirtyAnnots", { n: state.annotSpecs.length }));
+    if (orgDirty()) parts.push(t("shell.dirtyPages"));
+    if (state.redactMarks.length > 0) parts.push(t("shell.dirtyRedact", { n: state.redactMarks.length }));
+    return parts;
+  }
+  // true = không có gì chưa lưu, hoặc người dùng đồng ý bỏ (một hộp xác nhận duy nhất).
+  function confirmDiscardChanges() {
+    const parts = dirtyParts();
+    return !parts.length || confirm(t("shell.confirmDiscard", { list: parts.map((p) => "• " + p).join("\n") }));
+  }
+
   function setTab(tab) {
     if (routing) return;
     const want = MODE_OF[tab] || null;
@@ -58,6 +79,7 @@
     // Logic cũ từ chối vào chế độ (vd. chưa mở file) → giữ nguyên tab.
     if (!want || state[want]) current = tab;
     syncTabs();
+    mirrorHint(); // rời Annotate khi đang có hint → hiện nó ở thanh trạng thái
   }
 
   // Chế độ bị bật/tắt từ nơi khác (đúp chuột vào chữ → Sửa, v.v.) → bám theo.
@@ -80,8 +102,7 @@
     if (el.dataset.proxy) {
       closeMenus();
       const target = $(el.dataset.proxy);
-      // Gộp PDF / Nén mở tệp kết quả → bỏ chế độ sửa: hỏi trước nếu còn thay đổi.
-      if (LOADS_DOC.has(el.dataset.proxy) && !confirmDiscardEdits()) return;
+      // Gộp PDF / Nén: hỏi trước ở guard capture của chính nút đích (bên dưới).
       if (target && !target.disabled) target.click();
     } else if (el.dataset.tabGo) {
       setTab(el.dataset.tabGo);
@@ -95,7 +116,13 @@
 
   // ---------- Quick save (Ctrl+S): lưu đúng thứ của chế độ đang mở ----------
   function quickSave() {
-    const id = state.editMode ? "edSave" : state.organizeMode ? "orgSave" : "saveAnnots";
+    const redactReady = !$("secRedactApply").disabled;
+    const id = state.editMode ? "edSave"
+      : state.organizeMode ? "orgSave"
+      : (current === "protect" || state.secMode) && redactReady ? "secRedactApply"
+      // Không có chú thích nào nhưng còn vùng bôi đen chờ áp dụng → áp dụng chúng.
+      : $("saveAnnots").disabled && redactReady ? "secRedactApply"
+      : "saveAnnots";
     const btn = $(id);
     if (btn && !btn.disabled) btn.click();
     else $("status").textContent = t("shell.nothingToSave");
@@ -124,12 +151,40 @@
   if (appWin) {
     $("winMin").addEventListener("click", () => appWin.minimize());
     $("winMax").addEventListener("click", () => appWin.toggleMaximize());
+    // close() phát CloseRequested như nút đóng của Windows → đi qua guard bên dưới.
     $("winClose").addEventListener("click", () => appWin.close());
     // Đúp vào vùng kéo (khoảng trống hàng tab) = phóng to/khôi phục: script
     // drag-region của Tauri đã tự làm — không thêm handler (sẽ nháy).
     let rt = 0;
     window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(refreshMaxIcon, 120); });
     refreshMaxIcon();
+  }
+
+  // ---------- Đóng cửa sổ: hỏi nếu còn thay đổi chưa lưu ----------
+  // Có listener JS cho "tauri://close-requested" thì Rust luôn chặn việc đóng
+  // (api.prevent_close) và để JS quyết định — nút X, Alt+F4, close() của nút
+  // riêng / mục Thoát đều qua đây. Không dùng onCloseRequested vì wrapper đó
+  // gọi destroy() và nếu thiếu quyền core:window:allow-destroy thì cửa sổ không
+  // bao giờ đóng được; ở đây destroy lỗi → gỡ listener rồi close() lại (không
+  // còn listener = Rust đóng bình thường, chỉ cần allow-close).
+  if (appWin && typeof appWin.listen === "function") {
+    const EV = (window.__TAURI__.event && window.__TAURI__.event.TauriEvent &&
+      window.__TAURI__.event.TauriEvent.WINDOW_CLOSE_REQUESTED) || "tauri://close-requested";
+    let unlistenClose = null;
+    let closing = false;
+    appWin.listen(EV, async () => {
+      if (closing) return;
+      if (!confirmDiscardChanges()) return; // đã bị Rust chặn → cửa sổ ở lại
+      closing = true;
+      try {
+        await appWin.destroy();
+      } catch (_) {
+        try {
+          if (unlistenClose) { const un = unlistenClose; unlistenClose = null; await un(); }
+          await appWin.close();
+        } catch (err) { console.error(err); closing = false; }
+      }
+    }).then((un) => { unlistenClose = un; }).catch((err) => console.error(err));
   }
   // Chỉ hiện nút cửa sổ riêng khi không có thanh tiêu đề của Windows; lỗi
   // (thiếu quyền, chạy ngoài Tauri) → coi như có thanh gốc, không vẽ trùng.
@@ -239,6 +294,27 @@
   new MutationObserver(() => { $("status").title = $("status").textContent; })
     .observe($("status"), { childList: true, characterData: true, subtree: true });
 
+  // Hướng dẫn công cụ (setTool ghi vào #annotHint nằm trong panel Annotate):
+  // chọn Highlight/Crop từ Home hay Redact từ Protect thì panel đó không hiện →
+  // chép sang thanh trạng thái. Xoá hint → trả lại trạng thái cũ, nhưng chỉ khi
+  // thanh trạng thái vẫn đang hiện đúng hint đó (không xoá thông điệp khác).
+  let hintMirror = null; // { text, prev }
+  function mirrorHint() {
+    const txt = $("annotHint").textContent;
+    const st = $("status");
+    const hidden = current !== "annotate" || document.body.classList.contains("ribbon-collapsed");
+    if (txt && hidden) {
+      const prev = hintMirror && st.textContent === hintMirror.text ? hintMirror.prev : st.textContent;
+      hintMirror = { text: txt, prev };
+      if (st.textContent !== txt) st.textContent = txt;
+    } else if (!txt && hintMirror) {
+      if (st.textContent === hintMirror.text) st.textContent = hintMirror.prev;
+      hintMirror = null;
+    }
+  }
+  new MutationObserver(mirrorHint)
+    .observe($("annotHint"), { childList: true, characterData: true, subtree: true });
+
   // ---------- Ngôn ngữ ----------
   function refreshLangLabel() { $("langLabel").textContent = I18N.lang.toUpperCase(); }
   document.addEventListener("langchange", () => {
@@ -252,6 +328,16 @@
     const s = I18N.dict[lang]["viewer.docInfo"] || "";
     return s.replace("{n}", state.pages.length).replace("{name}", state.path ? shortName(state.path) : "");
   }
+  // Dịch lại một thông điệp tạm thời nếu nó đúng nguyên văn một chuỗi KHÔNG có
+  // tham số của ngôn ngữ cũ (hoặc dòng thông tin tài liệu). Chuỗi có tham số
+  // ({e}, {name}…) không khôi phục được tham số → giữ nguyên đến lần hiện sau.
+  function retranslateText(txt, other) {
+    if (!txt) return null;
+    if (state.path && txt === docInfoIn(other)) return docInfoIn(I18N.lang);
+    const src = I18N.dict[other];
+    for (const k in src) if (src[k] === txt && !/\{\w+\}/.test(txt)) return t(k);
+    return null;
+  }
   langHandlers.push(() => {
     buildComments();
     redrawAllAnnotPages();
@@ -259,7 +345,16 @@
     closeNotePopup();
     closeColorPopover();
     const other = I18N.lang === "vi" ? "en" : "vi";
-    if (state.path && $("status").textContent === docInfoIn(other)) $("status").textContent = docInfoIn(I18N.lang);
+    const showingMirror = hintMirror && $("status").textContent === hintMirror.text;
+    for (const id of ["status", "editHint", "organizeHint", "formHint", "convHint", "secHint"]) {
+      const nt = retranslateText($(id).textContent, other);
+      if (nt != null) $(id).textContent = nt;
+    }
+    if (hintMirror) {
+      if (showingMirror) hintMirror.text = $("status").textContent;
+      const np = retranslateText(hintMirror.prev, other);
+      if (np != null) hintMirror.prev = np;
+    }
     if (state.tool) { const tl = state.tool; setTool(tl); setTool(tl); } // setTool là toggle: tắt rồi bật để vẽ lại hint
     if (state.formMode && state.path) refreshFormCount();
     if (state.convMode) { toggleConvMode(); toggleConvMode(); }
@@ -270,9 +365,13 @@
   // ---------- Tài liệu ----------
   // Mở tệp khác khi đang ở chế độ Sửa: hỏi trước (capture — chạy trước openFile
   // của main.js), mở xong thì thoát chế độ sửa (editBase còn trỏ tệp cũ).
-  $("openBtn").addEventListener("click", (e) => {
-    if (!confirmDiscardEdits()) { e.stopImmediatePropagation(); e.preventDefault(); }
-  }, true);
+  // Cùng kiểu guard cho Gộp PDF / Nén (mở tệp kết quả) — bắt cả khi bấm trực
+  // tiếp lẫn qua nút ủy quyền (proxy gọi target.click()).
+  function guardLoad(e) {
+    if (!confirmDiscardChanges()) { e.stopImmediatePropagation(); e.preventDefault(); }
+  }
+  $("openBtn").addEventListener("click", guardLoad, true);
+  for (const id of LOADS_DOC) $(id).addEventListener("click", guardLoad, true);
 
   function onDocLoaded(path) {
     if (state.editMode) exitEditMode();
@@ -287,7 +386,8 @@
     get currentTab() { return current; },
     onDocLoaded,
     onLangChange(fn) { langHandlers.push(fn); },
-    confirmDiscardEdits,
+    confirmDiscardEdits,     // chỉ chế độ Sửa (đổi tab)
+    confirmDiscardChanges,   // mọi thay đổi chưa lưu (mở tệp khác, kéo-thả, đóng cửa sổ)
     closeMenus,
     openMenuAt,
   };
