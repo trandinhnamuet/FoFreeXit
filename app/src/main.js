@@ -3699,6 +3699,24 @@ async function saveEdits() {
 
 // ---------- Phase 7: OCR & Chuyển đổi ----------
 
+// Thông báo kết quả/lỗi của thao tác: ghi vào hint của thanh công cụ riêng VÀ
+// thanh trạng thái — thao tác có thể được gọi từ tab khác (Công cụ, menu Tệp)
+// khi thanh hint của nó đang ẩn, nên #status luôn phải nhận được thông báo.
+function actionMsg(hintId, msg) {
+  const h = $(hintId);
+  if (h) h.textContent = msg;
+  $("status").textContent = msg;
+}
+
+// Bật/tắt nút phụ thuộc công cụ ngoài; khi tắt, tooltip giải thích lý do
+// (cập nhật cả dataset.i18nTitle để đổi ngôn ngữ vẫn giữ đúng nội dung).
+function setConvToolState(id, ok, tipKey, missingKey) {
+  const b = $(id);
+  b.disabled = !ok;
+  b.dataset.i18nTitle = ok ? tipKey : missingKey;
+  b.title = t(b.dataset.i18nTitle);
+}
+
 async function toggleConvMode() {
   state.convMode = !state.convMode;
   $("convBar").classList.toggle("hidden", !state.convMode);
@@ -3712,8 +3730,8 @@ async function toggleConvMode() {
       $("convHint").textContent = miss.length
         ? t("conv.missingTools", { list: miss.join(", ") })
         : "";
-      $("cvOcr").disabled = !st.tesseract;
-      $("cvOffice").disabled = !st.soffice;
+      setConvToolState("cvOcr", st.tesseract, "ribbon.convert.ocrTip", "conv.ocrMissingTip");
+      setConvToolState("cvOffice", st.soffice, "ribbon.convert.officeTip", "conv.officeMissingTip");
     } catch (_) { /* trạng thái chỉ để gợi ý */ }
   } else {
     $("convHint").textContent = "";
@@ -3731,7 +3749,7 @@ async function runOcrAction() {
     $("convHint").textContent = "";
     loadDocument(out);
   } catch (e) {
-    $("convHint").textContent = t("conv.errOcr", { e });
+    actionMsg("convHint", t("conv.errOcr", { e }));
   }
 }
 
@@ -3742,7 +3760,7 @@ async function exportPngAction() {
     const files = await invoke("convert_images", { input: state.path, outDir: dir, dpi: 150 });
     $("status").textContent = t("conv.pngDone", { n: files.length, dir });
   } catch (e) {
-    $("convHint").textContent = t("conv.errPng", { e });
+    actionMsg("convHint", t("conv.errPng", { e }));
   }
 }
 
@@ -3754,7 +3772,7 @@ async function exportTxtAction() {
     await invoke("convert_txt", { input: state.path, output: out });
     $("status").textContent = t("conv.txtDone", { file: shortName(out) });
   } catch (e) {
-    $("convHint").textContent = t("conv.errTxt", { e });
+    actionMsg("convHint", t("conv.errTxt", { e }));
   }
 }
 
@@ -3762,14 +3780,14 @@ async function exportDocxAction() {
   const base = shortName(state.path).replace(/\.pdf$/i, "");
   const out = await invoke("pick_save_as", { ext: "docx", name: base + ".docx" });
   if (!out) return;
-  $("convHint").textContent = t("conv.docxRunning");
+  actionMsg("convHint", t("conv.docxRunning"));
   try {
     const engine = await invoke("convert_docx", { input: state.path, output: out });
     const note = engine === "libreoffice" ? t("conv.engineLibreOffice") : t("conv.engineBasic");
     $("status").textContent = t("conv.docxDone", { engine: note, file: shortName(out) });
     $("convHint").textContent = "";
   } catch (e) {
-    $("convHint").textContent = t("conv.errDocx", { e });
+    actionMsg("convHint", t("conv.errDocx", { e }));
   }
 }
 
@@ -3785,7 +3803,7 @@ async function officeToPdfAction() {
     $("convHint").textContent = "";
     loadDocument(out);
   } catch (e) {
-    $("convHint").textContent = t("conv.errOffice", { e });
+    actionMsg("convHint", t("conv.errOffice", { e }));
   }
 }
 
@@ -3808,7 +3826,7 @@ async function refreshFormCount() {
       ? t("form.countHint", { n: fields.length })
       : t("form.noFieldsHint");
   } catch (e) {
-    $("formHint").textContent = t("form.errRead", { e });
+    actionMsg("formHint", t("form.errRead", { e }));
   }
 }
 
@@ -3824,7 +3842,7 @@ async function openFillForm() {
   try {
     fields = await invoke("form_list", { path: state.path });
   } catch (e) {
-    $("formHint").textContent = t("form.errRead", { e });
+    actionMsg("formHint", t("form.errRead", { e }));
     return;
   }
   if (!fields.length) {
@@ -3945,7 +3963,7 @@ async function flattenFormAction() {
     $("status").textContent = t("form.flattenDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("formHint").textContent = t("form.errFlatten", { e });
+    actionMsg("formHint", t("form.errFlatten", { e }));
   }
 }
 
@@ -3958,9 +3976,9 @@ async function exportFormData(kind) {
   if (kind === "fdf" && !/\.fdf$/i.test(target)) target = target.replace(/\.[^.]*$/, "") + ".fdf";
   try {
     await invoke("form_export", { input: state.path, output: target });
-    $("formHint").textContent = t("form.exportDone", { file: shortName(target) });
+    actionMsg("formHint", t("form.exportDone", { file: shortName(target) }));
   } catch (e) {
-    $("formHint").textContent = t("form.errExport", { e });
+    actionMsg("formHint", t("form.errExport", { e }));
   }
 }
 
@@ -3974,7 +3992,7 @@ async function importFormFdf() {
     $("status").textContent = t("form.importDone", { n, file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("formHint").textContent = t("form.errImport", { e });
+    actionMsg("formHint", t("form.errImport", { e }));
   }
 }
 
@@ -4021,7 +4039,7 @@ async function applyRedactions() {
     $("status").textContent = t("sec.redactDone", { n, file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = t("sec.errRedact", { e });
+    actionMsg("secHint", t("sec.errRedact", { e }));
   }
 }
 
@@ -4110,7 +4128,7 @@ async function stripMetadataAction() {
     $("status").textContent = t("sec.stripDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = t("sec.errStrip", { e });
+    actionMsg("secHint", t("sec.errStrip", { e }));
   }
 }
 
@@ -4122,7 +4140,7 @@ async function optimizeSaveAction() {
     $("status").textContent = t("sec.optimizeDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = t("sec.errOptimize", { e });
+    actionMsg("secHint", t("sec.errOptimize", { e }));
   }
 }
 
@@ -4145,7 +4163,7 @@ function openCreateIdDialog() {
     try {
       await invoke("sig_create_id", { commonName: cn, output: out });
       closeModal();
-      $("secHint").textContent = t("sig.idDone", { file: shortName(out) });
+      actionMsg("secHint", t("sig.idDone", { file: shortName(out) }));
     } catch (e) {
       box.querySelector("#idErr").textContent = t("sig.err", { e });
     }
@@ -4199,15 +4217,15 @@ async function verifySignaturesAction(pathOverride) {
   try {
     checks = await invoke("sig_verify", { input: target });
   } catch (e) {
-    $("secHint").textContent = t("sig.errVerify", { e });
+    actionMsg("secHint", t("sig.errVerify", { e }));
     return;
   }
   const rows = checks.length
     ? checks
         .map((c, i) => {
           const badge = c.valid
-            ? `<span class="sig-ok">✓ ${t("sig.valid")}</span>`
-            : `<span class="sig-bad">✗ ${t("sig.invalid")}</span>`;
+            ? `<span class="sig-ok"><i data-icon="shield-check"></i> ${t("sig.valid")}</span>`
+            : `<span class="sig-bad"><i data-icon="win-close"></i> ${t("sig.invalid")}</span>`;
           const detail = [];
           if (!c.cryptoValid) detail.push(t("sig.detailCrypto"));
           if (!c.digestMatches) detail.push(t("sig.detailDigest"));
@@ -4246,6 +4264,7 @@ if (window.__TAURI__.event) {
       if (paths.length) $("status").textContent = t("ev.onlyPdf");
       return;
     }
+    if (window.Shell && Shell.confirmDiscardChanges && !Shell.confirmDiscardChanges()) return;
     if (state.editMode) exitEditMode();
     if (state.organizeMode) exitOrganizeMode();
     loadDocument(pdf);
@@ -4549,8 +4568,8 @@ window.addEventListener("keydown", (e) => {
     $("searchBox").select();
     return;
   }
-  if (e.ctrlKey && (e.key === "=" || e.key === "+")) { e.preventDefault(); setZoom(state.zoom * 1.25); return; }
-  if (e.ctrlKey && e.key === "-") { e.preventDefault(); setZoom(state.zoom / 1.25); return; }
+  if (e.ctrlKey && (e.key === "=" || e.key === "+")) { e.preventDefault(); setZoom((state.editMode ? state.editZoom : state.zoom) * 1.25); return; }
+  if (e.ctrlKey && e.key === "-") { e.preventDefault(); setZoom((state.editMode ? state.editZoom : state.zoom) / 1.25); return; }
   if (e.ctrlKey && e.key === "0") { e.preventDefault(); setZoom(1); return; }
   // Ctrl+Z hoàn tác / Ctrl+Y hoặc Ctrl+Shift+Z làm lại — không chặn khi đang gõ
   // trong ô text (để trình duyệt tự xử lý undo cấp ký tự trong contenteditable).
