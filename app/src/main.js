@@ -2251,7 +2251,7 @@ function openCropDialog(pageIdx, rectPdf) {
 const EDIT_STAGE_W = 820; // px bề rộng ảnh trang khi sửa
 
 function enterEditMode(pageIndex) {
-  if (!state.path) { $("status").textContent = "Hãy mở file trước khi sửa nội dung"; return; }
+  if (!state.path) { $("status").textContent = t("edit.openFirst"); return; }
   if (state.organizeMode) exitOrganizeMode();
   state.editMode = true;
   state.editPage = Number.isInteger(pageIndex) ? pageIndex : state.current;
@@ -2365,9 +2365,9 @@ async function loadEditPage() {
     buildEditOverlay();
     $("pageInput").value = state.editPage + 1;
     updateZoomLabel();
-    $("editHint").textContent = `Trang ${state.editPage + 1} · ${objs.length} đối tượng`;
+    $("editHint").textContent = t("edit.pageInfo", { page: state.editPage + 1, count: objs.length });
   } catch (e) {
-    $("editHint").textContent = "Lỗi nạp trang sửa: " + e;
+    $("editHint").textContent = t("edit.errLoadPage", { e });
   }
   $("edSave").disabled = state.editBase === state.path; // chưa có thay đổi nào
   $("edDiscard").disabled = state.editBase === state.path;
@@ -2526,16 +2526,16 @@ function selectEditObject(index, runIndices) {
     if (o.color) { state.editColor = o.color.slice(0, 3); $("edSw").style.background = rgbCss(state.editColor); }
     // Ô font: mặc định "(giữ nguyên: <family gốc>)" — chỉ đổi khi người dùng chọn khác.
     $("edFontFamily").options[0].textContent = o.fontFamily
-      ? `(giữ nguyên: ${o.fontFamily})`
-      : "(giữ nguyên)";
+      ? t("edit.fontKeepNamed", { font: o.fontFamily })
+      : t("edit.fontKeep");
     $("edFontFamily").value = "";
     $("edBold").classList.toggle("on", !!o.fontBold);
     $("edItalic").classList.toggle("on", !!o.fontItalic);
-    const emb = o.fontEmbedded == null ? "" : o.fontEmbedded ? " · font nhúng" : " · font hệ thống";
+    const emb = o.fontEmbedded == null ? "" : o.fontEmbedded ? " · " + t("edit.fontEmbedded") : " · " + t("edit.fontSystem");
     $("editHint").textContent =
       `${o.fontFamily || o.fontName || "?"} · ${Math.round(o.fontSize || 0)}pt${emb}`;
   } else {
-    $("edFontFamily").options[0].textContent = "(giữ nguyên)";
+    $("edFontFamily").options[0].textContent = t("edit.fontKeep");
     $("edBold").classList.remove("on");
     $("edItalic").classList.remove("on");
   }
@@ -2564,7 +2564,7 @@ async function stageEditOps(ops) {
     selectEditObject(-1);
     await loadEditPage();
   } catch (e) {
-    $("editHint").textContent = "Lỗi: " + e;
+    $("editHint").textContent = t("edit.err", { e });
   }
 }
 
@@ -3159,7 +3159,7 @@ function startBlockTextEdit(o, lines, ev) {
   $("edBold").disabled = false;
   $("edItalic").disabled = false;
   $("editHint").textContent =
-    "Sửa cả đoạn — Enter: xuống dòng · Bôi đen + B/I (Ctrl+B/I): đậm/nghiêng từng chữ · Ctrl+Enter: áp dụng · Esc: huỷ";
+    t("edit.hintParagraph");
 
   // Đọc nội dung theo DÒNG từ contenteditable (div/br → \n).
   const readText = () => {
@@ -3225,7 +3225,7 @@ function startBlockTextEdit(o, lines, ev) {
     // thay vì khoảng trống — hết cảm giác "chữ biến mất".
     if (bgSwapped) img.src = prevSrc;
     if (changed) {
-      $("editHint").textContent = "Đang áp dụng thay đổi…";
+      $("editHint").textContent = t("edit.applying");
       // Khối có TỪ 2 STYLE trở lên (thường + đậm/mono...) → gửi kèm đoạn
       // style để engine giữ đúng font/màu từng phần; 1 style → đường cũ
       // (ưu tiên dùng lại chính font object gốc).
@@ -3433,9 +3433,8 @@ function toggleInlineFormat(prop) {
   sel.removeAllRanges(); // DOM đã đổi — bỏ vùng chọn, giữ focus trong ô
   ce.focus();
   $("editHint").textContent = turnOn
-    ? (prop === "bold" ? "Đã in đậm phần bôi đen" : "Đã in nghiêng phần bôi đen") +
-      " — Ctrl+Enter để áp dụng"
-    : "Đã bỏ " + (prop === "bold" ? "in đậm" : "in nghiêng") + " phần bôi đen";
+    ? t(prop === "bold" ? "edit.boldOn" : "edit.italicOn")
+    : t(prop === "bold" ? "edit.boldOff" : "edit.italicOff");
   return true;
 }
 
@@ -3460,7 +3459,7 @@ function applyTextPropToSelected(part) {
   // thuật được sửa/xoá nội dung) — đúp chuột để sửa cả đoạn thì được.
   if (runs.some((r) => r.nested)) {
     $("editHint").textContent =
-      "Đổi font/cỡ/màu cho chữ trong khối form chưa hỗ trợ — đúp chuột để sửa nội dung, hoặc xoá.";
+      t("edit.nestedNoStyle");
     return;
   }
   stageEditOps(
@@ -3516,7 +3515,7 @@ function promptAddText(pdfX, pdfY) {
   const ov = $("editOverlay");
   const inp = document.createElement("input");
   inp.className = "edit-inline";
-  inp.placeholder = "Nhập chữ…";
+  inp.placeholder = t("edit.typeText");
   const s = state.editScale;
   const p = state.pages[state.editPage];
   const family = $("edFontFamily").value || null; // null = font mặc định
@@ -3563,7 +3562,7 @@ function onEditBoxMouseDown(e, o, runs) {
   // trợ kéo di chuyển/resize — chọn thôi, không bắt đầu drag.
   if (runObjs.some((r) => r && typeof r === "object" && r.nested)) {
     $("editHint").textContent =
-      "Khối này nằm trong form — đúp chuột để sửa nội dung; di chuyển/resize chưa hỗ trợ.";
+      t("edit.nestedNoMove");
     return;
   }
   const box = e.currentTarget;
@@ -3635,7 +3634,7 @@ async function armAddImage() {
   state.editArm = "image";
   $("edAddImage").classList.add("armed");
   $("editOverlay").classList.add("armed");
-  $("editHint").textContent = "Bấm lên trang để đặt ảnh";
+  $("editHint").textContent = t("edit.clickToPlaceImage");
 }
 
 async function replaceSelectedImage() {
@@ -3659,7 +3658,7 @@ function discardEdits() {
   state.editSel = null;
   selectEditObject(-1);
   loadEditPage();
-  $("status").textContent = "Đã huỷ mọi thay đổi nội dung — trở về file gốc.";
+  $("status").textContent = t("edit.discarded");
 }
 
 async function saveEdits() {
@@ -3668,11 +3667,11 @@ async function saveEdits() {
   try {
     // editBase đã gồm mọi thay đổi của trang đang sửa; ghi ra output (ops rỗng = sao chép/lưu lại).
     await invoke("edit_apply", { input: state.editBase, page: state.editPage, ops: [], output: out, password: null });
-    $("status").textContent = `Đã lưu nội dung đã sửa → ${shortName(out)}`;
+    $("status").textContent = t("edit.saved", { file: shortName(out) });
     exitEditMode();
     loadDocument(out);
   } catch (e) {
-    $("editHint").textContent = "Lỗi lưu: " + e;
+    $("editHint").textContent = t("edit.errSave", { e });
   }
 }
 
