@@ -224,6 +224,13 @@ fn page_chars(text: &PdfPageText) -> (String, Vec<PageChar>) {
             .map(|b| Rect { left: b.left().value, bottom: b.bottom().value, right: b.right().value, top: b.top().value })
             .filter(|r| r.right > r.left && r.top > r.bottom);
         let c = if c == '\u{0}' || c == '\u{FFFE}' { ' ' } else { c };
+        // Khoảng trắng lạ (NBSP, thin space…) → dấu cách thường, và gộp nhiều dấu
+        // cách liền nhau thành một: tuỳ font/bản PDFium (Windows vs Linux) mà
+        // "0912 345 678" ra NBSP hoặc 2 dấu cách → mẫu SĐT/số thẻ trượt.
+        let c = if c != '\r' && c != '\n' && c.is_whitespace() { ' ' } else { c };
+        if c == ' ' && hay.ends_with(' ') {
+            continue;
+        }
         chars.push(PageChar { byte: hay.len(), ch: c, rect });
         hay.push(c);
     }
