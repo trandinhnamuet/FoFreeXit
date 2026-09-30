@@ -24,6 +24,8 @@ fn ensure_pdfium_env() {
     }
 }
 
+mod cmd_annot;
+
 pub(crate) fn pdfium() -> Result<pdfium_render::prelude::Pdfium, String> {
     ensure_pdfium_env();
     ff_engine::bind_pdfium().map_err(|e| e.to_string())
@@ -1606,7 +1608,13 @@ fn main() {
             cmd_bookmarks::open_url,
             cmd_bookmarks::split_by_ranges,
             cmd_bookmarks::split_by_bookmarks,
-            cmd_bookmarks::split_by_size
+            cmd_bookmarks::split_by_size,
+            cmd_annot::annot_list_detailed,
+            cmd_annot::annot_save,
+            cmd_annot::annot_render_page,
+            cmd_annot::annot_default_author,
+            cmd_annot::annot_pick_stamp_image,
+            cmd_annot::annot_image_preview,
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");

@@ -6,6 +6,7 @@
 
 pub mod annot;
 pub mod bookmarks;
+pub mod annot_ext;
 pub mod convert;
 pub mod edit;
 mod cffwrap;
@@ -33,6 +34,11 @@ pub use bookmarks::{auto_bookmarks_from_headings, get_outline, set_outline, Book
 pub use links::{edit_links, list_links, save_outline_and_links, LinkInfo, NewLink};
 pub use split::{
     parse_page_ranges, plan_split_by_size, sanitize_file_name, split_by_bookmarks, split_by_ranges, split_by_size,
+};
+pub use annot_ext::{
+    apply_shape_annotations, delete_annotations, list_annotations_detailed, render_page_hiding,
+    save_annotations, update_annotations, AnnotDetail, AnnotMeta, AnnotRef, AnnotSaveRequest,
+    AnnotUpdate, ReplySpec, ShapeKind, ShapeSpec, StampSpec,
 };
 pub use edit::{apply_edits, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
 pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};
