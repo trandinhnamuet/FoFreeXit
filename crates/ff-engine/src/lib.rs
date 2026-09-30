@@ -13,6 +13,10 @@ mod formsurgery;
 mod tounicode;
 pub(crate) mod fontmatch;
 pub mod form;
+mod formap;
+pub mod formdata;
+pub mod formrecog;
+pub mod formx;
 pub mod meta;
 pub mod ocr;
 pub mod organize;
@@ -42,6 +46,12 @@ pub use convert::{
 pub use form::{
     create_form_fields, export_csv, export_fdf, fill_form_fields, flatten_form, import_fdf,
     list_form_fields, parse_fdf, FieldKind, FieldValue, FormField, NewField,
+};
+pub use formdata::{export_form_data, import_form_data, parse_xfdf, read_form_data};
+pub use formrecog::{recognize_fields, FieldProposal};
+pub use formx::{
+    apply_form_changes, create_fields, fill_form, list_widgets, reset_form, ButtonAction, FieldEdit,
+    FieldSpec, FillValue, WidgetInfo,
 };
 pub use ocr::{find_tesseract, ocr_add_text_layer, ocr_page_words, OcrWord};
 pub use redact::redact_areas;
