@@ -28,6 +28,7 @@
         <button class="tab-pill" data-tab="protect" data-i18n="tab.protect"></button>
         <button class="tab-pill" data-tab="a11y" data-i18n="ds.tab.a11y"></button>
         <button class="tab-pill" data-tab="tools" data-i18n="tab.tools"></button>
+        <button class="tab-pill ai-pill" data-tab="ai" data-i18n="ai.tab"></button>
         <button class="tab-pill" data-tab="help" data-i18n="tab.help"></button>
       </div>
       <div class="spacer" data-tauri-drag-region></div>
@@ -40,6 +41,7 @@
         <button id="searchNext" class="sbtn" data-i18n-title="shell.searchNext"><i data-icon="chevron-down"></i></button>
       </div>
       <div class="tr-right">
+        <button id="aiQuickBtn" class="qbtn ai-quick" data-i18n-title="ai.quickTip"><i data-icon="sparkle"></i></button>
         <button id="langBtn" class="qbtn lang-btn" data-i18n-title="shell.language"><span id="langLabel">VI</span></button>
         <button id="themeBtn" class="qbtn" data-i18n-title="shell.theme"><i data-icon="theme-system" id="themeIcon"></i></button>
         <button id="readingBtn" class="qbtn" data-i18n-title="shell.reading"><i data-icon="eye"></i></button>
@@ -375,6 +377,39 @@
           <button class="rbtn" data-proxy="copyPage" data-i18n-title="ribbon.home.copyTip"><i data-icon="copy"></i><span data-i18n="ribbon.home.copy"></span></button>
           <button class="rbtn" data-proxy="readingBtn" data-i18n-title="shell.reading"><i data-icon="eye"></i><span data-i18n="ribbon.tools.reading"></span></button>
           <button class="rbtn" data-proxy="fullscreenBtn" data-i18n-title="shell.fullscreen"><i data-icon="fullscreen"></i><span data-i18n="ribbon.tools.fullscreen"></span></button>
+          <button class="rbtn" data-proxy="aiRbRead" data-i18n-title="ai.rb.readTip"><i data-icon="speaker"></i><span data-i18n="ai.rb.read"></span></button>
+        </div>
+        <span class="spacer"></span>
+      </div>
+
+      <!-- AI ASSISTANT (features/ai.js) -->
+      <div class="rpanel" data-tab="ai" id="aiBar">
+        <div class="rgroup">
+          <button class="rbtn" id="aiRbPanel" data-i18n-title="ai.rb.panelTip"><i data-icon="sparkle"></i><span data-i18n="ai.rb.panel"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" data-ai-act="summaryShort" data-i18n-title="ai.rb.summaryTip"><i data-icon="summary"></i><span data-i18n="ai.rb.summary"></span></button>
+          <button class="rbtn" data-ai-act="keyPoints" data-i18n-title="ai.rb.keyPointsTip"><i data-icon="key-points"></i><span data-i18n="ai.rb.keyPoints"></span></button>
+          <button class="rbtn" data-ai-act="extractInfo" data-i18n-title="ai.rb.extractTip"><i data-icon="table"></i><span data-i18n="ai.rb.extract"></span></button>
+          <button class="rbtn" data-ai-act="translate" data-i18n-title="ai.rb.translateTip"><i data-icon="translate"></i><span data-i18n="ai.rb.translate"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" data-ai-act="explain" data-i18n-title="ai.rb.explainTip"><i data-icon="explain"></i><span data-i18n="ai.rb.explain"></span></button>
+          <button class="rbtn" data-ai-act="rewrite" data-i18n-title="ai.rb.rewriteTip"><i data-icon="edit-text"></i><span data-i18n="ai.rb.rewrite"></span></button>
+          <button class="rbtn" data-ai-act="improve" data-i18n-title="ai.rb.improveTip"><i data-icon="wand"></i><span data-i18n="ai.rb.improve"></span></button>
+          <button class="rbtn" data-ai-act="grammar" data-i18n-title="ai.rb.grammarTip"><i data-icon="spellcheck"></i><span data-i18n="ai.rb.grammar"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" data-ai-act="redact" data-i18n-title="ai.rb.redactTip"><i data-icon="redact"></i><span data-i18n="ai.rb.redact"></span></button>
+          <button class="rbtn" data-ai-act="compare" data-i18n-title="ai.rb.compareTip"><i data-icon="compare"></i><span data-i18n="ai.rb.compare"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="aiRbRead" data-ai-act="read" data-i18n-title="ai.rb.readTip"><i data-icon="speaker"></i><span data-i18n="ai.rb.read"></span></button>
+          <button class="rbtn" id="aiRbSettings" data-i18n-title="ai.rb.settingsTip"><i data-icon="gear"></i><span data-i18n="ai.rb.settings"></span></button>
         </div>
         <span class="spacer"></span>
       </div>
@@ -476,6 +511,80 @@
           </div>
         </div>
       </main>
+      <!-- AI Assistant (features/ai.js) — ẩn mặc định, kéo mép trái để đổi rộng -->
+      <aside id="aiPanel" class="ai-panel" hidden>
+        <div id="aiResizer" class="ai-resizer" data-i18n-title="ai.resizeTip"></div>
+        <header class="ai-head">
+          <span class="ai-logo"><i data-icon="sparkle"></i></span>
+          <div class="ai-title"><b data-i18n="ai.title"></b><span id="aiModelBadge" class="ai-badge"></span></div>
+          <span class="spacer"></span>
+          <button id="aiNewChat" class="qbtn" data-i18n-title="ai.newChat"><i data-icon="chat-new"></i></button>
+          <button id="aiSettingsBtn" class="qbtn" data-i18n-title="ai.settings"><i data-icon="gear"></i></button>
+          <button id="aiClose" class="qbtn" data-i18n-title="ai.close"><i data-icon="win-close"></i></button>
+        </header>
+        <div id="aiDocs" class="ai-docs"></div>
+        <div id="aiScroll" class="ai-scroll">
+          <div id="aiOnboard" class="ai-onboard" hidden>
+            <div class="ai-onboard-ic"><i data-icon="sparkle"></i></div>
+            <b data-i18n="ai.onboard.title"></b>
+            <p data-i18n="ai.onboard.text"></p>
+            <p class="muted" data-i18n="ai.onboard.privacy"></p>
+            <button id="aiOnboardBtn" class="ai-primary"><i data-icon="gear"></i><span data-i18n="ai.onboard.btn"></span></button>
+            <p class="muted" data-i18n="ai.onboard.tts"></p>
+          </div>
+          <div id="aiWelcome" class="ai-welcome">
+            <p class="ai-hello" data-i18n="ai.welcome"></p>
+            <div class="ai-cards">
+              <button class="ai-chip card" data-ai-act="summaryShort"><i data-icon="summary"></i><span data-i18n="ai.act.summaryShort"></span></button>
+              <button class="ai-chip card" data-ai-act="summaryLong"><i data-icon="file-text"></i><span data-i18n="ai.act.summaryLong"></span></button>
+              <button class="ai-chip card" data-ai-act="keyPoints"><i data-icon="key-points"></i><span data-i18n="ai.act.keyPoints"></span></button>
+              <button class="ai-chip card" data-ai-act="extractInfo"><i data-icon="table"></i><span data-i18n="ai.act.extractInfo"></span></button>
+            </div>
+            <p class="muted ai-tipline" data-i18n="ai.welcomeTip"></p>
+          </div>
+          <div id="aiThread" class="ai-thread"></div>
+        </div>
+        <div class="ai-tts" id="aiTts">
+          <i data-icon="speaker"></i>
+          <select id="aiTtsMode" class="rfield" data-i18n-title="ai.tts.modeTip">
+            <option value="page" data-i18n="ai.tts.modePage"></option>
+            <option value="from" data-i18n="ai.tts.modeFrom"></option>
+            <option value="selection" data-i18n="ai.tts.modeSel"></option>
+          </select>
+          <button id="aiTtsPlay" class="sbtn" data-i18n-title="ai.tts.play"><i data-icon="play"></i></button>
+          <button id="aiTtsStop" class="sbtn" data-i18n-title="ai.tts.stop" disabled><i data-icon="stop"></i></button>
+          <select id="aiTtsRate" class="rfield" data-i18n-title="ai.tts.rateTip">
+            <option value="0.75">0.75×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.25">1.25×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+          </select>
+          <select id="aiTtsVoice" class="rfield ai-voice" data-i18n-title="ai.tts.voiceTip"></select>
+          <span id="aiTtsState" class="ai-tts-state"></span>
+        </div>
+        <div class="ai-compose">
+          <div id="aiSelChip" class="ai-selchip" hidden>
+            <i data-icon="cursor"></i><span id="aiSelText"></span>
+            <button id="aiSelClear" data-i18n-title="ai.selClear"><i data-icon="win-close"></i></button>
+          </div>
+          <div id="aiChips" class="ai-chips">
+            <button class="ai-chip" data-ai-act="explain"><i data-icon="explain"></i><span data-i18n="ai.act.explain"></span></button>
+            <button class="ai-chip" data-ai-act="translate"><i data-icon="translate"></i><span data-i18n="ai.act.translate"></span></button>
+            <button class="ai-chip" data-ai-act="rewrite"><i data-icon="edit-text"></i><span data-i18n="ai.act.rewrite"></span></button>
+            <button class="ai-chip" data-ai-act="improve"><i data-icon="wand"></i><span data-i18n="ai.act.improve"></span></button>
+            <button class="ai-chip" data-ai-act="grammar"><i data-icon="spellcheck"></i><span data-i18n="ai.act.grammar"></span></button>
+            <button class="ai-chip" data-ai-act="redact"><i data-icon="redact"></i><span data-i18n="ai.act.redact"></span></button>
+            <button class="ai-chip" id="aiChipCompare" data-ai-act="compare" hidden><i data-icon="compare"></i><span data-i18n="ai.act.compare"></span></button>
+          </div>
+          <div class="ai-inputrow">
+            <textarea id="aiInput" rows="1" data-i18n-placeholder="ai.inputPh"></textarea>
+            <button id="aiSend" class="ai-send" data-i18n-title="ai.send"><i data-icon="send"></i></button>
+            <button id="aiStop" class="ai-send stop" data-i18n-title="ai.stop" hidden><i data-icon="stop"></i></button>
+          </div>
+          <div class="ai-disclaimer" data-i18n="ai.disclaimer"></div>
+        </div>
+      </aside>
     </div>
 
     <!-- ===== Thanh đáy ===== -->
@@ -577,6 +686,7 @@
     <script src="i18n/part-pagex.js"></script>
     <script src="i18n/part-docsec.js"></script>
     <script src="i18n/part-editx.js"></script>
+    <script src="i18n/part-ai.js"></script>
     <script src="icons.js"></script>
     <script src="main.js"></script>
     <script src="shell.js"></script>
@@ -587,5 +697,6 @@
     <script src="features/pagex.js"></script>
     <script src="features/docsec.js"></script>
     <script src="features/editx.js"></script>
+    <script src="features/ai.js"></script>
   </body>
 </html>

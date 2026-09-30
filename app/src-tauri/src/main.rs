@@ -13,6 +13,7 @@ mod cmd_compare;
 mod cmd_pagex;
 mod cmd_docsec;
 mod cmd_editx;
+mod cmd_ai;
 
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
@@ -1389,6 +1390,7 @@ fn main() {
     }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(cmd_ai::AiState::default())
         .setup(|app| {
             // Cửa sổ tạo ẨN (tauri.conf.json visible:false) — UI gọi show()
             // khi frontend SẴN SÀNG để user không thấy khung trắng đơ lúc
@@ -1504,6 +1506,15 @@ fn main() {
             cmd_docsec::a11y_fix,
             cmd_docsec::a11y_figures,
             cmd_docsec::a11y_set_alt,
+            cmd_ai::ai_get_settings,
+            cmd_ai::ai_save_settings,
+            cmd_ai::ai_test_connection,
+            cmd_ai::ai_chat,
+            cmd_ai::ai_cancel,
+            cmd_ai::ai_doc_pages,
+            cmd_ai::ai_find_pii,
+            cmd_ai::ai_pick_pdfs,
+            cmd_ai::ai_export_text,
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");

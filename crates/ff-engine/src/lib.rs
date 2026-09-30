@@ -70,6 +70,7 @@ pub use qpdf::{
 };
 pub use convert::{
     export_docx, export_images, export_text, find_soffice, office_to_pdf, pdf_to_docx_via_soffice,
+    text_to_docx,
 };
 pub use form::{
     create_form_fields, export_csv, export_fdf, fill_form_fields, flatten_form, import_fdf,
