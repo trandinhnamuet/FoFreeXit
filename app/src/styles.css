@@ -119,25 +119,17 @@ i[data-icon] { display: inline-flex; font-style: normal; }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--faint); }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 
-/* ---------- Title bar ---------- */
-.titlebar {
-  height: 32px; flex: 0 0 32px;
-  display: flex; align-items: center;
-  background: var(--titlebar);
-  user-select: none;
-}
-.tb-brand { display: flex; align-items: center; gap: 8px; padding-left: 10px; min-width: 0; }
-.tb-logo { width: 18px; height: 18px; flex: none; }
-.tb-title { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tb-drag { flex: 1; align-self: stretch; }
-.tb-controls { display: flex; align-self: stretch; }
+/* ---------- Nút cửa sổ (chỉ khi frameless) — nằm cuối hàng tab ---------- */
+.tb-controls { display: flex; align-self: stretch; margin: 0 -10px 0 6px; flex: none; }
+.tb-controls[hidden] { display: none !important; }
 .tb-btn {
-  width: 46px; height: 32px; padding: 0; border-radius: 0;
+  width: 46px; height: 100%; padding: 0; border-radius: 0;
   display: flex; align-items: center; justify-content: center; color: var(--text-2);
 }
 .tb-btn svg.ic { width: 16px; height: 16px; }
 .tb-close:hover { background: #e81123; color: #fff; }
 .tb-close:active { background: #c50f1f; color: #fff; }
+body.frameless .tabrow { background: var(--titlebar); }
 
 /* ---------- Tab row ---------- */
 .tabrow {
@@ -204,11 +196,11 @@ i[data-icon] { display: inline-flex; font-style: normal; }
 .files-btn, .qa, .tsep, .tr-right { flex: none; }
 .searchpill { flex: 0 1 auto; min-width: 0; }
 .searchpill input[type="search"] { flex: 1 1 auto; min-width: 48px; }
-@media (max-width: 1560px) {
+@media (max-width: 1760px) {
   .tab-pill { padding: 0 11px; font-size: 13.5px; }
   .searchpill input[type="search"] { width: 120px; }
 }
-@media (max-width: 1320px) {
+@media (max-width: 1480px) {
   .tab-pill { padding: 0 9px; }
   .searchpill input[type="search"] { width: 80px; }
   .searchpill .searchopt { display: none; }
@@ -518,7 +510,7 @@ select.zoom { height: 28px; width: 96px; padding: 2px 6px; text-align: center; f
   animation: menuIn 140ms var(--ease);
 }
 @keyframes menuIn { from { opacity: 0; transform: translateY(-4px) scale(.99); } to { opacity: 1; transform: none; } }
-.files-menu { top: 78px; left: 10px; min-width: 264px; }
+.files-menu { top: 52px; left: 10px; min-width: 264px; }
 .mini-menu { min-width: 190px; }
 .mitem {
   position: relative;

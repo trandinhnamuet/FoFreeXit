@@ -8,25 +8,8 @@
     <script src="theme.js"></script>
   </head>
   <body>
-    <!-- ===== Title bar tự vẽ (decorations:false) ===== -->
-    <header class="titlebar" data-tauri-drag-region>
-      <div class="tb-brand" data-tauri-drag-region>
-        <svg class="tb-logo" viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="3" y="2" width="18" height="20" rx="4" fill="var(--accent)"/>
-          <path d="M8.5 7.5h7M8.5 11.5h5M8.5 7.5v9" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/>
-        </svg>
-        <span class="tb-title" id="winTitle" data-tauri-drag-region>FoFreeXit</span>
-      </div>
-      <div class="tb-drag" data-tauri-drag-region></div>
-      <div class="tb-controls">
-        <button class="tb-btn" id="winMin" data-i18n-title="shell.minimize"><i data-icon="win-min"></i></button>
-        <button class="tb-btn" id="winMax" data-i18n-title="shell.maximize"><i data-icon="win-max"></i></button>
-        <button class="tb-btn tb-close" id="winClose" data-i18n-title="shell.close"><i data-icon="win-close"></i></button>
-      </div>
-    </header>
-
     <!-- ===== Hàng tab ===== -->
-    <nav class="tabrow">
+    <nav class="tabrow" data-tauri-drag-region>
       <button id="filesBtn" class="files-btn" aria-haspopup="menu"><i data-icon="menu"></i><span data-i18n="tab.files"></span></button>
       <div class="qa">
         <button id="openBtn" class="qbtn" data-i18n-title="shell.openTip"><i data-icon="folder-open"></i></button>
@@ -46,7 +29,7 @@
         <button class="tab-pill" data-tab="tools" data-i18n="tab.tools"></button>
         <button class="tab-pill" data-tab="help" data-i18n="tab.help"></button>
       </div>
-      <div class="spacer"></div>
+      <div class="spacer" data-tauri-drag-region></div>
       <div class="searchpill">
         <i data-icon="search"></i>
         <input id="searchBox" type="search" data-i18n-placeholder="shell.searchPh" autofocus />
@@ -61,6 +44,12 @@
         <button id="readingBtn" class="qbtn" data-i18n-title="shell.reading"><i data-icon="eye"></i></button>
         <button id="fullscreenBtn" class="qbtn" data-i18n-title="shell.fullscreen"><i data-icon="fullscreen"></i></button>
         <button id="collapseRibbonBtn" class="qbtn" data-i18n-title="shell.collapseRibbon"><i data-icon="chevron-up"></i></button>
+      </div>
+      <!-- Nút cửa sổ: chỉ hiện khi cửa sổ không có thanh tiêu đề của Windows (decorations:false). -->
+      <div class="tb-controls" id="winControls" hidden>
+        <button class="tb-btn" id="winMin" data-i18n-title="shell.minimize"><i data-icon="win-min"></i></button>
+        <button class="tb-btn" id="winMax" data-i18n-title="shell.maximize"><i data-icon="win-max"></i></button>
+        <button class="tb-btn tb-close" id="winClose" data-i18n-title="shell.close"><i data-icon="win-close"></i></button>
       </div>
     </nav>
 

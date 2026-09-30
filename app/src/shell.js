@@ -124,14 +124,20 @@
     $("winMin").addEventListener("click", () => appWin.minimize());
     $("winMax").addEventListener("click", () => appWin.toggleMaximize());
     $("winClose").addEventListener("click", () => appWin.close());
-    // Đúp vào vùng kéo = phóng to/khôi phục: script drag-region của Tauri đã tự
-    // làm — thêm handler ở đây sẽ phóng to rồi khôi phục ngay (nháy).
+    // Đúp vào vùng kéo (khoảng trống hàng tab) = phóng to/khôi phục: script
+    // drag-region của Tauri đã tự làm — không thêm handler (sẽ nháy).
     let rt = 0;
     window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(refreshMaxIcon, 120); });
     refreshMaxIcon();
-  } else {
-    document.querySelector(".tb-controls").style.visibility = "hidden";
   }
+  // Chỉ hiện nút cửa sổ riêng khi không có thanh tiêu đề của Windows; lỗi
+  // (thiếu quyền, chạy ngoài Tauri) → coi như có thanh gốc, không vẽ trùng.
+  (async () => {
+    let decorated = true;
+    try { if (appWin) decorated = await appWin.isDecorated(); } catch (_) {}
+    $("winControls").hidden = decorated;
+    document.body.classList.toggle("frameless", !decorated);
+  })();
 
   // ---------- Menus (ngôn ngữ / theme; Files do shell-extras lo) ----------
   function closeMenus(except) {
@@ -268,7 +274,6 @@
   function onDocLoaded(path) {
     if (state.editMode) exitEditMode();
     const name = path.split(/[\\/]/).pop();
-    $("winTitle").textContent = `FoFreeXit — ${name}`;
     document.title = `FoFreeXit — ${name}`;
     if (appWin) appWin.setTitle(`FoFreeXit — ${name}`).catch(() => {});
     document.dispatchEvent(new CustomEvent("docloaded", { detail: { path } }));
