@@ -144,12 +144,15 @@ I18N.add("en", {
     const path = it.dataset.path;
     const prev = lastLoaded;
     lastLoaded = null;
-    await loadDocument(path);
-    // loadDocument tự bắt lỗi; không có 'docloaded' cho đúng path này = mở thất bại.
+    const result = await loadDocument(path);
+    // loadDocument trả "ok" | "cancelled" | "missing" | "error". Chỉ bỏ khỏi
+    // danh sách khi tệp thật sự không còn (huỷ nhập mật khẩu thì giữ lại).
     if (!lastLoaded || !samePath(lastLoaded, path)) {
       if (!lastLoaded) lastLoaded = prev;
-      removeRecent(path);
-      $("status").textContent = t("x.recentMissing", { name: baseName(path) });
+      if (result === "missing") {
+        removeRecent(path);
+        $("status").textContent = t("x.recentMissing", { name: baseName(path) });
+      }
     }
   });
 
