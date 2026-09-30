@@ -69,6 +69,95 @@ function shortName(path) {
   return path.split(/[\\/]/).pop();
 }
 
+// Phân loại lỗi mở tệp từ backend (chuỗi lỗi PDFium / IO / qpdf).
+// Không tìm thấy / không đọc được tệp → sửa qua QPDF cũng vô ích (và tốn vài giây).
+function isNotFoundError(e) {
+  return /os error [23]\b|code:\s*[23]\b|NotFound|not found|No such file|kh\u00f4ng t\u00ecm th\u1ea5y|FileError/i.test(String(e));
+}
+function isPasswordError(e) {
+  return /PasswordError|invalid password/i.test(String(e));
+}
+
+// Đường dẫn file tạm trong thư mục temp của hệ thống.
+async function tempFilePath(name) {
+  const P = window.__TAURI__.path;
+  return P.join(await P.tempDir(), name);
+}
+
+// Hộp thoại nhập mật khẩu cho tệp PDF có mã hoá. Đúng mật khẩu → giải mã ra
+// 1 file tạm và trả đường dẫn file đó; Huỷ/đóng hộp thoại → null.
+function askPasswordAndDecrypt(path) {
+  return new Promise((resolve) => {
+    const box = openModal(t("viewer.pwTitle"), `
+      <p class="muted">${t("viewer.pwIntro", { name: escapeHtml(shortName(path)) })}</p>
+      <label for="openPwInput">${t("viewer.pwLabel")}</label>
+      <input type="password" id="openPwInput" autocomplete="current-password">
+      <div class="err" id="openPwErr"></div>
+      <div class="foot"><button id="openPwCancel">${t("common.cancel")}</button><button id="openPwOk" class="primary">${t("common.ok")}</button></div>
+    `);
+    const inp = box.querySelector("#openPwInput");
+    const err = box.querySelector("#openPwErr");
+    const ok = box.querySelector("#openPwOk");
+    let done = false;
+    let busy = false;
+    const finish = (v) => {
+      if (done) return;
+      done = true;
+      obs.disconnect();
+      if (ok.isConnected) closeModal();
+      resolve(v);
+    };
+    // Hộp thoại bị đóng bằng Esc / bấm nền / modal khác thay thế → coi như Huỷ.
+    const obs = new MutationObserver(() => {
+      if (!ok.isConnected || $("modalOverlay").classList.contains("hidden")) finish(null);
+    });
+    obs.observe($("modalOverlay"), { attributes: true, attributeFilter: ["class"] });
+    obs.observe(box, { childList: true });
+    const fail = (e) => {
+      busy = false;
+      ok.disabled = false;
+      if (done) return;
+      err.textContent = isPasswordError(e) ? t("viewer.pwWrong") : t("viewer.pwErr", { e });
+      inp.focus();
+      inp.select();
+    };
+    const submit = async () => {
+      if (busy || done) return;
+      const pw = inp.value;
+      if (!pw) { err.textContent = t("viewer.pwEmpty"); inp.focus(); return; }
+      busy = true;
+      ok.disabled = true;
+      err.textContent = t("viewer.pwChecking");
+      try {
+        // Kiểm tra nhanh bằng PDFium (sai mật khẩu → PasswordError tức thì,
+        // không phải chờ qpdf thử hết các kiểu mã hoá mật khẩu).
+        await invoke("organize_identity_plan", { path, password: pw });
+      } catch (e) {
+        fail(e);
+        return;
+      }
+      try {
+        // ensure_openable chỉ xác nhận mở được (trả lại CHÍNH tệp đã mã hoá) —
+        // các lệnh khác mở tệp không kèm mật khẩu nên cần 1 bản đã giải mã.
+        const out = await tempFilePath(`ff_decrypted_${Date.now()}.pdf`);
+        await invoke("security_decrypt", { input: path, password: pw, output: out });
+        const usable = await invoke("ensure_openable", { path: out, password: null });
+        if (done) return;
+        busy = false;
+        finish(usable);
+      } catch (e) {
+        fail(e);
+      }
+    };
+    ok.addEventListener("click", submit);
+    box.querySelector("#openPwCancel").addEventListener("click", () => finish(null));
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); submit(); }
+    });
+  });
+}
+
+// Trả về "ok" | "cancelled" (huỷ nhập mật khẩu) | "missing" (không tìm thấy tệp) | "error".
 async function loadDocument(path) {
   // Mở tệp TRƯỚC, chỉ khi thành công mới xoá trạng thái tài liệu cũ — mở lỗi
   // (tệp gần đây đã bị xoá…) không được làm mất chú thích chưa lưu.
@@ -80,11 +169,24 @@ async function loadDocument(path) {
     try {
       meta = await invoke("open_document", { path });
     } catch (e) {
-      // File hỏng (xref/trailer sai) — tự sửa qua QPDF rồi mở lại (Phase 3).
-      const usable = await invoke("ensure_openable", { path, password: null });
-      if (usable === path) throw e;
-      openedPath = usable;
-      meta = await invoke("open_document", { path: usable });
+      if (isNotFoundError(e)) throw e;
+      if (isPasswordError(e)) {
+        // Tệp có mật khẩu → hỏi mật khẩu, mở bản đã giải mã (file tạm) nhưng
+        // vẫn hiển thị/ghi "gần đây" theo đường dẫn GỐC.
+        const usable = await askPasswordAndDecrypt(path);
+        if (!usable) {
+          $("status").textContent = t("viewer.pwCancelled", { name: shortName(path) });
+          return "cancelled"; // Huỷ → giữ nguyên tài liệu đang mở
+        }
+        openedPath = usable;
+        meta = await invoke("open_document", { path: usable });
+      } else {
+        // File hỏng (xref/trailer sai) — tự sửa qua QPDF rồi mở lại (Phase 3).
+        const usable = await invoke("ensure_openable", { path, password: null });
+        if (usable === path) throw e;
+        openedPath = usable;
+        meta = await invoke("open_document", { path: usable });
+      }
     }
     state.path = openedPath;
     state.textLayers = {};
@@ -118,19 +220,33 @@ async function loadDocument(path) {
 
     // Khởi tạo plan mặc định ngay (tất cả trang theo thứ tự gốc).
     // Load plan thực tế ở background để không block UI khi mở file.
-    state.pagePlan = state.pages.map((p) => ({ page: p.index, rotate: 0 }));
-    invoke("organize_identity_plan", { path: state.path, password: null })
+    // Cùng dạng khe với organize_identity_plan (buildOrganizeGrid/organize_apply dùng).
+    const tmpPlan = state.pages.map((p) => ({
+      kind: "existing", source: null, srcIndex: p.index,
+      widthPt: null, heightPt: null, rotationDelta: 0, crop: null,
+    }));
+    const tmpJson = JSON.stringify(tmpPlan);
+    state.pagePlan = tmpPlan;
+    invoke("organize_identity_plan", { path: openedPath, password: null })
       .then((plan) => {
+        // Chỉ thay khi vẫn là tài liệu này và plan tạm chưa bị người dùng sửa.
+        if (state.path !== openedPath || JSON.stringify(state.pagePlan) !== tmpJson) return;
         state.pagePlan = plan;
+        if (state.organizeMode && JSON.stringify(plan) !== tmpJson) buildOrganizeGrid();
       })
       .catch(() => {});
     state.orgSelected = new Set();
     state.orgAnchor = null;
     state.orgThumbs = new Map();
     if (state.organizeMode) buildOrganizeGrid();
+    if (state.formMode) refreshFormCount();
+    return "ok";
   } catch (e) {
     if (!loaded) state.path = prevPath;
-    $("status").textContent = t("viewer.errOpen", { e });
+    $("status").textContent = !loaded && isNotFoundError(e)
+      ? t("viewer.errNotFound", { name: shortName(path) })
+      : t("viewer.errOpen", { e });
+    return loaded ? "ok" : isNotFoundError(e) ? "missing" : "error";
   }
 }
 
@@ -330,6 +446,9 @@ async function buildTextLayer(idx) {
 
 function updateCurrentPage() {
   const vp = $("viewport");
+  // Viewer đang ẩn (tab Trang / chế độ sửa): offsetTop của slot vô nghĩa →
+  // giữ nguyên trang hiện tại thay vì nhảy về trang cuối.
+  if (vp.classList.contains("hidden") || vp.offsetParent === null) return;
   const probe = vp.scrollTop + vp.clientHeight * 0.35;
   let cur = 0;
   for (const slot of state.slots) {
@@ -782,8 +901,11 @@ function clearAllHighlights() {
 function drawHighlightsForVisible() {
   clearAllHighlights();
   for (const idx of state.visible) drawHighlightsForPage(idx);
-  // luôn vẽ trang chứa hit hiện tại
-  if (state.hitIdx >= 0) drawHighlightsForPage(state.hits[state.hitIdx].pageIndex);
+  // luôn vẽ trang chứa hit hiện tại (nếu chưa vẽ ở vòng trên — tránh vẽ trùng)
+  if (state.hitIdx >= 0) {
+    const pg = state.hits[state.hitIdx].pageIndex;
+    if (!state.visible.has(pg)) drawHighlightsForPage(pg);
+  }
 }
 
 function drawHighlightsForPage(pageIdx) {
@@ -854,8 +976,8 @@ function updateAnnotCount() {
 function snapshot() {
   return JSON.parse(JSON.stringify({ annotSpecs: state.annotSpecs, pagePlan: state.pagePlan }));
 }
-function pushUndo() {
-  state.undoStack.push(snapshot());
+function pushUndo(snap) {
+  state.undoStack.push(snap || snapshot());
   if (state.undoStack.length > UNDO_LIMIT) state.undoStack.shift();
   state.redoStack = [];
   updateUndoRedoButtons();
@@ -883,12 +1005,18 @@ function applySnapshot(snap) {
   if (state.organizeMode) buildOrganizeGrid();
 }
 function undo() {
+  // Chốt ô sửa text box / popup ghi chú đang mở TRƯỚC (có thể ghi thêm 1 bước
+  // undo cho thay đổi vừa gõ) rồi mới lùi.
+  finishEditing();
+  closeNotePopup();
   if (!state.undoStack.length) return;
   const prev = state.undoStack.pop();
   state.redoStack.push(snapshot());
   applySnapshot(prev);
 }
 function redo() {
+  finishEditing();
+  closeNotePopup();
   if (!state.redoStack.length) return;
   const next = state.redoStack.pop();
   state.undoStack.push(snapshot());
@@ -901,6 +1029,9 @@ function drawAnnotsForPage(idx) {
   if (!slot) return;
   const layer = slot.querySelector(".annotlayer");
   if (!layer) return;
+  // Giữ ô sửa text box đang mở (nằm cùng layer) qua lần vẽ lại.
+  const keepEd = editing && editing.el && editing.el.parentNode === layer ? editing.el : null;
+  const edFocused = keepEd && document.activeElement === keepEd;
   layer.innerHTML = "";
   const p = state.pages[idx];
   const scale = PT_PER_PX * state.zoom;
@@ -1016,6 +1147,10 @@ function drawAnnotsForPage(idx) {
     });
     layer.appendChild(el);
   }
+  if (keepEd) {
+    layer.appendChild(keepEd);
+    if (edFocused) keepEd.focus();
+  }
 }
 
 function selectAnnot(id) {
@@ -1052,9 +1187,13 @@ function cssToPdf(idx, cssX, cssY) {
 // ===== Sửa Text box tại chỗ (in-place) + thanh Format =====
 let editing = null; // { id, el, bar }
 
-function editTextBox(spec) {
+// Các trường của text box mà 1 lượt sửa có thể đổi (so sánh để quyết định ghi undo).
+const TEXTBOX_FIELDS = ["contents", "fontSize", "bold", "italic", "underline", "color", "bottom"];
+const textBoxKey = (s) => JSON.stringify([s.contents || "", s.fontSize || 14, !!s.bold, !!s.italic, !!s.underline, s.color]);
+
+// `fresh`: text box VỪA tạo (bước undo đã ghi lúc tạo) → không ghi thêm.
+function editTextBox(spec, fresh) {
   finishEditing();
-  pushUndo(); // ghi lại trạng thái TRƯỚC khi sửa nội dung/định dạng text box
   state.selectedId = null;
   state.tool = null;
   document.querySelectorAll(".atool").forEach((b) => b.classList.remove("active"));
@@ -1080,10 +1219,12 @@ function editTextBox(spec) {
     fontStyle: spec.italic ? "italic" : "normal",
     textDecoration: spec.underline ? "underline" : "none",
   });
+  // Đặt `editing` rồi vẽ lại TRƯỚC (ẩn preview của spec đang sửa), sau đó mới
+  // gắn editor — vẽ lại xoá sạch layer nên gắn trước sẽ bị xoá mất.
+  const orig = JSON.parse(JSON.stringify(TEXTBOX_FIELDS.reduce((o, k) => ((o[k] = spec[k] === undefined ? null : spec[k]), o), {})));
+  editing = { id: spec.id, el: ed, fresh: !!fresh, orig, origKey: textBoxKey(spec) };
+  drawAnnotsForPage(spec.pageIndex);
   layer.appendChild(ed);
-  drawAnnotsForPage(spec.pageIndex); // ẩn preview của spec đang sửa
-
-  editing = { id: spec.id, el: ed };
   showFmtBar(spec, ed);
   ed.focus();
   // đặt con trỏ cuối
@@ -1098,17 +1239,26 @@ function editTextBox(spec) {
 
 function finishEditing() {
   if (!editing) return;
-  const spec = state.annotSpecs.find((s) => s.id === editing.id);
-  const ed = editing.el;
+  const ctx = editing;
+  const spec = state.annotSpecs.find((s) => s.id === ctx.id);
+  const ed = ctx.el;
   if (spec && ed) {
     spec.contents = ed.innerText.trim();
     // mở rộng rect theo chiều cao thực tế của editor
     const scale = PT_PER_PX * state.zoom;
     const realH = ed.offsetHeight / scale;
     spec.bottom = spec.top - Math.max(realH, 14);
+    // Sửa text box có sẵn: chỉ ghi undo khi nội dung/định dạng thực sự đổi —
+    // snapshot hiện tại với text box được trả về giá trị trước khi sửa.
+    if (!ctx.fresh && ctx.origKey !== textBoxKey(spec)) {
+      const snap = snapshot();
+      const s0 = snap.annotSpecs.find((s) => s.id === spec.id);
+      if (s0) Object.assign(s0, ctx.orig);
+      pushUndo(snap);
+    }
   }
   if (ed && ed.parentNode) ed.remove();
-  if (editing.bar && editing.bar.parentNode) editing.bar.remove();
+  if (ctx.bar && ctx.bar.parentNode) ctx.bar.remove();
   const pg = spec ? spec.pageIndex : null;
   editing = null;
   // Xoá text box rỗng (không nhập gì).
@@ -1189,7 +1339,18 @@ function showFmtBar(spec, editorEl) {
 let notePopupEl = null;
 function openNotePopup(spec) {
   closeNotePopup();
-  pushUndo(); // ghi lại trạng thái TRƯỚC khi sửa nội dung/màu ghi chú
+  // Chỉ ghi undo ở thay đổi THỰC SỰ đầu tiên (mở xem rồi đóng không tạo bước
+  // undo rỗng): snapshot lúc đó với ghi chú được trả về giá trị lúc mở.
+  const orig = { contents: spec.contents, color: spec.color.slice() };
+  let recorded = false;
+  const recordUndo = () => {
+    if (recorded) return;
+    recorded = true;
+    const snap = snapshot();
+    const s0 = snap.annotSpecs.find((s) => s.id === spec.id);
+    if (s0) { s0.contents = orig.contents; s0.color = orig.color.slice(); }
+    pushUndo(snap);
+  };
   const slot = state.slots[spec.pageIndex];
   const layer = slot.querySelector(".annotlayer");
   const icon = layer.querySelector(`.a-note[data-id="${spec.id}"]`);
@@ -1212,6 +1373,8 @@ function openNotePopup(spec) {
 
   const ta = pop.querySelector(".np-text");
   ta.addEventListener("input", () => {
+    if (ta.value === (spec.contents || "")) return;
+    recordUndo();
     spec.contents = ta.value;
     buildComments();
   });
@@ -1222,6 +1385,8 @@ function openNotePopup(spec) {
   });
   pop.querySelector(".np-color").addEventListener("click", (e) => {
     openColorPopover(e.currentTarget, spec.color, (rgb) => {
+      if (rgb[0] === spec.color[0] && rgb[1] === spec.color[1] && rgb[2] === spec.color[2]) return;
+      recordUndo();
       spec.color = rgb;
       pop.querySelector(".np-color .sw").style.background = rgbCss(rgb);
       drawAnnotsForPage(spec.pageIndex);
@@ -1500,7 +1665,7 @@ function onPagesMouseUp() {
   updateAnnotCount();
   buildComments();
 
-  if (tool === "freetext") editTextBox(spec);
+  if (tool === "freetext") editTextBox(spec, true);
   else if (tool === "note") openNotePopup(spec);
 }
 
