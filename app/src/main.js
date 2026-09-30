@@ -1625,6 +1625,7 @@ function enterOrganizeMode() {
 }
 function exitOrganizeMode() {
   state.organizeMode = false;
+  disconnectOrgThumbObserver();
   $("annobar").classList.remove("hidden");
   $("organizeBar").classList.add("hidden");
   $("viewport").classList.remove("hidden");
@@ -1667,11 +1668,23 @@ function refreshOrgSelection() {
 // pagePlan có khác trạng thái gốc của file đang mở không (đã chèn/xoá/đảo/xoay/
 // crop)? Watermark/Header-Footer cần biết để áp đúng lên trạng thái đang xem,
 // không phải file gốc còn trên đĩa (xem materializeBaseInput).
+// Chấp nhận cả dạng plan tạm {page, rotate} (dựng ngay khi mở file, trước khi
+// organize_identity_plan trả về) lẫn dạng đầy đủ {kind, source, srcIndex, ...}.
 function planIsDirty() {
   if (state.pagePlan.length !== state.pages.length) return true;
-  return state.pagePlan.some((e, i) =>
-    e.kind !== "existing" || e.source || e.srcIndex !== i ||
-    (e.rotationDelta || 0) !== 0 || e.crop);
+  return state.pagePlan.some((e, i) => {
+    const kind = e.kind || "existing";
+    const src = e.srcIndex != null ? e.srcIndex : e.page;
+    const rot = e.rotationDelta != null ? e.rotationDelta : (e.rotate || 0);
+    return kind !== "existing" || !!e.source || src !== i || (rot % 360) !== 0 || !!e.crop;
+  });
+}
+
+// Nút Lưu (Page) chỉ bật khi plan thật sự khác trạng thái gốc của file đang
+// mở — mở xong / lưu xong / undo về gốc → tắt (Ctrl+S báo "không có gì để lưu").
+function updateOrgSaveState() {
+  const btn = $("orgSave");
+  if (btn) btn.disabled = !state.pagePlan.length || !planIsDirty();
 }
 
 // Trả về đường dẫn file nên dùng làm "input" cho Watermark/Header-Footer:
@@ -1712,9 +1725,53 @@ function orgThumbKey(entry) {
 // Dựng lại toàn bộ lưới (chỉ gọi khi CẤU TRÚC plan đổi: chèn/xoá/đảo). Thumbnail
 // lấy từ cache nếu có; chỉ render trang chưa từng render → click chọn/xoay không
 // còn kéo theo render lại toàn bộ.
+// Thumbnail lưới nạp LƯỜI: chỉ render card gần khung nhìn (IntersectionObserver
+// gốc là #organizeGrid) — file 1000 trang không còn bắn cả nghìn render_page
+// một lúc. Cache vẫn theo "source#srcIndex"; request đang chạy được dùng chung.
+let orgThumbObserver = null;
+let orgThumbPending = new Map(); // key → Promise<dataURL> (của đúng cache hiện tại)
+let orgThumbPendingCache = null;
+function disconnectOrgThumbObserver() {
+  if (orgThumbObserver) { orgThumbObserver.disconnect(); orgThumbObserver = null; }
+}
+function loadOrgThumb(img) {
+  const key = img.dataset.thumbKey;
+  if (key == null || img.dataset.thumbLoaded) return;
+  img.dataset.thumbLoaded = "1";
+  const cache = state.orgThumbs;
+  const cached = cache.get(key);
+  if (cached) { img.src = cached; return; }
+  if (orgThumbPendingCache !== cache) { orgThumbPending = new Map(); orgThumbPendingCache = cache; }
+  let pr = orgThumbPending.get(key);
+  if (!pr) {
+    pr = invoke("render_page", { path: img.dataset.thumbPath, page: Number(img.dataset.thumbPage), width: 160 })
+      .then((url) => { cache.set(key, url); return url; })
+      .finally(() => { if (orgThumbPendingCache === cache) orgThumbPending.delete(key); });
+    orgThumbPending.set(key, pr);
+  }
+  pr.then((url) => { img.src = url; }).catch(() => { delete img.dataset.thumbLoaded; });
+}
+
 function buildOrganizeGrid() {
   const box = $("organizeGrid");
+  disconnectOrgThumbObserver();
+  // Plan tạm {page, rotate} (organize_identity_plan chưa về) → chuẩn hoá sang
+  // dạng đầy đủ để thumbnail/lưu dùng được ngay.
+  state.pagePlan = state.pagePlan.map((e) => (e && !e.kind && e.page != null)
+    ? { kind: "existing", source: null, srcIndex: e.page, rotationDelta: e.rotate || 0, crop: null }
+    : e);
   box.innerHTML = "";
+  const observer = typeof IntersectionObserver === "function"
+    ? new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        observer.unobserve(en.target);
+        const im = en.target.querySelector("img");
+        if (im) loadOrgThumb(im);
+      }
+    }, { root: box, rootMargin: "600px 0px" })
+    : null;
+  orgThumbObserver = observer;
   state.pagePlan.forEach((entry, i) => {
     const dims = (!entry.source && state.pages[entry.srcIndex])
       ? state.pages[entry.srcIndex]
@@ -1735,16 +1792,11 @@ function buildOrganizeGrid() {
     if (img) {
       const rot = entry.rotationDelta || 0;
       if (rot) img.style.transform = `rotate(${rot}deg)`;
-      const key = orgThumbKey(entry);
-      const cached = state.orgThumbs.get(key);
-      if (cached) {
-        img.src = cached;
-      } else {
-        const path = entry.source || state.path;
-        invoke("render_page", { path, page: entry.srcIndex, width: 160 })
-          .then((url) => { state.orgThumbs.set(key, url); img.src = url; })
-          .catch(() => {});
-      }
+      img.dataset.thumbKey = orgThumbKey(entry);
+      img.dataset.thumbPath = entry.source || state.path;
+      img.dataset.thumbPage = String(entry.srcIndex);
+      if (state.orgThumbs.has(img.dataset.thumbKey) || !observer) loadOrgThumb(img);
+      else observer.observe(card);
     }
     card.addEventListener("click", (e) => orgSelectCard(i, e));
     card.addEventListener("dragstart", (e) => e.dataTransfer.setData("text/plain", String(i)));
@@ -1758,7 +1810,7 @@ function buildOrganizeGrid() {
     });
     box.appendChild(card);
   });
-  $("orgSave").disabled = state.pagePlan.length === 0;
+  updateOrgSaveState();
 }
 
 function orgDeleteSelected() {
@@ -1783,6 +1835,7 @@ function orgRotateSelected(delta) {
     const img = cards[i] && cards[i].querySelector("img");
     if (img) img.style.transform = entry.rotationDelta ? `rotate(${entry.rotationDelta}deg)` : "";
   }
+  updateOrgSaveState();
 }
 
 async function orgSaveChanges() {
@@ -1791,6 +1844,7 @@ async function orgSaveChanges() {
   try {
     await invoke("organize_apply", { mainInput: state.path, plan: state.pagePlan, output: out, password: null });
     $("status").textContent = t("org.savedTo", { name: shortName(out) });
+    $("orgSave").disabled = true; // đã lưu — plan của file mới là trạng thái gốc
     exitOrganizeMode();
     loadDocument(out);
   } catch (e) {
@@ -2024,7 +2078,8 @@ function openSplitDialog() {
     const outDir = await invoke("pick_dir");
     if (!outDir) return;
     try {
-      const base = shortName(state.path).replace(/\.pdf$/i, "");
+      // Tên gốc người dùng mở (không phải file tạm ff_repaired_*.pdf sau khi sửa lỗi).
+      const base = shortName(state.origPath || state.path).replace(/(\.pdf)+$/i, "");
       const outs = await invoke("organize_split", {
         input: state.path, pagesPerFile: n, outDir, baseName: base, password: null,
       });
@@ -2170,7 +2225,7 @@ async function openHeaderFooterDialog() {
       fontSize: Number(box.querySelector("#hfSize").value) || 10,
       color: [r, g, b, 255],
       marginPt: Number(box.querySelector("#hfMargin").value) || 20,
-      date: new Date().toLocaleDateString("vi-VN"),
+      date: new Date().toLocaleDateString(I18N.lang === "vi" ? "vi-VN" : "en-US"),
       pages: box.querySelector("#hfPages").value.trim()
         ? parsePageRange(box.querySelector("#hfPages").value.trim(), base.pageCount)
         : [],
@@ -2256,6 +2311,7 @@ function openCropDialog(pageIdx, rectPdf) {
     closeModal();
     setTool(null);
     drawAnnotsForPage(pageIdx);
+    updateOrgSaveState();
     $("status").textContent = window.t("orgx.cropDone");
   });
 }
@@ -2383,7 +2439,8 @@ async function loadEditPage() {
     buildEditOverlay();
     $("pageInput").value = state.editPage + 1;
     updateZoomLabel();
-    $("editHint").textContent = t("edit.pageInfo", { page: state.editPage + 1, count: objs.length });
+    // Đang "armed" (Thêm chữ/ảnh) → giữ gợi ý "bấm lên trang để đặt", không ghi đè.
+    $("editHint").textContent = editArmedHint() || t("edit.pageInfo", { page: state.editPage + 1, count: objs.length });
   } catch (e) {
     $("editHint").textContent = t("edit.errLoadPage", { e });
   }
@@ -2526,6 +2583,13 @@ function refreshEditSelection() {
 
 // Chọn 1 khung. `runIndices`: mọi run thuộc khung (dòng text = nhiều run) —
 // thao tác xoá/kéo/đổi thuộc tính áp cho TẤT CẢ.
+// Gợi ý của công cụ đang "armed" (null nếu không armed).
+function editArmedHint() {
+  if (state.editArm === "image") return t("edit.clickToPlaceImage");
+  if (state.editArm === "text") return t("ev.addTextHint");
+  return null;
+}
+
 function selectEditObject(index, runIndices) {
   state.editSel = index != null && index >= 0 ? index : null;
   state.editSelRuns = state.editSel != null ? (runIndices || [state.editSel]) : [];
@@ -2550,7 +2614,7 @@ function selectEditObject(index, runIndices) {
     $("edBold").classList.toggle("on", !!o.fontBold);
     $("edItalic").classList.toggle("on", !!o.fontItalic);
     const emb = o.fontEmbedded == null ? "" : o.fontEmbedded ? " · " + t("edit.fontEmbedded") : " · " + t("edit.fontSystem");
-    $("editHint").textContent =
+    $("editHint").textContent = editArmedHint() ||
       `${o.fontFamily || o.fontName || "?"} · ${Math.round(o.fontSize || 0)}pt${emb}`;
   } else {
     $("edFontFamily").options[0].textContent = t("edit.fontKeep");
@@ -3656,7 +3720,7 @@ async function armAddImage() {
   state.editArm = "image";
   $("edAddImage").classList.add("armed");
   $("editOverlay").classList.add("armed");
-  $("editHint").textContent = t("edit.clickToPlaceImage");
+  $("editHint").textContent = editArmedHint();
 }
 
 async function replaceSelectedImage() {
