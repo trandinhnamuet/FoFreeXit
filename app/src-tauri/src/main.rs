@@ -12,6 +12,7 @@ mod cmd_bookmarks;
 mod cmd_compare;
 mod cmd_pagex;
 mod cmd_docsec;
+mod cmd_editx;
 
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
@@ -535,6 +536,9 @@ struct ObjectInfoDto {
     font_embedded: Option<bool>,
     font_size: Option<f32>,
     color: Option<[u8; 4]>,
+    /// Viền/nền/độ mờ/góc xoay/kích thước ảnh (panel Format — cmd_editx).
+    #[serde(flatten)]
+    extra: cmd_editx::ObjExtraDto,
 }
 
 /// Liệt kê page object của 1 trang để UI vẽ overlay chỉnh sửa.
@@ -546,6 +550,7 @@ fn edit_list_objects(path: String, page: u16, password: Option<String>) -> Resul
     Ok(objs
         .into_iter()
         .map(|o| ObjectInfoDto {
+            extra: cmd_editx::obj_extra(&o), // đứng ĐẦU: mượn `o` trước khi các field bị move
             index: o.index,
             kind: o.kind.as_str().to_string(),
             rect: RectDto { left: o.rect.left, bottom: o.rect.bottom, right: o.rect.right, top: o.rect.top },
@@ -700,6 +705,9 @@ struct EditOpDto {
     /// mang style). None/thiếu = khối 1 style.
     #[serde(default)]
     rich_lines: Option<Vec<Vec<RichSegDto>>>,
+    /// Field của op object mới (rotate/flip/cropImage/addShape/arrange...).
+    #[serde(flatten)]
+    extra: cmd_editx::EditExtraDto,
 }
 
 /// 1 đoạn cùng style trong reflow nhiều-style. `bold`/`italic`: override
@@ -769,7 +777,7 @@ fn edit_op_from_dto(d: EditOpDto) -> Result<ff_engine::EditOp, String> {
             height_pt: d.height_pt,
             image_path: d.image_path,
         },
-        other => return Err(format!("op sửa nội dung không hỗ trợ: {other}")),
+        other => return cmd_editx::edit_op_extra(other, d.index, d.indices, &d.extra),
     })
 }
 
@@ -1435,6 +1443,7 @@ fn main() {
             edit_preview,
             edit_cleanup,
             edit_flatten_to_temp,
+            cmd_editx::editx_extract_image,
             redact_apply,
             security_encrypt,
             security_decrypt,

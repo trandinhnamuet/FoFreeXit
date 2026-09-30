@@ -11,6 +11,7 @@ pub mod compare;
 pub mod compare_report;
 pub mod convert;
 pub mod edit;
+pub mod editobj;
 mod cffwrap;
 mod fontfix;
 mod formsurgery;
@@ -54,7 +55,10 @@ pub use compare::{
     CompareResult, CompareSummary, PagePair, RawImage, COMPARE_CANCELLED,
 };
 pub use compare_report::{export_compare_report, ReportInfo, ReportLabels, ReportStats};
-pub use edit::{apply_edits, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
+pub use edit::{apply_edits, extract_image, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
+// ShapeKind/ShapeSpec của editobj (hình vẽ trong nội dung trang) trùng tên với
+// annot_ext (chú thích) → re-export với tiền tố Edit.
+pub use editobj::{ArrangeMode, PathStyle, ShapeKind as EditShapeKind, ShapeSpec as EditShapeSpec};
 pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};
 pub use organize::{
     build_document, delete_pages, extract_pages, identity_plan, merge_files, rotate_pages,
