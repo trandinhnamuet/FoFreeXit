@@ -63,6 +63,83 @@ function displaySize(p) {
   };
 }
 
+// ---------- Toạ độ trang: không gian PDF (CHƯA xoay) <-> khung hiển thị ----------
+// Char box / kết quả tìm / annotation / redaction đều ở không gian người dùng
+// PDF CHƯA xoay; ảnh render (widthPt×heightPt) đã áp /Rotate và chỉ phủ hộp
+// trang hiển thị (CropBox ∩ MediaBox, gốc có thể khác 0 hoặc âm). "View" =
+// điểm (pt) tính từ góc TRÊN-trái trang đang hiển thị; px màn hình = pt × scale.
+// Backend cũ không trả rotation/box* → dự phòng: xoay 0, hộp (0,0,widthPt,heightPt)
+// — y hệt công thức cũ `x`, `heightPt − y`.
+function pageGeom(p) {
+  const r = (((Number(p.rotation) || 0) % 360) + 360) % 360;
+  const rot = r === 90 || r === 180 || r === 270 ? r : 0;
+  if (Number.isFinite(p.boxWidth) && Number.isFinite(p.boxHeight) && p.boxWidth > 0 && p.boxHeight > 0) {
+    return { rot, L: Number(p.boxLeft) || 0, B: Number(p.boxBottom) || 0, BW: p.boxWidth, BH: p.boxHeight };
+  }
+  // Không có hộp: gốc (0,0), kích thước CHƯA xoay suy từ khung hiển thị.
+  return rot === 90 || rot === 270
+    ? { rot, L: 0, B: 0, BW: p.heightPt, BH: p.widthPt }
+    : { rot, L: 0, B: 0, BW: p.widthPt, BH: p.heightPt };
+}
+
+// Điểm PDF (ux,uy) → điểm view {x,y} (pt từ góc trên-trái trang hiển thị).
+function pdfToView(p, ux, uy) {
+  const g = pageGeom(p);
+  switch (g.rot) {
+    case 90: return { x: uy - g.B, y: ux - g.L };
+    case 180: return { x: g.BW - (ux - g.L), y: uy - g.B };
+    case 270: return { x: g.BH - (uy - g.B), y: g.BW - (ux - g.L) };
+    default: return { x: ux - g.L, y: g.BH - (uy - g.B) };
+  }
+}
+
+// Điểm view {x,y} (pt từ góc trên-trái) → điểm PDF {ux,uy} chưa xoay.
+function viewToPdf(p, x, y) {
+  const g = pageGeom(p);
+  switch (g.rot) {
+    case 90: return { ux: g.L + y, uy: g.B + x };
+    case 180: return { ux: g.L + g.BW - x, uy: g.B + y };
+    case 270: return { ux: g.L + g.BW - y, uy: g.B + g.BH - x };
+    default: return { ux: g.L + x, uy: g.B + g.BH - y };
+  }
+}
+
+// Rect PDF {left,bottom,right,top} → rect view {x,y,w,h} (pt). Xoay 90/270 thì
+// rộng/cao đổi chỗ; w/h lấy thẳng từ kích thước rect (xoay 0 khớp đúng công thức cũ).
+function pdfRectToView(p, r) {
+  const a = pdfToView(p, r.left, r.top);
+  const b = pdfToView(p, r.right, r.bottom);
+  const swap = pageGeom(p).rot % 180 === 90;
+  return {
+    x: Math.min(a.x, b.x),
+    y: Math.min(a.y, b.y),
+    w: swap ? r.top - r.bottom : r.right - r.left,
+    h: swap ? r.right - r.left : r.top - r.bottom,
+  };
+}
+
+// Hai góc view (pt) → rect PDF {left,bottom,right,top} (min/max sau biến đổi).
+function viewRectToPdf(p, x0, y0, x1, y1) {
+  const a = viewToPdf(p, x0, y0);
+  const b = viewToPdf(p, x1, y1);
+  return {
+    left: Math.min(a.ux, b.ux),
+    right: Math.max(a.ux, b.ux),
+    bottom: Math.min(a.uy, b.uy),
+    top: Math.max(a.uy, b.uy),
+  };
+}
+
+// Độ dời view (dx,dy pt; y xuống) → độ dời PDF {dx,dy} (y lên) — kéo di chuyển.
+function viewDeltaToPdf(p, dx, dy) {
+  switch (pageGeom(p).rot) {
+    case 90: return { dx: dy, dy: dx };
+    case 180: return { dx: -dx, dy: dy };
+    case 270: return { dx: -dy, dy: -dx };
+    default: return { dx: dx, dy: -dy };
+  }
+}
+
 // ---------- Khởi tạo ----------
 
 function shortName(path) {
@@ -396,20 +473,33 @@ async function buildTextLayer(idx) {
   }
   const p = state.pages[idx];
   const scale = PT_PER_PX * state.zoom;
+  const rot = pageGeom(p).rot;
   layer.innerHTML = "";
   const frag = document.createDocumentFragment();
 
   // Gom ký tự thành "từ" (mỗi từ = 1 span) để double-click chọn cả từ,
   // kéo/Shift+Click chọn dải, và copy giữ khoảng trắng (chèn text node " ").
+  // Gom trong không gian PDF CHƯA xoay (dòng chữ nằm ngang ở đó kể cả khi
+  // trang có /Rotate); span dựng theo khung chưa xoay rồi xoay theo trang.
   let word = null;
   const flush = () => {
     if (word && word.text) {
       const w = (word.right - word.left) * scale;
       const h = (word.top - word.bottom) * scale;
+      const v = pdfRectToView(p, word);
       const span = document.createElement("span");
       span.textContent = word.text;
-      span.style.left = word.left * scale + "px";
-      span.style.top = (p.heightPt - word.top) * scale + "px";
+      if (rot === 0) {
+        span.style.left = v.x * scale + "px";
+        span.style.top = v.y * scale + "px";
+      } else {
+        // transform-origin 0 0 (CSS): chọn góc neo sao cho khung sau khi
+        // xoay (chiều kim đồng hồ, như /Rotate) phủ đúng rect view của từ.
+        const X = v.x * scale, Y = v.y * scale, VW = v.w * scale, VH = v.h * scale;
+        span.style.left = (rot === 270 ? X : X + VW) + "px";
+        span.style.top = (rot === 90 ? Y : Y + VH) + "px";
+        span.style.transform = `rotate(${rot}deg)`;
+      }
       span.style.width = Math.max(w, 1) + "px";
       span.style.height = h + "px";
       span.style.fontSize = h * 0.82 + "px";
@@ -923,13 +1013,13 @@ function drawHighlightsForPage(pageIdx) {
   const scale = PT_PER_PX * state.zoom;
   state.hits.forEach((h, i) => {
     if (h.pageIndex !== pageIdx || !h.rect) return;
-    const r = h.rect;
+    const v = pdfRectToView(p, h.rect);
     const div = document.createElement("div");
     div.className = "hl" + (i === state.hitIdx ? " current" : "");
-    div.style.left = r.left * scale + "px";
-    div.style.top = (p.heightPt - r.top) * scale + "px";
-    div.style.width = (r.right - r.left) * scale + "px";
-    div.style.height = (r.top - r.bottom) * scale + "px";
+    div.style.left = v.x * scale + "px";
+    div.style.top = v.y * scale + "px";
+    div.style.width = v.w * scale + "px";
+    div.style.height = v.h * scale + "px";
     ov.appendChild(div);
   });
 }
@@ -1055,17 +1145,34 @@ function drawAnnotsForPage(idx) {
       // Mỗi quad (= 1 dòng text đã chọn) vẽ riêng — không phải 1 khối phủ cả
       // khoảng trắng giữa các dòng (đúng như Foxit).
       const quads = s.quads && s.quads.length ? s.quads : [{ left: s.left, bottom: s.bottom, right: s.right, top: s.top }];
+      const rot = pageGeom(p).rot;
       quads.forEach((q, qi) => {
-        const left = q.left * scale;
-        const top = (p.heightPt - q.top) * scale;
-        const w = (q.right - q.left) * scale;
-        const h = (q.top - q.bottom) * scale;
+        const qv = pdfRectToView(p, q);
+        const left = qv.x * scale;
+        const top = qv.y * scale;
+        const w = qv.w * scale;
+        const h = qv.h * scale;
         const el = document.createElement("div");
         el.dataset.id = s.id;
         if (s.kind === "highlight") {
           el.className = "a-hl a-sel";
           el.style.background = `rgba(${s.color[0]},${s.color[1]},${s.color[2]},.4)`;
           Object.assign(el.style, { left: left + "px", top: top + "px", width: w + "px", height: h + "px" });
+        } else if (rot !== 0) {
+          // Trang xoay: gạch chân (đáy glyph) / gạch ngang (giữa glyph) lấy theo
+          // không gian PDF rồi chiếu sang view — 90/270 thành vạch DỌC.
+          el.className = "a-line a-sel";
+          const uy = s.kind === "underline" ? q.bottom : (q.bottom + q.top) / 2;
+          const pt = pdfToView(p, (q.left + q.right) / 2, uy);
+          if (rot === 180) {
+            el.style.borderTopColor = col;
+            Object.assign(el.style, { left: left + "px", top: pt.y * scale + "px", width: w + "px", height: "4px" });
+          } else {
+            Object.assign(el.style, {
+              left: pt.x * scale - 1 + "px", top: top + "px", width: "4px", height: h + "px",
+              minHeight: "0", borderTop: "0", borderLeft: `2px solid ${col}`,
+            });
+          }
         } else if (s.kind === "underline") {
           el.className = "a-line a-sel";
           el.style.borderTopColor = col;
@@ -1092,10 +1199,11 @@ function drawAnnotsForPage(idx) {
       continue;
     }
 
-    const left = s.left * scale;
-    const top = (p.heightPt - s.top) * scale;
-    const w = (s.right - s.left) * scale;
-    const h = (s.top - s.bottom) * scale;
+    const sv = pdfRectToView(p, s);
+    const left = sv.x * scale;
+    const top = sv.y * scale;
+    const w = sv.w * scale;
+    const h = sv.h * scale;
     const el = document.createElement("div");
     el.dataset.id = s.id;
     if (s.kind === "square") {
@@ -1140,11 +1248,12 @@ function drawAnnotsForPage(idx) {
     if (m.page !== idx) continue;
     const el = document.createElement("div");
     el.className = "redact-mark";
+    const mv = pdfRectToView(p, m.rect);
     Object.assign(el.style, {
-      left: m.rect.left * scale + "px",
-      top: (p.heightPt - m.rect.top) * scale + "px",
-      width: (m.rect.right - m.rect.left) * scale + "px",
-      height: (m.rect.top - m.rect.bottom) * scale + "px",
+      left: mv.x * scale + "px",
+      top: mv.y * scale + "px",
+      width: mv.w * scale + "px",
+      height: mv.h * scale + "px",
     });
     el.title = t("viewer.redactMarkTip");
     el.addEventListener("click", (ev) => {
@@ -1187,10 +1296,13 @@ function deleteSpec(id) {
   buildComments();
 }
 
+// Điểm CSS px (từ góc trên-trái slot trang) → điểm PDF chưa xoay {x,y}.
+// features/annot.js cũng dùng hàm này.
 function cssToPdf(idx, cssX, cssY) {
   const p = state.pages[idx];
   const scale = PT_PER_PX * state.zoom;
-  return { x: cssX / scale, y: p.heightPt - cssY / scale };
+  const u = viewToPdf(p, cssX / scale, cssY / scale);
+  return { x: u.ux, y: u.uy };
 }
 
 // ===== Sửa Text box tại chỗ (in-place) + thanh Format =====
@@ -1211,10 +1323,11 @@ function editTextBox(spec, fresh) {
   const slot = state.slots[spec.pageIndex];
   const layer = slot.querySelector(".annotlayer");
   const scale = PT_PER_PX * state.zoom;
-  const left = spec.left * scale;
-  const top = (state.pages[spec.pageIndex].heightPt - spec.top) * scale;
-  const w = Math.max((spec.right - spec.left) * scale, 60);
-  const h = Math.max((spec.top - spec.bottom) * scale, 20);
+  const sv = pdfRectToView(state.pages[spec.pageIndex], spec);
+  const left = sv.x * scale;
+  const top = sv.y * scale;
+  const w = Math.max(sv.w * scale, 60);
+  const h = Math.max(sv.h * scale, 20);
 
   const ed = document.createElement("div");
   ed.className = "a-editor";
@@ -1255,8 +1368,15 @@ function finishEditing() {
     spec.contents = ed.innerText.trim();
     // mở rộng rect theo chiều cao thực tế của editor
     const scale = PT_PER_PX * state.zoom;
-    const realH = ed.offsetHeight / scale;
-    spec.bottom = spec.top - Math.max(realH, 14);
+    const realH = Math.max(ed.offsetHeight / scale, 14);
+    const pm = state.pages[spec.pageIndex];
+    if (pageGeom(pm).rot === 0) {
+      spec.bottom = spec.top - realH;
+    } else {
+      // Trang xoay: nở theo chiều cao VIEW (mép trên view đứng yên) rồi đổi ngược.
+      const sv = pdfRectToView(pm, spec);
+      Object.assign(spec, viewRectToPdf(pm, sv.x, sv.y, sv.x + sv.w, sv.y + realH));
+    }
     // Sửa text box có sẵn: chỉ ghi undo khi nội dung/định dạng thực sự đổi —
     // snapshot hiện tại với text box được trả về giá trị trước khi sửa.
     if (!ctx.fresh && ctx.origKey !== textBoxKey(spec)) {
@@ -1559,16 +1679,21 @@ function createMarkupFromSelection() {
   const rawRects = Array.from(range.getClientRects()).filter((r) => r.width > 0.5 && r.height > 0.5);
   sel.removeAllRanges();
   if (!rawRects.length) return;
-  const clientRects = mergeRectsIntoLines(rawRects);
 
-  const quads = clientRects.map((r) => {
+  // Đổi từng rect (1/từ) sang PDF chưa xoay TRƯỚC rồi mới gộp dòng: trên trang
+  // xoay 90/270 dòng chữ chạy dọc trên màn hình nhưng vẫn nằm ngang trong
+  // không gian PDF. Lật dấu y để mergeRectsIntoLines (quy ước top < bottom) dùng lại được.
+  const pdfRects = rawRects.map((r) => {
     const a = cssToPdf(idx, r.left - slotRect.left, r.top - slotRect.top);
     const b = cssToPdf(idx, r.right - slotRect.left, r.bottom - slotRect.top);
     return {
       left: Math.min(a.x, b.x), right: Math.max(a.x, b.x),
-      bottom: Math.min(a.y, b.y), top: Math.max(a.y, b.y),
+      top: -Math.max(a.y, b.y), bottom: -Math.min(a.y, b.y),
     };
   });
+  const quads = mergeRectsIntoLines(pdfRects).map((l) => ({
+    left: l.left, right: l.right, bottom: -l.bottom, top: -l.top,
+  }));
   const bounds = quads.reduce(
     (acc, q) => acc ? {
       left: Math.min(acc.left, q.left), right: Math.max(acc.right, q.right),
@@ -1611,17 +1736,15 @@ function onPagesMouseUp() {
   const prev = slot.querySelector(".a-preview");
   if (prev) prev.remove();
 
-  const a = cssToPdf(d.idx, d.x0, d.y0);
-  const b = cssToPdf(d.idx, d.x1, d.y1);
-  const rect = {
-    left: Math.min(a.x, b.x),
-    right: Math.max(a.x, b.x),
-    bottom: Math.min(a.y, b.y),
-    top: Math.max(a.y, b.y),
-  };
+  // Khung kéo theo view (pt từ góc trên-trái trang hiển thị); Note/Text box
+  // chỉnh kích thước mặc định trong view rồi mới đổi sang PDF chưa xoay.
   const tool = state.tool;
   const scale = PT_PER_PX * state.zoom;
-  const tiny = rect.right - rect.left < 2 || rect.top - rect.bottom < 2;
+  const pg = state.pages[d.idx];
+  const vx0 = Math.min(d.x0, d.x1) / scale, vx1 = Math.max(d.x0, d.x1) / scale;
+  const vy0 = Math.min(d.y0, d.y1) / scale, vy1 = Math.max(d.y0, d.y1) / scale;
+  const tiny = vx1 - vx0 < 2 || vy1 - vy0 < 2;
+  let rect = viewRectToPdf(pg, vx0, vy0, vx1, vy1);
 
   if (tool === "crop") {
     if (tiny) return;
@@ -1636,13 +1759,13 @@ function onPagesMouseUp() {
     return; // giữ tool để quét tiếp nhiều vùng (như Foxit Mark for Redaction)
   }
   if (tool === "note") {
+    // Biểu tượng 18px neo góc trên-trái điểm bấm.
     const sz = 18 / scale;
-    rect.right = rect.left + sz;
-    rect.bottom = rect.top - sz;
+    rect = viewRectToPdf(pg, vx0, vy0, vx0 + sz, vy0 + sz);
   } else if (tool === "freetext") {
     if (tiny) {
-      rect.right = rect.left + 160 / scale;
-      rect.top = rect.bottom + 24 / scale;
+      // Khung mặc định 160×24px, neo góc dưới-trái (như trước).
+      rect = viewRectToPdf(pg, vx0, vy1 - 24 / scale, vx0 + 160 / scale, vy1);
     }
   } else if (tiny) {
     return;
@@ -2460,11 +2583,14 @@ async function openHeaderFooterDialog() {
 // của file đang mở, bất kể pagePlan đã bị đảo/chèn/xoá hay chưa.
 function openCropDialog(pageIdx, rectPdf) {
   const p = state.pages[pageIdx];
+  // Lề Trái/Phải/Trên/Dưới tính theo trang ĐANG HIỂN THỊ (đã xoay/crop);
+  // crop box ghi xuống engine ở không gian PDF chưa xoay (viewRectToPdf).
+  const mv = pdfRectToView(p, rectPdf);
   const m = {
-    left: rectPdf.left,
-    bottom: rectPdf.bottom,
-    right: p.widthPt - rectPdf.right,
-    top: p.heightPt - rectPdf.top,
+    left: mv.x,
+    bottom: p.heightPt - (mv.y + mv.h),
+    right: p.widthPt - (mv.x + mv.w),
+    top: mv.y,
   };
   const box = openModal(t("orgx.cropTitle"), `
     <div class="row">
@@ -2497,7 +2623,7 @@ function openCropDialog(pageIdx, rectPdf) {
       const isThis = !entry.source && entry.srcIndex === pageIdx;
       if (scope === "all" || isThis) {
         const dims = (!entry.source && state.pages[entry.srcIndex]) ? state.pages[entry.srcIndex] : p;
-        entry.crop = { left: l, bottom: b, right: dims.widthPt - r, top: dims.heightPt - t };
+        entry.crop = viewRectToPdf(dims, l, t, dims.widthPt - r, dims.heightPt - b);
       }
     }
     closeModal();
@@ -2653,9 +2779,10 @@ async function loadEditPage() {
       if (img.decode) { try { await img.decode(); } catch (_) {} }
       // Toạ độ chuột giả lập từ điểm PDF đã đúp → con trỏ đặt đúng chỗ đó.
       const ir = img.getBoundingClientRect();
+      const v = pdfToView(p, pending.x, pending.y);
       startTextEdit(o, {
-        clientX: ir.left + pending.x * state.editScale,
-        clientY: ir.top + (p.heightPt - pending.y) * state.editScale,
+        clientX: ir.left + v.x * state.editScale,
+        clientY: ir.top + v.y * state.editScale,
       });
     }
   }
@@ -2690,12 +2817,12 @@ function pickTextAt(objs, x, y) {
 
 function editBoxStyle(rect) {
   const s = state.editScale;
-  const p = state.pages[state.editPage];
+  const v = pdfRectToView(state.pages[state.editPage], rect);
   return {
-    left: rect.left * s + "px",
-    top: (p.heightPt - rect.top) * s + "px",
-    width: Math.max(2, (rect.right - rect.left) * s) + "px",
-    height: Math.max(2, (rect.top - rect.bottom) * s) + "px",
+    left: v.x * s + "px",
+    top: v.y * s + "px",
+    width: Math.max(2, v.w * s) + "px",
+    height: Math.max(2, v.h * s) + "px",
   };
 }
 
@@ -3295,16 +3422,21 @@ function startBlockTextEdit(o, lines, ev) {
 
   // Khung: khối căn giữa nở đều 2 phía (tâm giữ nguyên → chữ không xê dịch);
   // khối thường giữ mép trái, nở sang phải — khớp giới hạn nở 35% của engine.
+  // Giới hạn nở = mép hộp trang (PDF chưa xoay; trang crop có gốc ≠ 0).
+  // Ô sửa WYSIWYG giả định chữ nằm ngang: trang crop đặt đúng chỗ; trang xoay
+  // 90/180/270 ô chỉ neo tại góc (left, top) PDF của khối, không xoay theo trang.
+  const pgBox = pageGeom(p);
+  const boxL = pgBox.L, boxR = pgBox.L + pgBox.BW;
   let leftPt;
   let widthPt;
   if (centered) {
-    const grow = Math.min(bw * 0.175, bc - 8 - bw / 2, p.widthPt - 8 - bc - bw / 2);
+    const grow = Math.min(bw * 0.175, bc - boxL - 8 - bw / 2, boxR - 8 - bc - bw / 2);
     const g = Math.max(0, grow);
     leftPt = union.left - g;
     widthPt = bw + 2 * g;
   } else {
     leftPt = union.left;
-    widthPt = Math.min(bw * 1.35, p.widthPt - union.left - 8);
+    widthPt = Math.min(bw * 1.35, boxR - union.left - 8);
   }
   // Advance TỪNG DÒNG = khoảng cách baseline dòng này → dòng dưới (xấp xỉ
   // bằng hiệu mép DƯỚI 2 bbox — bbox PDF ôm sát glyph nên bottom bám baseline).
@@ -3323,10 +3455,11 @@ function startBlockTextEdit(o, lines, ev) {
   // Bù lệch dọc: line-box của trình duyệt căn giữa glyph trong line-height,
   // còn bbox PDF ôm sát glyph → đẩy khung lên (line-height − cỡ chữ)/2 cho trùng.
   const fs0 = (lines[0].fs || o.fontSize || 12) * s;
-  const topPx = Math.max(0, (p.heightPt - union.top) * s - Math.max(0, (perLineAdvances[0] - fs0) / 2));
+  const anchor = pdfToView(p, leftPt, union.top);
+  const topPx = Math.max(0, anchor.y * s - Math.max(0, (perLineAdvances[0] - fs0) / 2));
 
   Object.assign(ce.style, {
-    left: leftPt * s + "px",
+    left: anchor.x * s + "px",
     top: topPx + "px",
     width: widthPt * s + "px",
     minHeight: totalHeightPx + 4 + "px",
@@ -3614,7 +3747,9 @@ function fitEditLinesToPdf(ce, lines, s, page) {
     if (Math.abs(ls) > 0.05) sp.style.letterSpacing = ls.toFixed(2) + "px";
   });
 
-  // (2) Vị trí từng dòng (đo lại sau khi đã chỉnh cỡ).
+  // (2) Vị trí từng dòng (đo lại sau khi đã chỉnh cỡ). Trang xoay 90/180/270:
+  // ô sửa không xoay theo chữ gốc → bỏ bước căn trùng từng dòng.
+  if (pageGeom(page).rot !== 0) return;
   const imgR = img.getBoundingClientRect();
   for (let i = 0; i < divs.length && i < lines.length; i++) {
     const r = firstTextRect(divs[i]);
@@ -3626,7 +3761,8 @@ function fitEditLinesToPdf(ce, lines, s, page) {
     const fontAscent = m.fontBoundingBoxAscent || f.fs * 0.8;
     const inkAscent = m.actualBoundingBoxAscent || fontAscent;
     const curInkTop = r.top + (fontAscent - inkAscent);
-    const dy = imgR.top + (page.heightPt - lines[i].rect.top) * s - curInkTop;
+    const lv = pdfToView(page, lines[i].rect.left, lines[i].rect.top);
+    const dy = imgR.top + lv.y * s - curInkTop;
     if (Math.abs(dy) > 0.5) {
       if (i === 0) ce.style.top = parseFloat(ce.style.top) + dy + "px";
       else divs[i].style.marginTop = (parseFloat(divs[i].style.marginTop) || 0) + dy + "px";
@@ -3634,7 +3770,7 @@ function fitEditLinesToPdf(ce, lines, s, page) {
     // Ngang: khối căn trái bù qua ce.left (dòng đầu) / text-indent (dòng sau);
     // khối căn giữa bù mọi dòng qua text-indent (indent cộng thêm vào offset
     // căn giữa nên vẫn dịch được từng dòng mà không phá cơ chế center).
-    const dx = imgR.left + lines[i].rect.left * s - r.left;
+    const dx = imgR.left + lv.x * s - r.left;
     if (Math.abs(dx) > 0.5) {
       if (!centered && i === 0) ce.style.left = parseFloat(ce.style.left) + dx + "px";
       else divs[i].style.textIndent = (parseFloat(divs[i].style.textIndent) || 0) + dx + "px";
@@ -3770,8 +3906,9 @@ function onEditStageClick(e) {
   const cssX = e.clientX - r.left;
   const cssY = e.clientY - r.top;
   const p = state.pages[state.editPage];
-  const pdfX = cssX / state.editScale;
-  const pdfY = p.heightPt - cssY / state.editScale;
+  const u = viewToPdf(p, cssX / state.editScale, cssY / state.editScale);
+  const pdfX = u.ux;
+  const pdfY = u.uy;
   if (state.editArm === "text") {
     state.editArm = null;
     $("edAddText").classList.remove("armed");
@@ -3798,8 +3935,9 @@ function promptAddText(pdfX, pdfY) {
   const p = state.pages[state.editPage];
   const family = $("edFontFamily").value || null; // null = font mặc định
   const size = Number($("edFontSize").value) || 16;
-  inp.style.left = pdfX * s + "px";
-  inp.style.top = (p.heightPt - pdfY) * s + "px";
+  const v = pdfToView(p, pdfX, pdfY);
+  inp.style.left = v.x * s + "px";
+  inp.style.top = v.y * s + "px";
   inp.style.minWidth = "120px";
   inp.style.fontSize = Math.max(10, size * s) + "px";
   inp.style.fontFamily = cssFontStack(family);
@@ -3863,8 +4001,9 @@ function onEditBoxMouseDown(e, o, runs) {
     window.removeEventListener("mouseup", onUp);
     box.classList.remove("dragging");
     if (!moved) return;
-    const dx = (ev.clientX - startX) / state.editScale;
-    const dy = -(ev.clientY - startY) / state.editScale; // CSS y xuống = PDF y giảm
+    // CSS y xuống = PDF y giảm; trang xoay thì trục view ↔ PDF đổi theo /Rotate.
+    const { dx, dy } = viewDeltaToPdf(state.pages[state.editPage],
+      (ev.clientX - startX) / state.editScale, (ev.clientY - startY) / state.editScale);
     stageEditOps(runIndices.map((i) => ({ op: "transform", index: i, dx, dy, sx: 1, sy: 1 })));
   };
   window.addEventListener("mousemove", onMove);
@@ -4736,9 +4875,8 @@ $("editOverlay").addEventListener("dblclick", (e) => {
   const img = $("editImg");
   const r = img.getBoundingClientRect();
   const p = state.pages[state.editPage];
-  const x = (e.clientX - r.left) / state.editScale;
-  const y = p.heightPt - (e.clientY - r.top) / state.editScale;
-  const hit = pickTextAt(state.editObjects, x, y);
+  const u = viewToPdf(p, (e.clientX - r.left) / state.editScale, (e.clientY - r.top) / state.editScale);
+  const hit = pickTextAt(state.editObjects, u.ux, u.uy);
   if (hit) startTextEdit(hit, e);
 });
 // Đúp vào trang READ-ONLY trong cột: trang đó thành active + mở ô sửa ngay
@@ -4751,10 +4889,8 @@ $("editPagesCol").addEventListener("dblclick", (e) => {
   const p = state.pages[idx];
   const r = slot.getBoundingClientRect();
   const sc = r.width / p.widthPt;
-  state.editPendingPoint = {
-    x: (e.clientX - r.left) / sc,
-    y: p.heightPt - (e.clientY - r.top) / sc,
-  };
+  const u = viewToPdf(p, (e.clientX - r.left) / sc, (e.clientY - r.top) / sc);
+  state.editPendingPoint = { x: u.ux, y: u.uy };
   switchEditPage(idx, "nearest");
 });
 // Cuộn trong chế độ sửa: ô chỉ số trang bám theo trang đang nhìn; khi không
