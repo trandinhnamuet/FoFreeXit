@@ -56,7 +56,9 @@ for (const k of viKeys) if (enKeys.has(k) && vars(dict.vi[k]) !== vars(dict.en[k
 // ---- 3. Mọi key được dùng đều tồn tại ----
 const lineOf = (text, idx) => text.slice(0, idx).split("\n").length;
 const used = []; // [key, where]
-const jsFiles = fs.readdirSync(SRC).filter((f) => f.endsWith(".js")).map((f) => path.join(SRC, f));
+const FEAT = path.join(SRC, "features");
+const featFiles = fs.existsSync(FEAT) ? fs.readdirSync(FEAT).filter((f) => f.endsWith(".js")).map((f) => path.join(FEAT, f)) : [];
+const jsFiles = [...fs.readdirSync(SRC).filter((f) => f.endsWith(".js")).map((f) => path.join(SRC, f)), ...featFiles];
 for (const file of jsFiles) {
   const src = read(file);
   for (const m of src.matchAll(/\bt\(\s*(["'`])([\w.-]+)\1/g)) used.push([m[2], `${rel(file)}:${lineOf(src, m.index)}`]);
@@ -78,7 +80,7 @@ for (const [k, where] of used) {
   if (!viKeys.has(k) && !enKeys.has(k)) errors.push(`key không tồn tại: ${k} — ${where}`);
 }
 
-// ---- 4. main.js không còn chuỗi tiếng Việt ngoài comment ----
+// ---- 4. main.js + features/*.js không còn chuỗi tiếng Việt ngoài comment ----
 const VI = /[àáảãạăằắẳẵặâầấẩẫậđèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]/i;
 const mainSrc = read(path.join(SRC, "main.js"));
 // Bỏ comment (// và /* */) nhưng giữ nguyên chuỗi và số dòng.

@@ -1595,6 +1595,21 @@ function closeModal() {
   $("modalBox").innerHTML = "";
 }
 
+/// Hộp xác nhận chuyên nghiệp thay cho confirm() của trình duyệt.
+/// Trả Promise<boolean>: true = người dùng bấm nút chính.
+function confirmModal(title, message, okLabel) {
+  return new Promise((resolve) => {
+    const box = openModal(escapeHtml(title), `
+      <p>${escapeHtml(message)}</p>
+      <div class="foot"><button id="cfmCancel">${t("common.cancel")}</button><button id="cfmOk" class="primary">${escapeHtml(okLabel || t("common.ok"))}</button></div>
+    `);
+    const done = (v) => { closeModal(); resolve(v); };
+    box.querySelector("#cfmCancel").addEventListener("click", () => done(false));
+    box.querySelector("#cfmOk").addEventListener("click", () => done(true));
+    setTimeout(() => box.querySelector("#cfmOk").focus(), 0);
+  });
+}
+
 /// Parse "1-3,5" (1-based, kiểu người dùng nhập) → mảng index 0-based hợp lệ.
 function parsePageRange(str, count) {
   const out = [];
