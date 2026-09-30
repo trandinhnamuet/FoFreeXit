@@ -22,6 +22,7 @@
       const on = b.dataset.tab === current;
       b.classList.toggle("on", on);
       b.setAttribute("aria-selected", on ? "true" : "false");
+      if (on) b.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
     document.querySelectorAll(".rpanel").forEach((p) => p.classList.toggle("on", p.dataset.tab === current));
   }
@@ -142,6 +143,7 @@
   // ---------- Menus (ngôn ngữ / theme; Files do shell-extras lo) ----------
   function closeMenus(except) {
     document.querySelectorAll(".menu:not(.submenu)").forEach((m) => { if (m !== except) m.classList.add("hidden"); });
+    document.querySelectorAll("#langBtn.active, #themeBtn.active").forEach((b) => b.classList.remove("active"));
     document.querySelectorAll(".files-btn.open").forEach((b) => { if (!except || except.id !== "filesMenu") b.classList.remove("open"); });
   }
   function openMenuAt(menu, anchor, alignRight) {
@@ -149,6 +151,7 @@
     closeMenus();
     if (!willOpen) return false;
     menu.classList.remove("hidden");
+    if (anchor.id === "langBtn" || anchor.id === "themeBtn") anchor.classList.add("active");
     const r = anchor.getBoundingClientRect();
     menu.style.top = r.bottom + 6 + "px";
     if (alignRight) { menu.style.left = ""; menu.style.right = Math.max(8, window.innerWidth - r.right) + "px"; }

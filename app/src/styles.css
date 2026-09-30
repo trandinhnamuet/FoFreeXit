@@ -5,6 +5,8 @@
   --accent-rgb: 37, 99, 235;
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
+  --accent-fill: #2563eb;
+  --accent-fill-hover: #1d4ed8;
   --accent-soft: rgba(var(--accent-rgb), .10);
   --accent-soft-2: rgba(var(--accent-rgb), .2);
   --on-accent: #fff;
@@ -45,6 +47,9 @@
   --accent-rgb: 79, 140, 255;
   --accent: #4f8cff;
   --accent-hover: #6ea0ff;
+  /* nền đặc có chữ trắng: đủ tương phản AA (4.5:1) trên theme tối */
+  --accent-fill: #2f6fed;
+  --accent-fill-hover: #2563eb;
   --accent-soft: rgba(var(--accent-rgb), .16);
   --accent-soft-2: rgba(var(--accent-rgb), .28);
   --on-accent: #fff;
@@ -142,11 +147,11 @@ body.frameless .tabrow { background: var(--titlebar); }
 }
 .files-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  background: var(--accent); color: var(--on-accent);
+  background: var(--accent-fill); color: var(--on-accent);
   height: 30px; padding: 0 14px 0 10px; border-radius: var(--radius);
   font-weight: 600; box-shadow: 0 1px 2px rgba(var(--accent-rgb), .35);
 }
-.files-btn:hover { background: var(--accent-hover); }
+.files-btn:hover { background: var(--accent-fill-hover); }
 .files-btn:active, .files-btn.open { background: var(--accent-hover); box-shadow: inset 0 1px 3px rgba(0,0,0,.2); }
 .files-btn svg.ic { width: 16px; height: 16px; }
 .qa { display: flex; gap: 2px; margin-left: 6px; }
@@ -163,8 +168,8 @@ body.frameless .tabrow { background: var(--titlebar); }
   height: 30px; padding: 0 15px; border-radius: 999px;
   font-size: 14px; color: var(--text); white-space: nowrap;
 }
-.tab-pill.on { background: var(--accent); color: var(--on-accent); font-weight: 600; box-shadow: 0 1px 3px rgba(var(--accent-rgb), .35); }
-.tab-pill.on:hover { background: var(--accent-hover); }
+.tab-pill.on { background: var(--accent-fill); color: var(--on-accent); font-weight: 600; box-shadow: 0 1px 3px rgba(var(--accent-rgb), .35); }
+.tab-pill.on:hover { background: var(--accent-fill-hover); }
 .tr-right { display: flex; gap: 2px; align-items: center; margin-left: 6px; }
 
 .searchpill {
@@ -204,7 +209,7 @@ body.frameless .tabrow { background: var(--titlebar); }
 }
 @media (max-width: 1480px) {
   .tab-pill { padding: 0 9px; }
-  .searchpill input[type="search"] { width: 80px; }
+  .searchpill input[type="search"] { width: 84px; }
   .searchpill .searchopt { display: none; }
   .tsep { margin: 0 4px; }
 }
@@ -237,7 +242,7 @@ body.frameless .tabrow { background: var(--titlebar); }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 5px;
   height: 66px;
-  min-width: 58px; max-width: 116px;
+  min-width: 58px; max-width: 156px;
   padding: 6px 8px 5px;
   border-radius: var(--radius);
   color: var(--text-2);
@@ -304,8 +309,8 @@ body.frameless .tabrow { background: var(--titlebar); }
 .sq:active:not(:disabled), .sq-wide:active:not(:disabled) { background: var(--press); }
 .sq:disabled, .sq-wide:disabled { opacity: .38; background: var(--input-bg); }
 .sq .it { font-family: Georgia, serif; font-style: italic; }
-.sq.on, .ed-style.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.sq.on:hover:not(:disabled), .ed-style.on:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--on-accent); }
+.sq.on, .ed-style.on { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-accent); }
+.sq.on:hover:not(:disabled), .ed-style.on:hover:not(:disabled) { background: var(--accent-fill-hover); border-color: var(--accent-fill-hover); color: var(--on-accent); }
 .sq-wide.active, .sq-wide.armed { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .rhint {
   align-self: center;
@@ -446,7 +451,7 @@ body.tool-active .annotlayer * { pointer-events: none; }
   border-radius: var(--radius-sm); cursor: pointer; font-weight: 700; padding: 0;
   display: inline-flex; align-items: center; justify-content: center; gap: 2px;
 }
-.fmtbtn.on { background: var(--accent); color: var(--on-accent); }
+.fmtbtn.on { background: var(--accent-fill); color: var(--on-accent); }
 .fmtbtn .sw, .citem .csw, #annotSw, #edSw, .np-color .sw, .fmt-color .sw {
   display: inline-block; width: 12px; height: 12px; border-radius: 3px;
   border: 1px solid rgba(127,127,127,.45); vertical-align: middle;
@@ -590,11 +595,11 @@ select.zoom { height: 28px; width: 96px; padding: 2px 6px; text-align: center; f
 .modal-box .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .modal-box button { background: var(--surface-2); border: 1px solid var(--border); padding: 6px 14px; }
 .modal-box button:hover { background: var(--surface-3); }
-.modal-box button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
-.modal-box button.primary:hover { background: var(--accent-hover); }
+.modal-box button.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-accent); font-weight: 600; }
+.modal-box button.primary:hover { background: var(--accent-fill-hover); border-color: var(--accent-fill-hover); }
 .modal-box .anchor9 { display: grid; grid-template-columns: repeat(3, 34px); gap: 4px; }
 .modal-box .anchor9 button { width: 34px; height: 28px; padding: 0; }
-.modal-box .anchor9 button.cur { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.modal-box .anchor9 button.cur { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-accent); }
 .modal-box .err { color: var(--danger); font-size: 12px; margin-top: 8px; }
 .modal-box .status { display: block; margin-top: 6px; }
 .modal-box kbd {
@@ -693,3 +698,78 @@ body.reading .reading-exit:hover { opacity: 1; background: var(--surface); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* =====================================================================
+   Tinh chỉnh sau audit giao diện (tương phản, căn chỉnh, trạng thái, hẹp)
+   ===================================================================== */
+/* Hàng tab: ô tìm kiếm không co nhỏ hơn nội dung; đếm/mũi tên chỉ hiện khi đang tìm */
+.searchpill { flex: 0 0 auto; }
+.searchpill:has(#searchBox:placeholder-shown) :is(.searchcount, .sbtn) { display: none; }
+@media (max-width: 1280px) { #readingBtn, #fullscreenBtn { display: none; } }
+@media (max-width: 1180px) {
+  .searchpill input[type="search"] { width: 0; min-width: 0; padding: 0; transition: width var(--dur) var(--ease); }
+  .searchpill:focus-within input[type="search"], .searchpill:has(#searchBox:not(:placeholder-shown)) input[type="search"] { width: 140px; padding: 4px 6px; }
+  .tabs-main { mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent); }
+}
+@media (max-width: 1100px) { .rbtn { min-width: 54px; padding-inline: 6px; } .rhint { display: none; } }
+
+/* Chế độ đọc: cửa sổ frameless vẫn giữ vùng kéo + nút cửa sổ */
+body.reading.frameless .tabrow { display: flex !important; height: 32px; flex-basis: 32px; background: transparent; }
+body.reading.frameless .tabrow > :not(.spacer):not(.tb-controls) { display: none; }
+body.reading .reading-exit { top: 16px; }
+body.reading.frameless .reading-exit { top: 44px; }
+
+/* Trường bị khoá trông khác trường sửa được */
+input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; background: var(--surface-2); }
+
+/* Checkbox/radio trong hộp thoại: thẳng hàng, dễ đọc */
+.modal-box label:has(> input[type="checkbox"]), .modal-box label:has(> input[type="radio"]) {
+  display: inline-flex; align-items: flex-start; gap: 8px; margin: 8px 0 0; color: var(--text); font-size: 13px; line-height: 1.35; }
+.modal-box label > input[type="checkbox"], .modal-box label > input[type="radio"] { margin: 1px 0 0; flex: none; }
+.modal-box .row:has(> label > input[type="checkbox"]) > * { flex: 0 0 auto; margin-right: 18px; }
+
+/* Nhãn ribbon cùng đường đáy (kể cả nhóm Định dạng chữ) */
+.rbtn { justify-content: flex-end; padding-bottom: 5px; }
+.rgroup-stack { justify-content: flex-end; padding-bottom: 5px; gap: 2px; min-height: 0; height: 100%; }
+.rgroup-stack .rrow { height: 22px; }
+.rgroup-stack :is(.rfield, .sq, .sq-wide) { height: 22px; }
+.rgroup-stack .rgroup-label { line-height: 12px; margin-top: 0; }
+#edColorBtn { flex: 1; }
+.rbtn.primary:not(:disabled) > span { font-weight: 600; }
+
+/* Hộp thoại: bề rộng ổn định */
+.modal-box { width: min(440px, calc(100vw - 48px)); min-width: 0; max-width: none; }
+.modal-box:has(.anchor9, .sig-table, .form-table, .kv) { width: min(600px, calc(100vw - 48px)); }
+.modal-box .foot :is(#wmPreview, #hfPreview) { margin-right: auto; }
+.np-foot button { display: inline-flex; align-items: center; gap: 6px; }
+.np-foot button svg.ic, .modal-box .foot button svg.ic { width: 15px; height: 15px; }
+.modal-box .foot button { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Danh sách chú thích nhẹ nhàng hơn */
+.comments .citem .ckind { color: var(--text); }
+.comments .citem .cdel { color: var(--faint); opacity: 0; transition: opacity var(--dur); }
+.comments .citem:hover .cdel, .comments .citem:focus-within .cdel { opacity: 1; }
+.comments .citem .cdel:hover { color: var(--danger); }
+.comments .empty, .outline .oitem.muted { padding: 24px 12px; text-align: center; line-height: 1.5; white-space: normal; }
+
+/* Focus bàn phím luôn thấy */
+:is(.tb-btn, .rbtn, .tab-pill, .rail .tab):focus-visible { outline-offset: -2px; }
+
+/* Nhảy trang không dính sát ribbon */
+.viewport, .edit-stage { scroll-padding-top: 18px; }
+
+/* Menu */
+.submenu { max-width: 360px; }
+.submenu .mitem > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mitem kbd { color: var(--muted); }
+.tabrow .qbtn.active { background: var(--accent-soft); color: var(--accent); }
+
+/* Ô màu chưa chọn không giống checkbox */
+#edSw:not([style*="background"]) { background: conic-gradient(#e11 0 25%, #2563eb 0 50%, #1f9d55 0 75%, #111 0); }
+
+.sig-table td:nth-child(-n+3) { white-space: nowrap; }
+body.ribbon-collapsed .tabrow { border-bottom: 1px solid var(--border); }
+.pagebox { justify-content: center; }
+.pagenum { width: 4ch; text-align: center; }
+.cs { border-width: 0; box-shadow: inset 0 0 0 1px rgba(127,127,127,.35); }
+.cs.cur { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }

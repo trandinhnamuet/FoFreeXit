@@ -416,7 +416,7 @@ function buildOutline(items) {
   const box = $("outline");
   box.innerHTML = "";
   if (!items.length) {
-    box.innerHTML = `<div class="oitem" style="color:#777">${t("viewer.noOutline")}</div>`;
+    box.innerHTML = `<div class="oitem muted">${t("viewer.noOutline")}</div>`;
     return;
   }
   for (const it of items) {
@@ -424,10 +424,11 @@ function buildOutline(items) {
     el.className = "oitem";
     el.style.paddingLeft = 6 + it.level * 14 + "px";
     el.textContent = it.title || t("viewer.untitled");
+    el.title = el.textContent; // mục dài bị cắt "…" → rê chuột xem đủ
     if (it.pageIndex != null) {
       el.addEventListener("click", () => goToPage(it.pageIndex));
     } else {
-      el.style.color = "#777";
+      el.classList.add("muted");
     }
     box.appendChild(el);
   }
@@ -1203,9 +1204,10 @@ function openNotePopup(spec) {
     <textarea class="np-text" placeholder="${t("annot.notePlaceholder")}">${escapeHtml(spec.contents || "")}</textarea>
     <div class="np-foot">
       <button class="np-color"><span class="sw" style="background:${rgbCss(spec.color)}"></span>${t("common.color")}</button>
-      <button class="np-del">🗑 ${t("common.delete")}</button>
+      <button class="np-del"><i data-icon="trash"></i>${t("common.delete")}</button>
     </div>`;
   document.body.appendChild(pop);
+  applyIcons(pop);
   notePopupEl = pop;
 
   const ta = pop.querySelector(".np-text");
@@ -1579,7 +1581,13 @@ async function copyCurrentPage() {
 
 function openModal(title, bodyHtml) {
   $("modalBox").innerHTML = `<h3>${title}</h3>${bodyHtml}`;
+  applyIcons($("modalBox"));
   $("modalOverlay").classList.remove("hidden");
+  // Focus vào ô nhập đầu tiên (hoặc nút chính) để dùng bàn phím ngay.
+  setTimeout(() => {
+    const f = $("modalBox").querySelector("input:not([type=hidden]):not(:disabled), select, textarea, .foot .primary");
+    if (f) f.focus();
+  }, 0);
   return $("modalBox");
 }
 function closeModal() {
@@ -1810,7 +1818,7 @@ function openInsertDialog() {
     </div>
     <div id="insFileOpts" style="display:none">
       <label>${t("org.sourceFile")}</label>
-      <button id="insPickFile" type="button">📂 ${t("org.pickFile")}</button>
+      <button id="insPickFile" type="button"><i data-icon="folder-open"></i>${t("org.pickFile")}</button>
       <span id="insFileName" class="status"></span>
       <label>${t("org.rangeLabel")}</label>
       <input type="text" id="insRange" placeholder="${t("org.rangeAllPh")}">
@@ -1913,7 +1921,7 @@ function openReplaceDialog() {
   const box = openModal(t("org.replaceTitle"), `
     <p>${t("org.replaceIntro", { n: state.orgSelected.size })}</p>
     <label>${t("org.sourceFile")}</label>
-    <button id="repPickFile" type="button">📂 ${t("org.pickFile")}</button>
+    <button id="repPickFile" type="button"><i data-icon="folder-open"></i>${t("org.pickFile")}</button>
     <span id="repFileName" class="status"></span>
     <label>${t("org.srcRangeLabel")}</label>
     <input type="text" id="repRange" placeholder="${t("org.rangeAllPh")}">
@@ -2054,7 +2062,7 @@ async function openWatermarkDialog() {
     <label>${t("orgx.wmPages")}</label>
     <input type="text" id="wmPages" placeholder="${t("orgx.pagesAll")}">
     <div class="foot">
-      <button id="wmPreview" type="button">👁 ${t("orgx.preview")}</button>
+      <button id="wmPreview" type="button"><i data-icon="eye"></i>${t("orgx.preview")}</button>
       <button id="wmCancel">${t("common.cancel")}</button><button id="wmOk" class="primary">${t("common.apply")}</button>
     </div>
     <div class="err" id="wmErr"></div>
@@ -2140,7 +2148,7 @@ async function openHeaderFooterDialog() {
     <label>${t("orgx.hfPages")}</label>
     <input type="text" id="hfPages" placeholder="${t("orgx.pagesAll")}">
     <div class="foot">
-      <button id="hfPreview" type="button">👁 ${t("orgx.preview")}</button>
+      <button id="hfPreview" type="button"><i data-icon="eye"></i>${t("orgx.preview")}</button>
       <button id="hfCancel">${t("common.cancel")}</button><button id="hfOk" class="primary">${t("common.apply")}</button>
     </div>
     <div class="err" id="hfErr"></div>
