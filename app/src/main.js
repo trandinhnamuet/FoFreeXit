@@ -2051,14 +2051,23 @@ function openInsertDialog() {
     <div id="insBlankOpts">
       <label>${t("org.paperSize")}</label>
       <select id="insPaper">
-        <option value="612x792">Letter</option>
+        <option value="same">${t("pagex.insSameSize")}</option>
         <option value="595x842">A4</option>
+        <option value="612x792">Letter</option>
+        <option value="612x1008">Legal</option>
+        <option value="420x595">A5</option>
+        <option value="842x1191">A3</option>
         <option value="custom">${t("org.customSize")}</option>
       </select>
       <div class="row" id="insCustomSize" style="display:none">
         <div><label>${t("org.widthPt")}</label><input type="number" id="insW" value="612"></div>
         <div><label>${t("org.heightPt")}</label><input type="number" id="insH" value="792"></div>
       </div>
+      <div class="radiorow" id="insOrient" style="display:none">
+        <label><input type="radio" name="insOrient" value="portrait" checked> ${t("pagex.portrait")}</label>
+        <label><input type="radio" name="insOrient" value="landscape"> ${t("pagex.landscape")}</label>
+      </div>
+      <div class="row"><div><label>${t("pagex.insCount")}</label><input type="number" id="insCount" value="1" min="1" max="500"></div><div></div></div>
     </div>
     <div id="insFileOpts" style="display:none">
       <label>${t("org.sourceFile")}</label>
@@ -2084,6 +2093,7 @@ function openInsertDialog() {
   }));
   box.querySelector("#insPaper").addEventListener("change", (e) => {
     box.querySelector("#insCustomSize").style.display = e.target.value === "custom" ? "flex" : "none";
+    box.querySelector("#insOrient").style.display = ["custom", "same"].includes(e.target.value) ? "none" : "";
   });
   box.querySelector("#insPickFile").addEventListener("click", async () => {
     const p = await invoke("pick_pdf");
@@ -2100,10 +2110,22 @@ function openInsertDialog() {
       if (paper === "custom") {
         w = Number(box.querySelector("#insW").value) || 612;
         h = Number(box.querySelector("#insH").value) || 792;
+      } else if (paper === "same") {
+        // Cùng cỡ trang đang chọn (hoặc trang hiện tại) — mặc định của Foxit.
+        const ref = state.pagePlan[state.orgSelected.size ? Math.min(...state.orgSelected) : Math.min(state.current || 0, state.pagePlan.length - 1)];
+        const d = ref && ref.kind === "blank" ? ref : (ref && !ref.source && state.pages[ref.srcIndex]) || { widthPt: 612, heightPt: 792 };
+        [w, h] = [d.widthPt, d.heightPt];
+        if (ref && ((ref.rotationDelta || 0) % 180) !== 0) [w, h] = [h, w];
       } else {
         [w, h] = paper.split("x").map(Number);
       }
-      newEntries = [{ kind: "blank", widthPt: w, heightPt: h, rotationDelta: 0, crop: null }];
+      // Hướng giấy: đổi chiều nếu cần (không áp khi tự nhập kích thước).
+      if (paper !== "custom" && paper !== "same") {
+        const land = box.querySelector('input[name=insOrient]:checked').value === "landscape";
+        if (land !== (w > h)) [w, h] = [h, w];
+      }
+      const count = Math.max(1, Math.min(500, Number(box.querySelector("#insCount").value) || 1));
+      newEntries = Array.from({ length: count }, () => ({ kind: "blank", widthPt: w, heightPt: h, rotationDelta: 0, crop: null }));
     } else {
       if (!insertFile) { box.querySelector("#insErr").textContent = t("org.needSource"); return; }
       let count;
@@ -2279,177 +2301,6 @@ function openSplitDialog() {
       closeModal();
     } catch (e) {
       box.querySelector("#splitErr").textContent = t("orgx.err", { e });
-    }
-  });
-}
-
-async function openWatermarkDialog() {
-  const base = await materializeBaseInput();
-  const previewPage = base.isTemp ? (state.orgSelected.size ? Math.min(...state.orgSelected) : 0) : state.current;
-  const box = openModal(t("orgx.wmTitle"), `
-    ${base.isTemp ? MATERIALIZED_NOTE : ""}
-    <label>${t("orgx.wmText")}</label>
-    <input type="text" id="wmText" value="CONFIDENTIAL">
-    <div class="row">
-      <div><label>${t("orgx.fontSize")}</label><input type="number" id="wmSize" value="36"></div>
-      <div><label>${t("orgx.colorRgb")}</label><input type="text" id="wmColor" value="200,0,0"></div>
-      <div><label>${t("orgx.wmAlpha")}</label><input type="number" id="wmAlpha" value="120" min="0" max="255"></div>
-    </div>
-    <div class="row">
-      <label><input type="checkbox" id="wmBold"> ${t("orgx.bold")}</label>
-      <label><input type="checkbox" id="wmItalic"> ${t("orgx.italic")}</label>
-    </div>
-    <label>${t("orgx.wmRotate")}</label>
-    <input type="number" id="wmRotate" value="45">
-    <label>${t("common.position")}</label>
-    <div class="anchor9" id="wmAnchor">
-      ${["top-left", "top-center", "top-right", "middle-left", "center", "middle-right", "bottom-left", "bottom-center", "bottom-right"]
-        .map((a) => `<button type="button" data-a="${a}" class="${a === "center" ? "cur" : ""}">●</button>`).join("")}
-    </div>
-    <label>${t("orgx.wmPages")}</label>
-    <input type="text" id="wmPages" placeholder="${t("orgx.pagesAll")}">
-    <div class="foot">
-      <button id="wmPreview" type="button"><i data-icon="eye"></i>${t("orgx.preview")}</button>
-      <button id="wmCancel">${t("common.cancel")}</button><button id="wmOk" class="primary">${t("common.apply")}</button>
-    </div>
-    <div class="err" id="wmErr"></div>
-  `);
-  let anchor = "center";
-  box.querySelector("#wmAnchor").addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-a]");
-    if (!btn) return;
-    anchor = btn.dataset.a;
-    box.querySelectorAll("#wmAnchor button").forEach((b) => b.classList.toggle("cur", b === btn));
-  });
-  function buildSpec() {
-    const [r, g, b] = box.querySelector("#wmColor").value.split(",").map((x) => Number(x.trim()) || 0);
-    return {
-      text: box.querySelector("#wmText").value || "",
-      fontSize: Number(box.querySelector("#wmSize").value) || 36,
-      color: [r, g, b, Number(box.querySelector("#wmAlpha").value) || 120],
-      bold: box.querySelector("#wmBold").checked,
-      italic: box.querySelector("#wmItalic").checked,
-      rotationDeg: Number(box.querySelector("#wmRotate").value) || 0,
-      anchor,
-      pages: box.querySelector("#wmPages").value.trim()
-        ? parsePageRange(box.querySelector("#wmPages").value.trim(), base.pageCount)
-        : [],
-    };
-  }
-  box.querySelector("#wmPreview").addEventListener("click", async () => {
-    try {
-      const url = await invoke("preview_watermark", { input: base.path, page: previewPage, spec: buildSpec(), width: 500 });
-      let img = box.querySelector("#wmPreviewImg");
-      if (!img) {
-        img = document.createElement("img");
-        img.id = "wmPreviewImg";
-        img.style.maxWidth = "100%";
-        img.style.marginTop = "8px";
-        box.insertBefore(img, box.querySelector(".foot"));
-      }
-      img.src = url;
-    } catch (e) {
-      box.querySelector("#wmErr").textContent = t("orgx.previewErr", { e });
-    }
-  });
-  box.querySelector("#wmCancel").addEventListener("click", closeModal);
-  box.querySelector("#wmOk").addEventListener("click", async () => {
-    const out = await invoke("pick_save_pdf");
-    if (!out) return;
-    try {
-      await invoke("watermark_add", { input: base.path, spec: buildSpec(), output: out, password: null });
-      $("status").textContent = t("orgx.wmDone", { name: shortName(out) });
-      closeModal();
-      loadDocument(out);
-    } catch (e) {
-      box.querySelector("#wmErr").textContent = t("orgx.err", { e });
-    }
-  });
-}
-
-async function openHeaderFooterDialog() {
-  const base = await materializeBaseInput();
-  const previewPage = base.isTemp ? (state.orgSelected.size ? Math.min(...state.orgSelected) : 0) : state.current;
-  const box = openModal(t("orgx.hfTitle"), `
-    ${base.isTemp ? MATERIALIZED_NOTE : ""}
-    <div class="row">
-      <div><label>${t("orgx.hfTL")}</label><input type="text" id="hfTL"></div>
-      <div><label>${t("orgx.hfTC")}</label><input type="text" id="hfTC"></div>
-      <div><label>${t("orgx.hfTR")}</label><input type="text" id="hfTR"></div>
-    </div>
-    <div class="row">
-      <div><label>${t("orgx.hfBL")}</label><input type="text" id="hfBL"></div>
-      <div><label>${t("orgx.hfBC")}</label><input type="text" id="hfBC" value="${t("orgx.hfBCDefault", { page: "{page}", total: "{total}" })}"></div>
-      <div><label>${t("orgx.hfBR")}</label><input type="text" id="hfBR"></div>
-    </div>
-    <p class="status">${t("orgx.hfInsertTok")}
-      <button type="button" data-tok="{page}">{page}</button>
-      <button type="button" data-tok="{total}">{total}</button>
-      <button type="button" data-tok="{date}">{date}</button>
-    </p>
-    <div class="row">
-      <div><label>${t("orgx.fontSize")}</label><input type="number" id="hfSize" value="10"></div>
-      <div><label>${t("orgx.hfMargin")}</label><input type="number" id="hfMargin" value="20"></div>
-      <div><label>${t("orgx.colorRgb")}</label><input type="text" id="hfColor" value="0,0,0"></div>
-    </div>
-    <label>${t("orgx.hfPages")}</label>
-    <input type="text" id="hfPages" placeholder="${t("orgx.pagesAll")}">
-    <div class="foot">
-      <button id="hfPreview" type="button"><i data-icon="eye"></i>${t("orgx.preview")}</button>
-      <button id="hfCancel">${t("common.cancel")}</button><button id="hfOk" class="primary">${t("common.apply")}</button>
-    </div>
-    <div class="err" id="hfErr"></div>
-  `);
-  let lastFocused = box.querySelector("#hfBC");
-  box.querySelectorAll("input[type=text]").forEach((inp) => inp.addEventListener("focus", () => { lastFocused = inp; }));
-  box.querySelectorAll("button[data-tok]").forEach((btn) => btn.addEventListener("click", () => {
-    if (lastFocused) { lastFocused.value += btn.dataset.tok; lastFocused.focus(); }
-  }));
-  function buildSpec() {
-    const [r, g, b] = box.querySelector("#hfColor").value.split(",").map((x) => Number(x.trim()) || 0);
-    return {
-      topLeft: box.querySelector("#hfTL").value,
-      topCenter: box.querySelector("#hfTC").value,
-      topRight: box.querySelector("#hfTR").value,
-      bottomLeft: box.querySelector("#hfBL").value,
-      bottomCenter: box.querySelector("#hfBC").value,
-      bottomRight: box.querySelector("#hfBR").value,
-      fontSize: Number(box.querySelector("#hfSize").value) || 10,
-      color: [r, g, b, 255],
-      marginPt: Number(box.querySelector("#hfMargin").value) || 20,
-      date: new Date().toLocaleDateString(I18N.lang === "vi" ? "vi-VN" : "en-US"),
-      pages: box.querySelector("#hfPages").value.trim()
-        ? parsePageRange(box.querySelector("#hfPages").value.trim(), base.pageCount)
-        : [],
-    };
-  }
-  box.querySelector("#hfPreview").addEventListener("click", async () => {
-    try {
-      const url = await invoke("preview_header_footer", { input: base.path, page: previewPage, spec: buildSpec(), width: 500 });
-      let img = box.querySelector("#hfPreviewImg");
-      if (!img) {
-        img = document.createElement("img");
-        img.id = "hfPreviewImg";
-        img.style.maxWidth = "100%";
-        img.style.marginTop = "8px";
-        box.insertBefore(img, box.querySelector(".foot"));
-      }
-      img.src = url;
-    } catch (e) {
-      box.querySelector("#hfErr").textContent = t("orgx.previewErr", { e });
-    }
-  });
-  box.querySelector("#hfCancel").addEventListener("click", closeModal);
-  box.querySelector("#hfOk").addEventListener("click", async () => {
-    const out = await invoke("pick_save_pdf");
-    if (!out) return;
-    try {
-      await invoke("header_footer_add", { input: base.path, spec: buildSpec(), output: out, password: null });
-      $("status").textContent = t("orgx.hfDone", { name: shortName(out) });
-      closeModal();
-      loadDocument(out);
-    } catch (e) {
-      box.querySelector("#hfErr").textContent = t("orgx.err", { e });
     }
   });
 }
@@ -4644,8 +4495,6 @@ $("orgExtract").addEventListener("click", openExtractDialog);
 $("orgReplace").addEventListener("click", openReplaceDialog);
 $("orgMerge").addEventListener("click", openMergeDialog);
 $("orgSplit").addEventListener("click", openSplitDialog);
-$("orgWatermark").addEventListener("click", openWatermarkDialog);
-$("orgHeaderFooter").addEventListener("click", openHeaderFooterDialog);
 $("orgSave").addEventListener("click", orgSaveChanges);
 $("modalOverlay").addEventListener("click", (e) => {
   if (e.target.id === "modalOverlay") closeModal();

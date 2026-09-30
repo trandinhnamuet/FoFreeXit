@@ -10,6 +10,7 @@ use tauri_plugin_dialog::DialogExt;
 
 mod cmd_bookmarks;
 mod cmd_compare;
+mod cmd_pagex;
 
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
@@ -505,159 +506,12 @@ fn organize_materialize(
     Ok(tmp.to_string_lossy().into_owned())
 }
 
-fn parse_anchor(s: &str) -> Result<ff_engine::Anchor, String> {
-    use ff_engine::Anchor::*;
-    Ok(match s {
-        "top-left" => TopLeft,
-        "top-center" => TopCenter,
-        "top-right" => TopRight,
-        "middle-left" => MiddleLeft,
-        "center" => Center,
-        "middle-right" => MiddleRight,
-        "bottom-left" => BottomLeft,
-        "bottom-center" => BottomCenter,
-        "bottom-right" => BottomRight,
-        other => return Err(format!("vị trí neo không hợp lệ: {other}")),
-    })
-}
-
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WatermarkDto {
-    text: String,
-    font_size: f32,
-    color: [u8; 4],
-    #[serde(default)]
-    bold: bool,
-    #[serde(default)]
-    italic: bool,
-    #[serde(default)]
-    rotation_deg: f32,
-    anchor: String,
-    #[serde(default)]
-    pages: Vec<u16>,
-}
-
-/// Thêm watermark văn bản vào `input`, ghi ra `output`.
-#[tauri::command]
-fn watermark_add(
-    input: String,
-    spec: WatermarkDto,
-    output: String,
-    password: Option<String>,
-) -> Result<(), String> {
-    let pdfium = pdfium()?;
-    let anchor = parse_anchor(&spec.anchor)?;
-    let ws = ff_engine::WatermarkSpec {
-        text: spec.text,
-        font_size: spec.font_size,
-        color: spec.color,
-        bold: spec.bold,
-        italic: spec.italic,
-        rotation_deg: spec.rotation_deg,
-        anchor,
-        pages: spec.pages,
-    };
-    ff_engine::add_watermark(&pdfium, std::path::Path::new(&input), &ws, std::path::Path::new(&output), password.as_deref())
-        .map_err(|e| e.to_string())
-}
-
-#[derive(serde::Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct HeaderFooterDto {
-    #[serde(default)]
-    top_left: String,
-    #[serde(default)]
-    top_center: String,
-    #[serde(default)]
-    top_right: String,
-    #[serde(default)]
-    bottom_left: String,
-    #[serde(default)]
-    bottom_center: String,
-    #[serde(default)]
-    bottom_right: String,
-    font_size: f32,
-    color: [u8; 4],
-    margin_pt: f32,
-    #[serde(default)]
-    bold: bool,
-    #[serde(default)]
-    italic: bool,
-    #[serde(default)]
-    date: String,
-    #[serde(default)]
-    pages: Vec<u16>,
-}
-
-/// Thêm header/footer (gồm đánh số trang qua token {page}/{total}) vào `input`.
-#[tauri::command]
-fn header_footer_add(
-    input: String,
-    spec: HeaderFooterDto,
-    output: String,
-    password: Option<String>,
-) -> Result<(), String> {
-    let pdfium = pdfium()?;
-    let hf = ff_engine::HeaderFooterSpec {
-        top_left: spec.top_left,
-        top_center: spec.top_center,
-        top_right: spec.top_right,
-        bottom_left: spec.bottom_left,
-        bottom_center: spec.bottom_center,
-        bottom_right: spec.bottom_right,
-        font_size: spec.font_size,
-        color: spec.color,
-        margin_pt: spec.margin_pt,
-        bold: spec.bold,
-        italic: spec.italic,
-        date: spec.date,
-        pages: spec.pages,
-    };
-    ff_engine::add_header_footer(&pdfium, std::path::Path::new(&input), &hf, std::path::Path::new(&output), password.as_deref())
-        .map_err(|e| e.to_string())
-}
-
-fn render_temp_page(pdfium: &pdfium_render::prelude::Pdfium, path: &std::path::Path, page: u16, width: u32) -> Result<String, String> {
+pub(crate) fn render_temp_page(pdfium: &pdfium_render::prelude::Pdfium, path: &std::path::Path, page: u16, width: u32) -> Result<String, String> {
     let rendered = ff_engine::render::render_page(pdfium, path, page, width, None).map_err(|e| e.to_string())?;
     let mut buf = Cursor::new(Vec::new());
     rendered.image.write_to(&mut buf, image::ImageFormat::Png).map_err(|e| e.to_string())?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(buf.get_ref());
     Ok(format!("data:image/png;base64,{b64}"))
-}
-
-/// Xem trước watermark trên 1 trang: áp vào file tạm rồi render, không sửa `input`.
-#[tauri::command]
-fn preview_watermark(input: String, page: u16, spec: WatermarkDto, width: u32) -> Result<String, String> {
-    let pdfium = pdfium()?;
-    let anchor = parse_anchor(&spec.anchor)?;
-    let ws = ff_engine::WatermarkSpec {
-        text: spec.text, font_size: spec.font_size, color: spec.color,
-        bold: spec.bold, italic: spec.italic, rotation_deg: spec.rotation_deg,
-        anchor, pages: vec![page],
-    };
-    let tmp = std::env::temp_dir().join(format!("ff_preview_wm_{}.pdf", std::process::id()));
-    ff_engine::add_watermark(&pdfium, std::path::Path::new(&input), &ws, &tmp, None).map_err(|e| e.to_string())?;
-    let result = render_temp_page(&pdfium, &tmp, page, width);
-    let _ = std::fs::remove_file(&tmp);
-    result
-}
-
-/// Xem trước header/footer trên 1 trang: áp vào file tạm rồi render, không sửa `input`.
-#[tauri::command]
-fn preview_header_footer(input: String, page: u16, spec: HeaderFooterDto, width: u32) -> Result<String, String> {
-    let pdfium = pdfium()?;
-    let hf = ff_engine::HeaderFooterSpec {
-        top_left: spec.top_left, top_center: spec.top_center, top_right: spec.top_right,
-        bottom_left: spec.bottom_left, bottom_center: spec.bottom_center, bottom_right: spec.bottom_right,
-        font_size: spec.font_size, color: spec.color, margin_pt: spec.margin_pt,
-        bold: spec.bold, italic: spec.italic, date: spec.date, pages: vec![page],
-    };
-    let tmp = std::env::temp_dir().join(format!("ff_preview_hf_{}.pdf", std::process::id()));
-    ff_engine::add_header_footer(&pdfium, std::path::Path::new(&input), &hf, &tmp, None).map_err(|e| e.to_string())?;
-    let result = render_temp_page(&pdfium, &tmp, page, width);
-    let _ = std::fs::remove_file(&tmp);
-    result
 }
 
 // ---------- Phase 4: Sửa nội dung (Edit) ----------
@@ -1563,10 +1417,15 @@ fn main() {
             organize_merge,
             organize_split,
             organize_materialize,
-            watermark_add,
-            header_footer_add,
-            preview_watermark,
-            preview_header_footer,
+            cmd_pagex::pagex_stamp_add,
+            cmd_pagex::pagex_stamp_preview,
+            cmd_pagex::pagex_hf_add,
+            cmd_pagex::pagex_hf_preview,
+            cmd_pagex::pagex_bates_add,
+            cmd_pagex::pagex_marks_scan,
+            cmd_pagex::pagex_marks_remove,
+            cmd_pagex::pagex_pick_pdfs,
+            cmd_pagex::pagex_pick_stamp_file,
             edit_list_objects,
             edit_font_data,
             app_font_data,
@@ -1618,7 +1477,7 @@ fn main() {
             cmd_annot::annot_image_preview,
             cmd_compare::compare_run,
             cmd_compare::compare_cancel,
-            cmd_compare::compare_export_report
+            cmd_compare::compare_export_report,
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");

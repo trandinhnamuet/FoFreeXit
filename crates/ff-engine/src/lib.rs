@@ -14,6 +14,7 @@ pub mod edit;
 mod cffwrap;
 mod fontfix;
 mod formsurgery;
+mod pagemark_cos;
 mod tounicode;
 pub(crate) mod fontmatch;
 pub mod form;
@@ -69,7 +70,11 @@ pub use redact::redact_areas;
 pub use sign::{generate_self_signed_id, sign_pdf, verify_signatures, SignatureCheck};
 pub use render::{bind_pdfium, page_count, page_render_mismatch, render_page_png, PageImage};
 pub use text::{extract_text, page_char_boxes, search, CharBox, Rect, SearchHit};
-pub use watermark::{add_header_footer, add_watermark, Anchor, HeaderFooterSpec, WatermarkSpec};
+pub use watermark::{
+    add_background, add_bates, add_header_footer, add_watermark, preview_page_mark, remove_page_marks,
+    scan_page_marks, Anchor, BatesFormat, BatesRange, FontChoice, HeaderFooterSpec, MarkCounts, MarkKind,
+    PageMarkJob, PageSubset, StampSource, TextStyle, WatermarkSpec,
+};
 
 /// Lỗi cấp engine.
 #[derive(Debug, thiserror::Error)]

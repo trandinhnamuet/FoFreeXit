@@ -192,18 +192,26 @@
           <button class="rbtn" id="orgDelete" data-i18n-title="ribbon.page.deleteTip"><i data-icon="page-delete"></i><span data-i18n="ribbon.page.delete"></span></button>
           <button class="rbtn" id="orgExtract" data-i18n-title="ribbon.page.extractTip"><i data-icon="page-extract"></i><span data-i18n="ribbon.page.extract"></span></button>
           <button class="rbtn" id="orgReplace" data-i18n-title="ribbon.page.replaceTip"><i data-icon="page-replace"></i><span data-i18n="ribbon.page.replace"></span></button>
+          <button class="rbtn" id="orgDuplicate" data-i18n-title="pagex.rb.duplicateTip"><i data-icon="page-duplicate"></i><span data-i18n="pagex.rb.duplicate"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
           <button class="rbtn" id="orgRotateL" data-i18n-title="ribbon.page.rotateLTip"><i data-icon="rotate-left"></i><span data-i18n="ribbon.page.rotateL"></span></button>
           <button class="rbtn" id="orgRotateR" data-i18n-title="ribbon.page.rotateRTip"><i data-icon="rotate-right"></i><span data-i18n="ribbon.page.rotateR"></span></button>
+          <button class="rbtn" id="orgReverse" data-i18n-title="pagex.rb.reverseTip"><i data-icon="page-reverse"></i><span data-i18n="pagex.rb.reverse"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
           <button class="rbtn" id="orgMerge" data-i18n-title="ribbon.page.mergeTip"><i data-icon="merge"></i><span data-i18n="ribbon.page.merge"></span></button>
           <button class="rbtn" id="orgSplit" data-i18n-title="ribbon.page.splitTip"><i data-icon="split"></i><span data-i18n="ribbon.page.split"></span></button>
-          <button class="rbtn" id="orgWatermark" data-i18n-title="ribbon.page.watermarkTip"><i data-icon="watermark"></i><span data-i18n="ribbon.page.watermark"></span></button>
-          <button class="rbtn" id="orgHeaderFooter" data-i18n-title="ribbon.page.headerFooterTip"><i data-icon="header-footer"></i><span data-i18n="ribbon.page.headerFooter"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <!-- Page Marks: mỗi nút mở menu Thêm… / Cập nhật… / Gỡ (features/pagex.js) -->
+        <div class="rgroup">
+          <button class="rbtn pm-drop" id="orgWatermark" data-pm="watermark" data-i18n-title="ribbon.page.watermarkTip" aria-haspopup="menu"><i data-icon="watermark"></i><span><span data-i18n="ribbon.page.watermark"></span><i data-icon="chevron-down-sm" class="pm-caret"></i></span></button>
+          <button class="rbtn pm-drop" id="pmBackground" data-pm="background" data-i18n-title="pagex.rb.backgroundTip" aria-haspopup="menu"><i data-icon="page-background"></i><span><span data-i18n="pagex.rb.background"></span><i data-icon="chevron-down-sm" class="pm-caret"></i></span></button>
+          <button class="rbtn pm-drop" id="orgHeaderFooter" data-pm="headerFooter" data-i18n-title="ribbon.page.headerFooterTip" aria-haspopup="menu"><i data-icon="header-footer"></i><span><span data-i18n="ribbon.page.headerFooter"></span><i data-icon="chevron-down-sm" class="pm-caret"></i></span></button>
+          <button class="rbtn pm-drop" id="pmBates" data-pm="bates" data-i18n-title="pagex.rb.batesTip" aria-haspopup="menu"><i data-icon="bates"></i><span><span data-i18n="pagex.rb.bates"></span><i data-icon="chevron-down-sm" class="pm-caret"></i></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
@@ -464,6 +472,9 @@
       <button class="mitem" data-theme-set="system"><span class="mcheck"></span><i data-icon="theme-system"></i><span data-i18n="shell.themeSystem"></span></button>
     </div>
 
+    <!-- Menu thả xuống của Page Marks (Thêm / Cập nhật / Gỡ) -->
+    <div id="pmMenu" class="menu mini-menu hidden" role="menu"></div>
+
     <div id="modalOverlay" class="modal-overlay hidden">
       <div id="modalBox" class="modal-box"></div>
     </div>
@@ -491,6 +502,7 @@
     <script src="i18n/part-bookmarks.js"></script>
     <script src="i18n/part-annot.js"></script>
     <script src="i18n/part-compare.js"></script>
+    <script src="i18n/part-pagex.js"></script>
     <script src="icons.js"></script>
     <script src="main.js"></script>
     <script src="shell.js"></script>
@@ -498,5 +510,6 @@
     <script src="features/bookmarks.js"></script>
     <script src="features/annot.js"></script>
     <script src="features/compare.js"></script>
+    <script src="features/pagex.js"></script>
   </body>
 </html>
