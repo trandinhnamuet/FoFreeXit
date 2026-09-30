@@ -3686,10 +3686,10 @@ async function toggleConvMode() {
     try {
       const st = await invoke("convert_tools_status");
       const miss = [];
-      if (!st.tesseract) miss.push("Tesseract (OCR)");
-      if (!st.soffice) miss.push("LibreOffice (Office↔PDF chất lượng cao)");
+      if (!st.tesseract) miss.push(t("conv.toolTesseract"));
+      if (!st.soffice) miss.push(t("conv.toolLibreOffice"));
       $("convHint").textContent = miss.length
-        ? `Chưa cài: ${miss.join(", ")} — các nút liên quan sẽ báo lỗi kèm hướng dẫn`
+        ? t("conv.missingTools", { list: miss.join(", ") })
         : "";
       $("cvOcr").disabled = !st.tesseract;
       $("cvOffice").disabled = !st.soffice;
@@ -3703,14 +3703,14 @@ async function runOcrAction() {
   const lang = $("cvLang").value || "vie+eng";
   const out = await invoke("pick_save_pdf");
   if (!out) return;
-  $("convHint").textContent = "Đang OCR… (tài liệu dài có thể mất vài phút)";
+  $("convHint").textContent = t("conv.ocrRunning");
   try {
     const n = await invoke("ocr_run", { input: state.path, lang, output: out });
-    $("status").textContent = `OCR xong: ${n} từ, đã thêm lớp text ẩn → ${shortName(out)}`;
+    $("status").textContent = t("conv.ocrDone", { n, file: shortName(out) });
     $("convHint").textContent = "";
     loadDocument(out);
   } catch (e) {
-    $("convHint").textContent = "Lỗi OCR: " + e;
+    $("convHint").textContent = t("conv.errOcr", { e });
   }
 }
 
@@ -3719,9 +3719,9 @@ async function exportPngAction() {
   if (!dir) return;
   try {
     const files = await invoke("convert_images", { input: state.path, outDir: dir, dpi: 150 });
-    $("status").textContent = `Đã xuất ${files.length} ảnh PNG (150 DPI) vào ${dir}`;
+    $("status").textContent = t("conv.pngDone", { n: files.length, dir });
   } catch (e) {
-    $("convHint").textContent = "Lỗi xuất PNG: " + e;
+    $("convHint").textContent = t("conv.errPng", { e });
   }
 }
 
@@ -3731,9 +3731,9 @@ async function exportTxtAction() {
   if (!out) return;
   try {
     await invoke("convert_txt", { input: state.path, output: out });
-    $("status").textContent = `Đã xuất text → ${shortName(out)}`;
+    $("status").textContent = t("conv.txtDone", { file: shortName(out) });
   } catch (e) {
-    $("convHint").textContent = "Lỗi xuất TXT: " + e;
+    $("convHint").textContent = t("conv.errTxt", { e });
   }
 }
 
@@ -3741,14 +3741,14 @@ async function exportDocxAction() {
   const base = shortName(state.path).replace(/\.pdf$/i, "");
   const out = await invoke("pick_save_as", { ext: "docx", name: base + ".docx" });
   if (!out) return;
-  $("convHint").textContent = "Đang chuyển sang Word…";
+  $("convHint").textContent = t("conv.docxRunning");
   try {
     const engine = await invoke("convert_docx", { input: state.path, output: out });
-    const note = engine === "libreoffice" ? "LibreOffice (giữ layout tốt)" : "bộ chuyển cơ bản (text + bố cục)";
-    $("status").textContent = `Đã xuất Word (${note}) → ${shortName(out)}`;
+    const note = engine === "libreoffice" ? t("conv.engineLibreOffice") : t("conv.engineBasic");
+    $("status").textContent = t("conv.docxDone", { engine: note, file: shortName(out) });
     $("convHint").textContent = "";
   } catch (e) {
-    $("convHint").textContent = "Lỗi xuất Word: " + e;
+    $("convHint").textContent = t("conv.errDocx", { e });
   }
 }
 
@@ -3757,14 +3757,14 @@ async function officeToPdfAction() {
   if (!src) return;
   const dir = await invoke("pick_dir");
   if (!dir) return;
-  $("convHint").textContent = "Đang chuyển Office → PDF…";
+  $("convHint").textContent = t("conv.officeRunning");
   try {
     const out = await invoke("office_convert", { input: src, outDir: dir });
-    $("status").textContent = `Đã chuyển → ${shortName(out)}`;
+    $("status").textContent = t("conv.officeDone", { file: shortName(out) });
     $("convHint").textContent = "";
     loadDocument(out);
   } catch (e) {
-    $("convHint").textContent = "Lỗi Office→PDF (máy cần LibreOffice): " + e;
+    $("convHint").textContent = t("conv.errOffice", { e });
   }
 }
 
@@ -3784,11 +3784,17 @@ async function refreshFormCount() {
     state.formFields = fields;
     $("fmCount").textContent = fields.length;
     $("formHint").textContent = fields.length
-      ? `${fields.length} field trong tài liệu`
-      : "Tài liệu chưa có field form — dùng “Thêm field”.";
+      ? t("form.countHint", { n: fields.length })
+      : t("form.noFieldsHint");
   } catch (e) {
-    $("formHint").textContent = "Lỗi đọc form: " + e;
+    $("formHint").textContent = t("form.errRead", { e });
   }
+}
+
+// Nhãn hiển thị cho loại field (giá trị gốc gửi backend giữ nguyên).
+function formKindLabel(kind) {
+  const known = ["text", "checkbox", "radio", "combo", "list", "button", "signature", "unknown"];
+  return known.includes(kind) ? t("form.kind." + kind) : kind;
 }
 
 // Modal liệt kê field + input để điền, nút Lưu.
@@ -3797,18 +3803,18 @@ async function openFillForm() {
   try {
     fields = await invoke("form_list", { path: state.path });
   } catch (e) {
-    $("formHint").textContent = "Lỗi đọc form: " + e;
+    $("formHint").textContent = t("form.errRead", { e });
     return;
   }
   if (!fields.length) {
-    openModal("Điền form", `<p class="muted">Tài liệu chưa có field form nào. Hãy dùng “➕ Thêm field”.</p>
-      <div class="foot"><button id="ffClose" class="primary">Đóng</button></div>`)
+    openModal(t("form.fillTitle"), `<p class="muted">${t("form.noFieldsModal")}</p>
+      <div class="foot"><button id="ffClose" class="primary">${t("common.close")}</button></div>`)
       .querySelector("#ffClose").addEventListener("click", closeModal);
     return;
   }
   const rows = fields
     .map((f, i) => {
-      const label = `${escapeHtml(f.name)} <span class="muted">(${f.kind}${f.pageIndex != null ? `, trang ${f.pageIndex + 1}` : ""})</span>`;
+      const label = `${escapeHtml(f.name)} <span class="muted">(${formKindLabel(f.kind)}${f.pageIndex != null ? `, ${t("form.pageN", { n: f.pageIndex + 1 })}` : ""})</span>`;
       let input;
       if (f.kind === "checkbox" || f.kind === "radio") {
         const on = f.value && f.value !== "Off";
@@ -3824,10 +3830,10 @@ async function openFillForm() {
       return `<tr><td>${label}</td><td>${input}</td></tr>`;
     })
     .join("");
-  const box = openModal("Điền form", `
+  const box = openModal(t("form.fillTitle"), `
     <table class="form-table"><tbody>${rows}</tbody></table>
     <div class="err" id="ffErr"></div>
-    <div class="foot"><button id="ffCancel">Huỷ</button><button id="ffOk" class="primary">Lưu &amp; áp dụng…</button></div>
+    <div class="foot"><button id="ffCancel">${t("common.cancel")}</button><button id="ffOk" class="primary">${t("form.saveApply")}</button></div>
   `);
   box.querySelector("#ffCancel").addEventListener("click", closeModal);
   box.querySelector("#ffOk").addEventListener("click", async () => {
@@ -3843,36 +3849,36 @@ async function openFillForm() {
     try {
       const n = await invoke("form_fill", { input: state.path, values, output: out });
       closeModal();
-      $("status").textContent = `Đã điền ${n} field → ${shortName(out)}`;
+      $("status").textContent = t("form.fillDone", { n, file: shortName(out) });
       loadDocument(out);
     } catch (e) {
-      box.querySelector("#ffErr").textContent = "Lỗi: " + e;
+      box.querySelector("#ffErr").textContent = t("form.err", { e });
     }
   });
 }
 
 function openCreateFieldDialog() {
-  const box = openModal("Thêm field mới", `
-    <label>Tên field</label>
+  const box = openModal(t("form.createTitle"), `
+    <label>${t("form.fieldName")}</label>
     <input type="text" id="nfName" placeholder="hoTen">
-    <label>Loại</label>
+    <label>${t("form.fieldType")}</label>
     <select id="nfKind">
-      <option value="text">Text (ô nhập chữ)</option>
-      <option value="checkbox">Checkbox</option>
-      <option value="combo">Combo box (chọn 1)</option>
+      <option value="text">${t("form.typeTextOpt")}</option>
+      <option value="checkbox">${t("form.kind.checkbox")}</option>
+      <option value="combo">${t("form.typeComboOpt")}</option>
     </select>
     <div class="row">
-      <div><label>Trang</label><input type="number" id="nfPage" value="1" min="1"></div>
-      <div><label>Cỡ (rộng×cao pt)</label><input type="text" id="nfSize" value="200x20"></div>
+      <div><label>${t("common.page")}</label><input type="number" id="nfPage" value="1" min="1"></div>
+      <div><label>${t("form.sizeLabel")}</label><input type="text" id="nfSize" value="200x20"></div>
     </div>
     <div class="row">
-      <div><label>Vị trí X (pt)</label><input type="number" id="nfX" value="80"></div>
-      <div><label>Vị trí Y từ đáy (pt)</label><input type="number" id="nfY" value="700"></div>
+      <div><label>${t("form.posX")}</label><input type="number" id="nfX" value="80"></div>
+      <div><label>${t("form.posY")}</label><input type="number" id="nfY" value="700"></div>
     </div>
-    <label id="nfOptLabel" class="hidden">Lựa chọn (cách nhau dấu phẩy)</label>
-    <input type="text" id="nfOpts" class="hidden" placeholder="Nam, Nữ, Khác">
+    <label id="nfOptLabel" class="hidden">${t("form.optionsLabel")}</label>
+    <input type="text" id="nfOpts" class="hidden" placeholder="${t("form.optionsPlaceholder")}">
     <div class="err" id="nfErr"></div>
-    <div class="foot"><button id="nfCancel">Huỷ</button><button id="nfOk" class="primary">Tạo &amp; lưu…</button></div>
+    <div class="foot"><button id="nfCancel">${t("common.cancel")}</button><button id="nfOk" class="primary">${t("form.createSave")}</button></div>
   `);
   const kindSel = box.querySelector("#nfKind");
   const toggleOpts = () => {
@@ -3885,11 +3891,11 @@ function openCreateFieldDialog() {
   box.querySelector("#nfOk").addEventListener("click", async () => {
     const name = box.querySelector("#nfName").value.trim();
     const err = box.querySelector("#nfErr");
-    if (!name) { err.textContent = "Cần nhập tên field."; return; }
+    if (!name) { err.textContent = t("form.nameRequired"); return; }
     const kind = kindSel.value;
     const page = Math.max(1, Number(box.querySelector("#nfPage").value) || 1) - 1;
     const m = box.querySelector("#nfSize").value.match(/^\s*(\d+)\s*[x×]\s*(\d+)\s*$/);
-    if (!m) { err.textContent = "Cỡ phải dạng rộng×cao, vd 200x20."; return; }
+    if (!m) { err.textContent = t("form.sizeInvalid"); return; }
     const w = Number(m[1]), h = Number(m[2]);
     const x = Number(box.querySelector("#nfX").value) || 0;
     const y = Number(box.querySelector("#nfY").value) || 0;
@@ -3902,10 +3908,10 @@ function openCreateFieldDialog() {
     try {
       await invoke("form_create", { input: state.path, fields: [field], output: out });
       closeModal();
-      $("status").textContent = `Đã tạo field “${name}” → ${shortName(out)}`;
+      $("status").textContent = t("form.createDone", { name, file: shortName(out) });
       loadDocument(out);
     } catch (e) {
-      err.textContent = "Lỗi: " + e;
+      err.textContent = t("form.err", { e });
     }
   });
 }
@@ -3915,10 +3921,10 @@ async function flattenFormAction() {
   if (!out) return;
   try {
     await invoke("form_flatten", { input: state.path, output: out, password: null });
-    $("status").textContent = `Đã flatten form → ${shortName(out)}`;
+    $("status").textContent = t("form.flattenDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("formHint").textContent = "Lỗi flatten: " + e;
+    $("formHint").textContent = t("form.errFlatten", { e });
   }
 }
 
@@ -3931,9 +3937,9 @@ async function exportFormData(kind) {
   if (kind === "fdf" && !/\.fdf$/i.test(target)) target = target.replace(/\.[^.]*$/, "") + ".fdf";
   try {
     await invoke("form_export", { input: state.path, output: target });
-    $("formHint").textContent = `Đã xuất dữ liệu form → ${shortName(target)}`;
+    $("formHint").textContent = t("form.exportDone", { file: shortName(target) });
   } catch (e) {
-    $("formHint").textContent = "Lỗi xuất: " + e;
+    $("formHint").textContent = t("form.errExport", { e });
   }
 }
 
@@ -3944,10 +3950,10 @@ async function importFormFdf() {
   if (!out) return;
   try {
     const n = await invoke("form_import_fdf", { input: state.path, fdf, output: out });
-    $("status").textContent = `Đã nhập ${n} field từ FDF → ${shortName(out)}`;
+    $("status").textContent = t("form.importDone", { n, file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("formHint").textContent = "Lỗi nhập FDF: " + e;
+    $("formHint").textContent = t("form.errImport", { e });
   }
 }
 
