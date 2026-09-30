@@ -16,6 +16,7 @@ mod cmd_editx;
 mod cmd_ai;
 mod cmd_create;
 mod cmd_formx;
+mod cmd_signx;
 
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
@@ -1545,6 +1546,21 @@ fn main() {
             cmd_create::export_run,
             cmd_create::ocr_run_ex,
             cmd_create::ocr_images,
+            cmd_signx::signx_read_image,
+            cmd_signx::signx_id_info,
+            cmd_signx::signx_create_pfx,
+            cmd_signx::signx_pick_id,
+            cmd_signx::signx_pick_save_pfx,
+            cmd_signx::signx_list_fields,
+            cmd_signx::signx_sign,
+            cmd_signx::signx_verify,
+            cmd_signx::fillsign_apply,
+            cmd_signx::print_render_page,
+            cmd_signx::batch_run,
+            cmd_signx::batch_cancel,
+            cmd_signx::batch_validate,
+            cmd_signx::batch_pick_files,
+            cmd_signx::batch_list_folder
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");

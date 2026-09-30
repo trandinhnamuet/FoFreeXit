@@ -36,6 +36,11 @@ const-oid = { version = "0.9", features = ["db"] }
 regex = "1"
 # Đính kèm: /Params /CheckSum (MD5 theo chuẩn PDF).
 md-5 = "0.10"
+# Digital ID dạng PFX/P12 (PKCS#12, cả PBES2/AES lẫn PBE-3DES/RC2 cũ) — thuần Rust.
+p12-keystore = "0.2.1"
+sha1 = { version = "0.10", features = ["oid"] }
+# Batch / Action Wizard: bước xử lý (BatchStep) deserialize thẳng từ UI.
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 # Dựng PDF fixture (Form XObject...) trong integration test.

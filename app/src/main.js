@@ -4473,9 +4473,10 @@ $("secEncrypt").addEventListener("click", openEncryptDialog);
 $("secDecrypt").addEventListener("click", openDecryptDialog);
 $("secStripMeta").addEventListener("click", stripMetadataAction);
 $("secOptimize").addEventListener("click", optimizeSaveAction);
-$("secCreateId").addEventListener("click", openCreateIdDialog);
-$("secSign").addEventListener("click", openSignDialog);
-$("secVerify").addEventListener("click", () => verifySignaturesAction());
+// Chữ ký số nâng cao (PFX, chữ ký hiển thị, bảng xác thực) ở features/signx.js.
+$("secCreateId").addEventListener("click", () => (window.SignX ? SignX.createId() : openCreateIdDialog()));
+$("secSign").addEventListener("click", () => (window.SignX ? SignX.sign() : openSignDialog()));
+$("secVerify").addEventListener("click", () => (window.SignX ? SignX.verify() : verifySignaturesAction()));
 
 // Sửa nội dung (Phase 4)
 $("editModeBtn").addEventListener("click", toggleEditMode);

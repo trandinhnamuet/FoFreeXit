@@ -9,11 +9,13 @@ pub mod bookmarks;
 pub mod annot_ext;
 pub mod compare;
 pub mod compare_report;
+pub mod batch;
 pub mod convert;
 pub mod create;
 pub mod edit;
 pub mod editobj;
 pub mod export;
+pub mod fillsign;
 mod cffwrap;
 mod fontfix;
 mod formsurgery;
@@ -113,7 +115,14 @@ pub use formx::{
     apply_form_changes, create_fields, fill_form, list_widgets, reset_form, ButtonAction, FieldEdit,
     FieldSpec, FillValue, WidgetInfo,
 };
-pub use sign::{generate_self_signed_id, sign_pdf, verify_signatures, SignatureCheck};
+pub use sign::{
+    build_pfx, generate_self_signed_id, generate_self_signed_pfx, identity_info, list_signature_fields,
+    load_identity_file, sign_pdf, sign_pdf_ex, verify_signatures, CertDetails, Identity, IdentityInfo,
+    SigAppearance, SigFieldInfo, SignRequest, SignatureCheck,
+};
+pub use batch::{run_batch, validate_steps, BatchEvent, BatchFileResult, BatchStep, ConvertFormat};
+// MarkKind của fillsign trùng tên watermark::MarkKind → tiền tố Fill.
+pub use fillsign::{apply_fill_sign, FillItem, MarkKind as FillMarkKind};
 pub use render::{bind_pdfium, page_count, page_render_mismatch, render_page_png, PageImage};
 pub use text::{extract_text, page_char_boxes, search, CharBox, Rect, SearchHit};
 pub use watermark::{
