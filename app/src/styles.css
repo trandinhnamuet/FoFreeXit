@@ -773,3 +773,22 @@ body.ribbon-collapsed .tabrow { border-bottom: 1px solid var(--border); }
 .pagenum { width: 4ch; text-align: center; }
 .cs { border-width: 0; box-shadow: inset 0 0 0 1px rgba(127,127,127,.35); }
 .cs.cur { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+
+/* =====================================================================
+   Hoàn thiện: phần đầu cửa sổ một màu, focus tinh gọn, căn nhóm ribbon
+   ===================================================================== */
+/* Hàng tab (kể cả khi cửa sổ frameless) cùng nền với ribbon: sáng thì sáng hết, tối thì tối hết. */
+body.frameless .tabrow { background: var(--chrome); }
+body.reading.frameless .tabrow { background: var(--canvas); }
+
+/* Ô tìm kiếm: viền focus nằm trên cả viên thuốc, không vẽ thêm khung riêng cho input bên trong. */
+.searchpill input[type="search"]:focus, .searchpill input[type="search"]:focus-visible { outline: none; box-shadow: none; }
+.searchpill:has(#searchBox:focus-visible) { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Nhóm xếp chồng (vd. ngôn ngữ OCR) cao đúng bằng dải nút → nhãn cùng đường đáy với nút bên cạnh. */
+.rgroup-stack { align-self: stretch; height: auto; }
+
+/* Focus bàn phím trên nút màu đặc: vòng mềm thay cho outline dày chồng lên nền xanh. */
+:is(.modal-box button.primary, .files-btn, .tab-pill.on):focus-visible {
+  outline: none; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px rgba(var(--accent-rgb), .55);
+}
