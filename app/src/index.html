@@ -24,9 +24,12 @@
         <button class="tab-pill" data-tab="annotate" data-i18n="tab.annotate"></button>
         <button class="tab-pill" data-tab="page" data-i18n="tab.page"></button>
         <button class="tab-pill" data-tab="form" data-i18n="tab.form"></button>
+        <button class="tab-pill" data-tab="fillsign" data-i18n="sx.tab"></button>
         <button class="tab-pill" data-tab="convert" data-i18n="tab.convert"></button>
         <button class="tab-pill" data-tab="protect" data-i18n="tab.protect"></button>
+        <button class="tab-pill" data-tab="a11y" data-i18n="ds.tab.a11y"></button>
         <button class="tab-pill" data-tab="tools" data-i18n="tab.tools"></button>
+        <button class="tab-pill ai-pill" data-tab="ai" data-i18n="ai.tab"></button>
         <button class="tab-pill" data-tab="help" data-i18n="tab.help"></button>
       </div>
       <div class="spacer" data-tauri-drag-region></div>
@@ -39,6 +42,7 @@
         <button id="searchNext" class="sbtn" data-i18n-title="shell.searchNext"><i data-icon="chevron-down"></i></button>
       </div>
       <div class="tr-right">
+        <button id="aiQuickBtn" class="qbtn ai-quick" data-i18n-title="ai.quickTip"><i data-icon="sparkle"></i></button>
         <button id="langBtn" class="qbtn lang-btn" data-i18n-title="shell.language"><span id="langLabel">VI</span></button>
         <button id="themeBtn" class="qbtn" data-i18n-title="shell.theme"><i data-icon="theme-system" id="themeIcon"></i></button>
         <button id="readingBtn" class="qbtn" data-i18n-title="shell.reading"><i data-icon="eye"></i></button>
@@ -85,8 +89,25 @@
           <button class="rbtn" id="edAddText" data-i18n-title="ribbon.edit.addTextTip"><i data-icon="text-add"></i><span data-i18n="ribbon.edit.addText"></span></button>
           <button class="rbtn" id="edAddImage" data-i18n-title="ribbon.edit.addImageTip"><i data-icon="image-add"></i><span data-i18n="ribbon.edit.addImage"></span></button>
           <button class="rbtn lnk-tool" id="edLink" data-i18n-title="lnk.ribbonTip"><i data-icon="link"></i><span data-i18n="lnk.ribbon"></span></button>
+          <button class="rbtn rbtn-dd" id="edAddShape" data-i18n-title="editx.addShapeTip"><i data-icon="shapes"></i><span data-i18n="editx.addShape"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <!-- Ảnh / đối tượng (editx): thay, xoay, lật, cắt, trích ảnh -->
+        <div class="rgroup">
           <button class="rbtn" id="edReplaceImage" data-i18n-title="ribbon.edit.replaceImageTip" disabled><i data-icon="image-replace"></i><span data-i18n="ribbon.edit.replaceImage"></span></button>
-          <button class="rbtn" id="edDelete" data-i18n-title="ribbon.edit.deleteTip" disabled><i data-icon="trash"></i><span data-i18n="ribbon.edit.delete"></span></button>
+        </div>
+        <div class="rgroup rgroup-stack">
+          <div class="rrow">
+            <button id="edRotL" class="sq" data-i18n-title="editx.rotLTip" disabled><i data-icon="rotate-left"></i></button>
+            <button id="edRotR" class="sq" data-i18n-title="editx.rotRTip" disabled><i data-icon="rotate-right"></i></button>
+            <button id="edFlipH" class="sq" data-i18n-title="editx.flipHTip" disabled><i data-icon="flip-h"></i></button>
+            <button id="edFlipV" class="sq" data-i18n-title="editx.flipVTip" disabled><i data-icon="flip-v"></i></button>
+          </div>
+          <div class="rrow">
+            <button id="edCrop" class="sq-wide" data-i18n-title="editx.cropTip" disabled><i data-icon="crop"></i><span data-i18n="editx.crop"></span></button>
+            <button id="edExtractImage" class="sq-wide" data-i18n-title="editx.extractTip" disabled><i data-icon="image-export"></i><span data-i18n="editx.extract"></span></button>
+          </div>
+          <span class="rgroup-label" data-i18n="editx.objGroup"></span>
         </div>
         <span class="rsep"></span>
         <div class="rgroup rgroup-stack">
@@ -109,8 +130,39 @@
             <button id="edBold" class="sq ed-style" data-i18n-title="ribbon.edit.boldTip" disabled><b>B</b></button>
             <button id="edItalic" class="sq ed-style" data-i18n-title="ribbon.edit.italicTip" disabled><i class="it">I</i></button>
             <button id="edColorBtn" class="sq-wide" data-i18n-title="ribbon.edit.colorTip" disabled><span class="sw" id="edSw"></span><span data-i18n="common.color"></span></button>
+            <button id="edAlignL" class="sq" data-i18n-title="editx.alignLTip" disabled><i data-icon="align-text-left"></i></button>
+            <button id="edAlignC" class="sq" data-i18n-title="editx.alignCTip" disabled><i data-icon="align-text-center"></i></button>
+            <button id="edAlignR" class="sq" data-i18n-title="editx.alignRTip" disabled><i data-icon="align-text-right"></i></button>
           </div>
           <span class="rgroup-label" data-i18n="ribbon.edit.fontGroup"></span>
+        </div>
+        <span class="rsep"></span>
+        <!-- Định dạng đối tượng (editx): viền, nền, nét, độ dày, độ mờ, góc xoay -->
+        <div class="rgroup rgroup-stack">
+          <div class="rrow">
+            <button id="edStroke" class="sq-wide" data-i18n-title="editx.strokeTip" disabled><span class="sw" id="edStrokeSw"></span><span data-i18n="editx.stroke"></span></button>
+            <button id="edFill" class="sq-wide" data-i18n-title="editx.fillTip" disabled><span class="sw" id="edFillSw"></span><span data-i18n="editx.fill"></span></button>
+            <select id="edDash" class="rfield ex-dash" data-i18n-title="editx.dashTip" disabled>
+              <option value="solid" data-i18n="editx.dashSolid"></option>
+              <option value="dash" data-i18n="editx.dashDash"></option>
+              <option value="dot" data-i18n="editx.dashDot"></option>
+            </select>
+          </div>
+          <div class="rrow">
+            <label class="ex-num" data-i18n-title="editx.widthTip"><span data-i18n="editx.widthShort"></span><input id="edWidth" class="rfield" type="number" min="0" max="72" step="0.5" disabled></label>
+            <label class="ex-num" data-i18n-title="editx.opacityTip"><span data-i18n="editx.opacityShort"></span><input id="edOpacity" class="rfield" type="number" min="0" max="100" step="5" disabled></label>
+            <label class="ex-num" data-i18n-title="editx.angleTip"><span data-i18n="editx.angleShort"></span><input id="edAngle" class="rfield" type="number" min="-360" max="360" step="1" disabled></label>
+          </div>
+          <span class="rgroup-label" data-i18n="editx.formatGroup"></span>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn rbtn-dd" id="edArrange" data-i18n-title="editx.arrangeTip" disabled><i data-icon="arrange"></i><span data-i18n="editx.arrange"></span></button>
+          <button class="rbtn rbtn-dd" id="edAlignObj" data-i18n-title="editx.alignObjTip" disabled><i data-icon="align-objects"></i><span data-i18n="editx.alignObj"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="edDelete" data-i18n-title="ribbon.edit.deleteTip" disabled><i data-icon="trash"></i><span data-i18n="ribbon.edit.delete"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
@@ -192,18 +244,26 @@
           <button class="rbtn" id="orgDelete" data-i18n-title="ribbon.page.deleteTip"><i data-icon="page-delete"></i><span data-i18n="ribbon.page.delete"></span></button>
           <button class="rbtn" id="orgExtract" data-i18n-title="ribbon.page.extractTip"><i data-icon="page-extract"></i><span data-i18n="ribbon.page.extract"></span></button>
           <button class="rbtn" id="orgReplace" data-i18n-title="ribbon.page.replaceTip"><i data-icon="page-replace"></i><span data-i18n="ribbon.page.replace"></span></button>
+          <button class="rbtn" id="orgDuplicate" data-i18n-title="pagex.rb.duplicateTip"><i data-icon="page-duplicate"></i><span data-i18n="pagex.rb.duplicate"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
           <button class="rbtn" id="orgRotateL" data-i18n-title="ribbon.page.rotateLTip"><i data-icon="rotate-left"></i><span data-i18n="ribbon.page.rotateL"></span></button>
           <button class="rbtn" id="orgRotateR" data-i18n-title="ribbon.page.rotateRTip"><i data-icon="rotate-right"></i><span data-i18n="ribbon.page.rotateR"></span></button>
+          <button class="rbtn" id="orgReverse" data-i18n-title="pagex.rb.reverseTip"><i data-icon="page-reverse"></i><span data-i18n="pagex.rb.reverse"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
           <button class="rbtn" id="orgMerge" data-i18n-title="ribbon.page.mergeTip"><i data-icon="merge"></i><span data-i18n="ribbon.page.merge"></span></button>
           <button class="rbtn" id="orgSplit" data-i18n-title="ribbon.page.splitTip"><i data-icon="split"></i><span data-i18n="ribbon.page.split"></span></button>
-          <button class="rbtn" id="orgWatermark" data-i18n-title="ribbon.page.watermarkTip"><i data-icon="watermark"></i><span data-i18n="ribbon.page.watermark"></span></button>
-          <button class="rbtn" id="orgHeaderFooter" data-i18n-title="ribbon.page.headerFooterTip"><i data-icon="header-footer"></i><span data-i18n="ribbon.page.headerFooter"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <!-- Page Marks: mỗi nút mở menu Thêm… / Cập nhật… / Gỡ (features/pagex.js) -->
+        <div class="rgroup">
+          <button class="rbtn pm-drop" id="orgWatermark" data-pm="watermark" data-i18n-title="ribbon.page.watermarkTip" aria-haspopup="menu"><i data-icon="watermark"></i><span><span data-i18n="ribbon.page.watermark"></span><i data-icon="chevron-down-sm" class="pm-caret"></i></span></button>
+          <button class="rbtn pm-drop" id="pmBackground" data-pm="background" data-i18n-title="pagex.rb.backgroundTip" aria-haspopup="menu"><i data-icon="page-background"></i><span><span data-i18n="pagex.rb.background"></span><i data-icon="chevron-down-sm" class="pm-caret"></i></span></button>
+          <button class="rbtn pm-drop" id="orgHeaderFooter" data-pm="headerFooter" data-i18n-title="ribbon.page.headerFooterTip" aria-haspopup="menu"><i data-icon="header-footer"></i><span><span data-i18n="ribbon.page.headerFooter"></span><i data-icon="chevron-down-sm" class="pm-caret"></i></span></button>
+          <button class="rbtn pm-drop" id="pmBates" data-pm="bates" data-i18n-title="pagex.rb.batesTip" aria-haspopup="menu"><i data-icon="bates"></i><span><span data-i18n="pagex.rb.bates"></span><i data-icon="chevron-down-sm" class="pm-caret"></i></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
@@ -215,23 +275,84 @@
 
       <!-- FORM -->
       <div class="rpanel hidden" data-tab="form" id="formBar">
+        <div class="rgroup rgroup-stack fx-tools">
+          <div class="rrow">
+            <button class="fx-tool" data-fx-tool="text" data-i18n-title="fx.tool.textTip"><i data-icon="field-text"></i><span data-i18n="fx.tool.text"></span></button>
+            <button class="fx-tool" data-fx-tool="checkbox" data-i18n-title="fx.tool.checkboxTip"><i data-icon="field-check"></i><span data-i18n="fx.tool.checkbox"></span></button>
+            <button class="fx-tool" data-fx-tool="radio" data-i18n-title="fx.tool.radioTip"><i data-icon="field-radio"></i><span data-i18n="fx.tool.radio"></span></button>
+            <button class="fx-tool" data-fx-tool="combo" data-i18n-title="fx.tool.comboTip"><i data-icon="field-combo"></i><span data-i18n="fx.tool.combo"></span></button>
+          </div>
+          <div class="rrow">
+            <button class="fx-tool" data-fx-tool="list" data-i18n-title="fx.tool.listTip"><i data-icon="field-list"></i><span data-i18n="fx.tool.list"></span></button>
+            <button class="fx-tool" data-fx-tool="button" data-i18n-title="fx.tool.buttonTip"><i data-icon="field-button"></i><span data-i18n="fx.tool.button"></span></button>
+            <button class="fx-tool" data-fx-tool="date" data-i18n-title="fx.tool.dateTip"><i data-icon="field-date"></i><span data-i18n="fx.tool.date"></span></button>
+            <button class="fx-tool" data-fx-tool="signature" data-i18n-title="fx.tool.signatureTip"><i data-icon="field-sig"></i><span data-i18n="fx.tool.signature"></span></button>
+          </div>
+          <div class="rgroup-label" data-i18n="fx.group.create"></div>
+        </div>
+        <span class="rsep"></span>
         <div class="rgroup">
-          <button class="rbtn" id="fmFill" data-i18n-title="ribbon.form.fillTip"><i data-icon="form-fill"></i><span><span data-i18n="ribbon.form.fill"></span> (<span id="fmCount">0</span>)</span></button>
-          <button class="rbtn" id="fmCreate" data-i18n-title="ribbon.form.createTip"><i data-icon="field-add"></i><span data-i18n="ribbon.form.create"></span></button>
+          <button class="rbtn" id="fxRecognize" data-i18n-title="fx.recognizeTip"><i data-icon="wand"></i><span data-i18n="fx.recognize"></span></button>
+          <button class="rbtn" id="fxHighlight" data-i18n-title="fx.highlightTip"><i data-icon="field-highlight"></i><span data-i18n="fx.highlight"></span></button>
+          <button class="rbtn" id="fxDesign" data-i18n-title="fx.designTip"><i data-icon="field-edit"></i><span data-i18n="fx.design"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="fmFill" data-i18n-title="ribbon.form.fillTip"><i data-icon="form-fill"></i><span><span data-i18n="fx.fillList"></span> (<span id="fmCount">0</span>)</span></button>
+          <button class="rbtn" id="fxReset" data-i18n-title="fx.resetTip"><i data-icon="reset"></i><span data-i18n="fx.reset"></span></button>
           <button class="rbtn" id="fmFlatten" data-i18n-title="ribbon.form.flattenTip"><i data-icon="flatten"></i><span data-i18n="ribbon.form.flatten"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
-          <button class="rbtn" id="fmExportFdf" data-i18n-title="ribbon.form.exportFdfTip"><i data-icon="export"></i><span data-i18n="ribbon.form.exportFdf"></span></button>
-          <button class="rbtn" id="fmExportCsv" data-i18n-title="ribbon.form.exportCsvTip"><i data-icon="table"></i><span data-i18n="ribbon.form.exportCsv"></span></button>
-          <button class="rbtn" id="fmImportFdf" data-i18n-title="ribbon.form.importFdfTip"><i data-icon="import"></i><span data-i18n="ribbon.form.importFdf"></span></button>
+          <button class="rbtn" id="fxImport" data-i18n-title="fx.importTip"><i data-icon="import"></i><span><span data-i18n="fx.import"></span> ▾</span></button>
+          <button class="rbtn" id="fxExport" data-i18n-title="fx.exportTip"><i data-icon="export"></i><span><span data-i18n="fx.export"></span> ▾</span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn primary" id="fxSave" data-i18n-title="fx.saveTip" disabled><i data-icon="save"></i><span><span data-i18n="fx.save"></span> (<span id="fxDirtyN">0</span>)</span></button>
         </div>
         <span class="spacer"></span>
         <span id="formHint" class="rhint"></span>
       </div>
 
+      <!-- FILL & SIGN (features/signx.js) -->
+      <div class="rpanel" data-tab="fillsign" id="fsBar">
+        <div class="rgroup">
+          <button class="rbtn fs-tool" id="fsText" data-fs="text" data-i18n-title="sx.fsTextTip"><i data-icon="text-add"></i><span data-i18n="sx.fsText"></span></button>
+          <button class="rbtn fs-tool" id="fsCheck" data-fs="check" data-i18n-title="sx.fsCheckTip"><i data-icon="check-mark"></i><span data-i18n="sx.fsCheck"></span></button>
+          <button class="rbtn fs-tool" id="fsCross" data-fs="cross" data-i18n-title="sx.fsCrossTip"><i data-icon="cross-mark"></i><span data-i18n="sx.fsCross"></span></button>
+          <button class="rbtn fs-tool" id="fsDot" data-fs="dot" data-i18n-title="sx.fsDotTip"><i data-icon="dot-mark"></i><span data-i18n="sx.fsDot"></span></button>
+          <button class="rbtn fs-tool" id="fsLine" data-fs="line" data-i18n-title="sx.fsLineTip"><i data-icon="line-mark"></i><span data-i18n="sx.fsLine"></span></button>
+          <button class="rbtn fs-tool" id="fsDate" data-fs="date" data-i18n-title="sx.fsDateTip"><i data-icon="calendar"></i><span data-i18n="sx.fsDate"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="fsSig" data-i18n-title="sx.fsSignTip"><i data-icon="signature"></i><span data-i18n="sx.fsSign"></span></button>
+          <button class="rbtn" id="fsInit" data-i18n-title="sx.fsInitialsTip"><i data-icon="initials"></i><span data-i18n="sx.fsInitials"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn primary" id="fsApply" data-i18n-title="sx.fsApplyTip" disabled><i data-icon="save"></i><span><span data-i18n="sx.fsApply"></span> (<span id="fsCount">0</span>)</span></button>
+          <button class="rbtn" id="fsClear" data-i18n-title="sx.fsClearTip" disabled><i data-icon="discard"></i><span data-i18n="sx.fsClear"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" data-proxy="secSign" data-i18n-title="ribbon.protect.signTip"><i data-icon="shield-check"></i><span data-i18n="sx.fsDigital"></span></button>
+        </div>
+        <span class="spacer"></span>
+        <span id="fsHint" class="rhint"></span>
+      </div>
+
       <!-- CONVERT -->
       <div class="rpanel hidden" data-tab="convert" id="convBar">
+        <!-- Nhóm Tạo PDF (features/create.js) -->
+        <div class="rgroup">
+          <button class="rbtn cr-drop" id="cvCreateBtn" data-menu="cvCreateMenu" aria-haspopup="menu" data-i18n-title="create.fromFileTip"><i data-icon="file-plus"></i><span><span data-i18n="create.fromFile"></span> <i data-icon="chevron-down" class="cr-caret"></i></span></button>
+          <button class="rbtn" id="cvScanBtn" data-i18n-title="create.fromScannerTip"><i data-icon="scanner"></i><span data-i18n="create.fromScanner"></span></button>
+          <button class="rbtn" id="cvCombineBtn" data-i18n-title="create.combineTip"><i data-icon="merge"></i><span data-i18n="create.combine"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <!-- Nhóm OCR -->
         <div class="rgroup rgroup-stack">
           <div class="rrow">
             <select id="cvLang" class="rfield" data-i18n-title="ribbon.convert.ocrLangTip">
@@ -242,16 +363,19 @@
           </div>
           <span class="rgroup-label" data-i18n="ribbon.convert.ocrLang"></span>
         </div>
-        <button class="rbtn" id="cvOcr" data-i18n-title="ribbon.convert.ocrTip"><i data-icon="ocr"></i><span data-i18n="ribbon.convert.ocr"></span></button>
-        <span class="rsep"></span>
         <div class="rgroup">
-          <button class="rbtn" id="cvDocx" data-i18n-title="ribbon.convert.toWordTip"><i data-icon="file-word"></i><span data-i18n="ribbon.convert.toWord"></span></button>
-          <button class="rbtn" id="cvPng" data-i18n-title="ribbon.convert.toPngTip"><i data-icon="file-image"></i><span data-i18n="ribbon.convert.toPng"></span></button>
-          <button class="rbtn" id="cvTxt" data-i18n-title="ribbon.convert.toTxtTip"><i data-icon="file-text"></i><span data-i18n="ribbon.convert.toTxt"></span></button>
+          <button class="rbtn" id="cvOcr" data-i18n-title="ribbon.convert.ocrTip"><i data-icon="ocr"></i><span data-i18n="ribbon.convert.ocr"></span></button>
+          <button class="rbtn" id="cvOcrImage" data-i18n-title="create.ocrImageTip"><i data-icon="ocr-image"></i><span data-i18n="create.ocrImage"></span></button>
         </div>
         <span class="rsep"></span>
+        <!-- Nhóm Xuất -->
         <div class="rgroup">
-          <button class="rbtn" id="cvOffice" data-i18n-title="ribbon.convert.officeTip"><i data-icon="file-import"></i><span data-i18n="ribbon.convert.office"></span></button>
+          <button class="rbtn" id="cvDocx" data-i18n-title="ribbon.convert.toWordTip"><i data-icon="file-word"></i><span data-i18n="create.exp.word"></span></button>
+          <button class="rbtn" id="cvXlsx" data-i18n-title="create.exp.excelTip"><i data-icon="file-excel"></i><span data-i18n="create.exp.excel"></span></button>
+          <button class="rbtn" id="cvPptx" data-i18n-title="create.exp.pptTip"><i data-icon="file-ppt"></i><span data-i18n="create.exp.ppt"></span></button>
+          <button class="rbtn cr-drop" id="cvImageBtn" data-menu="cvImageMenu" aria-haspopup="menu" data-i18n-title="create.exp.imageTip"><i data-icon="file-image"></i><span><span data-i18n="create.exp.image"></span> <i data-icon="chevron-down" class="cr-caret"></i></span></button>
+          <button class="rbtn" id="cvHtml" data-i18n-title="create.exp.htmlTip"><i data-icon="file-code"></i><span data-i18n="create.exp.html"></span></button>
+          <button class="rbtn" id="cvTxt" data-i18n-title="ribbon.convert.toTxtTip"><i data-icon="file-text"></i><span data-i18n="create.exp.text"></span></button>
         </div>
         <span class="spacer"></span>
         <span id="convHint" class="rhint"></span>
@@ -261,13 +385,20 @@
       <div class="rpanel hidden" data-tab="protect" id="secBar">
         <div class="rgroup">
           <button class="rbtn atool" id="secRedactTool" data-tool="redact" data-i18n-title="ribbon.protect.redactMarkTip"><i data-icon="redact"></i><span data-i18n="ribbon.protect.redactMark"></span></button>
+          <button class="rbtn" id="secRedactPages" data-i18n-title="ds.rb.redactPagesTip"><i data-icon="redact-page"></i><span data-i18n="ds.rb.redactPages"></span></button>
+          <button class="rbtn" id="secRedactSearch" data-i18n-title="ds.rb.searchRedactTip"><i data-icon="search-redact"></i><span data-i18n="ds.rb.searchRedact"></span></button>
           <button class="rbtn" id="secRedactApply" data-i18n-title="ribbon.protect.redactApplyTip" disabled><i data-icon="redact-apply"></i><span><span data-i18n="ribbon.protect.redactApply"></span> (<span id="redactCount">0</span>)</span></button>
           <button class="rbtn" id="secRedactClear" data-i18n-title="ribbon.protect.redactClearTip" disabled><i data-icon="redact-clear"></i><span data-i18n="ribbon.protect.redactClear"></span></button>
+          <button class="rbtn" id="secRedactOptions" data-i18n-title="ds.rb.redactOptionsTip"><i data-icon="redact-style"></i><span data-i18n="ds.rb.redactOptions"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
           <button class="rbtn" id="secEncrypt" data-i18n-title="ribbon.protect.encryptTip"><i data-icon="lock"></i><span data-i18n="ribbon.protect.encrypt"></span></button>
           <button class="rbtn" id="secDecrypt" data-i18n-title="ribbon.protect.decryptTip"><i data-icon="unlock"></i><span data-i18n="ribbon.protect.decrypt"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="secSanitize" data-i18n-title="ds.rb.sanitizeTip"><i data-icon="sanitize"></i><span data-i18n="ds.rb.sanitize"></span></button>
           <button class="rbtn" id="secStripMeta" data-i18n-title="ribbon.protect.stripMetaTip"><i data-icon="eraser"></i><span data-i18n="ribbon.protect.stripMeta"></span></button>
         </div>
         <span class="rsep"></span>
@@ -280,6 +411,20 @@
         <span id="secHint" class="rhint"></span>
       </div>
 
+      <!-- ACCESSIBILITY (Trợ năng) -->
+      <div class="rpanel" data-tab="a11y" id="a11yBar">
+        <div class="rgroup">
+          <button class="rbtn" id="a11yFullCheck" data-i18n-title="ds.rb.fullCheckTip"><i data-icon="a11y-check"></i><span data-i18n="ds.rb.fullCheck"></span></button>
+          <button class="rbtn" id="a11yQuickCheck" data-i18n-title="ds.rb.quickCheckTip"><i data-icon="a11y"></i><span data-i18n="ds.rb.quickCheck"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="a11yAltText" data-i18n-title="ds.rb.altTextTip"><i data-icon="alt-text"></i><span data-i18n="ds.rb.altText"></span></button>
+          <button class="rbtn" id="a11yProps" data-i18n-title="ds.rb.docPropsTip"><i data-icon="file-info"></i><span data-i18n="ds.rb.docProps"></span></button>
+        </div>
+        <span class="spacer"></span>
+      </div>
+
       <!-- TOOLS -->
       <div class="rpanel" data-tab="tools" id="toolsBar">
         <div class="rgroup">
@@ -289,10 +434,48 @@
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
+          <button class="rbtn" id="cmpOpen" data-i18n-title="cmp.btnTip"><i data-icon="compare"></i><span data-i18n="cmp.btn"></span></button>
+          <button class="rbtn" id="sxBatch" data-i18n-title="sx.batchTip"><i data-icon="wizard"></i><span data-i18n="sx.batch"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
           <button class="rbtn" data-action="find" data-i18n-title="ribbon.home.findTip"><i data-icon="search-doc"></i><span data-i18n="ribbon.home.find"></span></button>
           <button class="rbtn" data-proxy="copyPage" data-i18n-title="ribbon.home.copyTip"><i data-icon="copy"></i><span data-i18n="ribbon.home.copy"></span></button>
           <button class="rbtn" data-proxy="readingBtn" data-i18n-title="shell.reading"><i data-icon="eye"></i><span data-i18n="ribbon.tools.reading"></span></button>
           <button class="rbtn" data-proxy="fullscreenBtn" data-i18n-title="shell.fullscreen"><i data-icon="fullscreen"></i><span data-i18n="ribbon.tools.fullscreen"></span></button>
+          <button class="rbtn" data-proxy="aiRbRead" data-i18n-title="ai.rb.readTip"><i data-icon="speaker"></i><span data-i18n="ai.rb.read"></span></button>
+        </div>
+        <span class="spacer"></span>
+      </div>
+
+      <!-- AI ASSISTANT (features/ai.js) -->
+      <div class="rpanel" data-tab="ai" id="aiBar">
+        <div class="rgroup">
+          <button class="rbtn" id="aiRbPanel" data-i18n-title="ai.rb.panelTip"><i data-icon="sparkle"></i><span data-i18n="ai.rb.panel"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" data-ai-act="summaryShort" data-i18n-title="ai.rb.summaryTip"><i data-icon="summary"></i><span data-i18n="ai.rb.summary"></span></button>
+          <button class="rbtn" data-ai-act="keyPoints" data-i18n-title="ai.rb.keyPointsTip"><i data-icon="key-points"></i><span data-i18n="ai.rb.keyPoints"></span></button>
+          <button class="rbtn" data-ai-act="extractInfo" data-i18n-title="ai.rb.extractTip"><i data-icon="table"></i><span data-i18n="ai.rb.extract"></span></button>
+          <button class="rbtn" data-ai-act="translate" data-i18n-title="ai.rb.translateTip"><i data-icon="translate"></i><span data-i18n="ai.rb.translate"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" data-ai-act="explain" data-i18n-title="ai.rb.explainTip"><i data-icon="explain"></i><span data-i18n="ai.rb.explain"></span></button>
+          <button class="rbtn" data-ai-act="rewrite" data-i18n-title="ai.rb.rewriteTip"><i data-icon="edit-text"></i><span data-i18n="ai.rb.rewrite"></span></button>
+          <button class="rbtn" data-ai-act="improve" data-i18n-title="ai.rb.improveTip"><i data-icon="wand"></i><span data-i18n="ai.rb.improve"></span></button>
+          <button class="rbtn" data-ai-act="grammar" data-i18n-title="ai.rb.grammarTip"><i data-icon="spellcheck"></i><span data-i18n="ai.rb.grammar"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" data-ai-act="redact" data-i18n-title="ai.rb.redactTip"><i data-icon="redact"></i><span data-i18n="ai.rb.redact"></span></button>
+          <button class="rbtn" data-ai-act="compare" data-i18n-title="ai.rb.compareTip"><i data-icon="compare"></i><span data-i18n="ai.rb.compare"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="aiRbRead" data-ai-act="read" data-i18n-title="ai.rb.readTip"><i data-icon="speaker"></i><span data-i18n="ai.rb.read"></span></button>
+          <button class="rbtn" id="aiRbSettings" data-i18n-title="ai.rb.settingsTip"><i data-icon="gear"></i><span data-i18n="ai.rb.settings"></span></button>
         </div>
         <span class="spacer"></span>
       </div>
@@ -312,6 +495,10 @@
       <button id="organizeModeBtn"></button>
       <button id="editModeBtn"></button>
       <button id="formModeBtn"></button>
+      <button id="fmCreate"></button>
+      <button id="fmExportFdf"></button>
+      <button id="fmExportCsv"></button>
+      <button id="fmImportFdf"></button>
       <button id="secModeBtn"></button>
       <button id="convModeBtn"></button>
     </div>
@@ -323,6 +510,7 @@
           <button id="tabThumbs" class="tab active" data-i18n-title="side.thumbs"><i data-icon="thumbs"></i></button>
           <button id="tabOutline" class="tab" data-i18n-title="side.outline"><i data-icon="outline"></i></button>
           <button id="tabComments" class="tab" data-i18n-title="side.comments"><i data-icon="comments"></i></button>
+          <button id="tabAttach" class="tab" data-i18n-title="ds.side.attachments"><i data-icon="attach"></i></button>
           <span class="spacer"></span>
           <button id="sidebarToggle" class="tab" data-i18n-title="side.toggle"><i data-icon="sidebar"></i></button>
         </div>
@@ -330,6 +518,7 @@
           <div id="thumbs" class="panel thumbs"></div>
           <div id="outline" class="panel outline hidden"></div>
           <div id="comments" class="panel comments hidden"></div>
+          <div id="attachments" class="panel attachments hidden"></div>
         </div>
       </aside>
 
@@ -349,6 +538,123 @@
           </div>
         </div>
       </main>
+
+      <!-- So sánh tài liệu: màn hình kết quả riêng (2 cột đồng bộ + bảng khác biệt). -->
+      <main id="compareStage" class="compare-stage hidden">
+        <div class="cmp-bar">
+          <div class="cmp-title"><i data-icon="compare"></i><span data-i18n="cmp.resultTitle"></span></div>
+          <span class="cmp-sep"></span>
+          <button id="cmpPrev" data-i18n-title="cmp.prevTip"><i data-icon="chevron-up"></i></button>
+          <span id="cmpPos" class="cmp-pos">0/0</span>
+          <button id="cmpNext" data-i18n-title="cmp.nextTip"><i data-icon="chevron-down"></i></button>
+          <span class="cmp-sep"></span>
+          <button id="cmpZoomOut" data-i18n-title="shell.zoomOut"><i data-icon="zoom-minus"></i></button>
+          <span id="cmpZoomLbl" class="cmp-zoomlbl">100%</span>
+          <button id="cmpZoomIn" data-i18n-title="shell.zoomIn"><i data-icon="zoom-plus"></i></button>
+          <span class="spacer"></span>
+          <button id="cmpRerun" data-i18n-title="cmp.rerunTip"><i data-icon="compare"></i><span data-i18n="cmp.rerun"></span></button>
+          <button id="cmpExport" class="primary" data-i18n-title="cmp.exportTip"><i data-icon="file-export"></i><span data-i18n="cmp.export"></span></button>
+          <button id="cmpClose" data-i18n-title="cmp.closeTip"><i data-icon="win-close"></i><span data-i18n="cmp.close"></span></button>
+        </div>
+        <div class="cmp-main">
+          <div class="cmp-docs">
+            <div class="cmp-heads">
+              <div class="cmp-head"><span class="cmp-tag" data-i18n="cmp.old"></span><span id="cmpOldHead" class="cmp-fn"></span></div>
+              <div class="cmp-head"><span class="cmp-tag new" data-i18n="cmp.new"></span><span id="cmpNewHead" class="cmp-fn"></span></div>
+            </div>
+            <div id="cmpScroll" class="cmp-scroll"><div id="cmpRows" class="cmp-rows"></div></div>
+          </div>
+          <aside class="cmp-panel">
+            <div class="cmp-sum">
+              <div id="cmpTotal" class="cmp-total"></div>
+              <div id="cmpChips" class="cmp-chips"></div>
+            </div>
+            <div id="cmpList" class="cmp-list" tabindex="0"></div>
+          </aside>
+        </div>
+        <div id="cmpBusy" class="cmp-busy hidden">
+          <div class="cmp-busy-box">
+            <div class="boot-spin"></div>
+            <div id="cmpBusyText" class="cmp-busy-text"></div>
+            <div class="cmp-prog"><div id="cmpBusyFill"></div></div>
+            <button id="cmpBusyCancel" data-i18n="common.cancel"></button>
+          </div>
+        </div>
+      </main>
+      <!-- AI Assistant (features/ai.js) — ẩn mặc định, kéo mép trái để đổi rộng -->
+      <aside id="aiPanel" class="ai-panel" hidden>
+        <div id="aiResizer" class="ai-resizer" data-i18n-title="ai.resizeTip"></div>
+        <header class="ai-head">
+          <span class="ai-logo"><i data-icon="sparkle"></i></span>
+          <div class="ai-title"><b data-i18n="ai.title"></b><span id="aiModelBadge" class="ai-badge"></span></div>
+          <span class="spacer"></span>
+          <button id="aiNewChat" class="qbtn" data-i18n-title="ai.newChat"><i data-icon="chat-new"></i></button>
+          <button id="aiSettingsBtn" class="qbtn" data-i18n-title="ai.settings"><i data-icon="gear"></i></button>
+          <button id="aiClose" class="qbtn" data-i18n-title="ai.close"><i data-icon="win-close"></i></button>
+        </header>
+        <div id="aiDocs" class="ai-docs"></div>
+        <div id="aiScroll" class="ai-scroll">
+          <div id="aiOnboard" class="ai-onboard" hidden>
+            <div class="ai-onboard-ic"><i data-icon="sparkle"></i></div>
+            <b data-i18n="ai.onboard.title"></b>
+            <p data-i18n="ai.onboard.text"></p>
+            <p class="muted" data-i18n="ai.onboard.privacy"></p>
+            <button id="aiOnboardBtn" class="ai-primary"><i data-icon="gear"></i><span data-i18n="ai.onboard.btn"></span></button>
+            <p class="muted" data-i18n="ai.onboard.tts"></p>
+          </div>
+          <div id="aiWelcome" class="ai-welcome">
+            <p class="ai-hello" data-i18n="ai.welcome"></p>
+            <div class="ai-cards">
+              <button class="ai-chip card" data-ai-act="summaryShort"><i data-icon="summary"></i><span data-i18n="ai.act.summaryShort"></span></button>
+              <button class="ai-chip card" data-ai-act="summaryLong"><i data-icon="file-text"></i><span data-i18n="ai.act.summaryLong"></span></button>
+              <button class="ai-chip card" data-ai-act="keyPoints"><i data-icon="key-points"></i><span data-i18n="ai.act.keyPoints"></span></button>
+              <button class="ai-chip card" data-ai-act="extractInfo"><i data-icon="table"></i><span data-i18n="ai.act.extractInfo"></span></button>
+            </div>
+            <p class="muted ai-tipline" data-i18n="ai.welcomeTip"></p>
+          </div>
+          <div id="aiThread" class="ai-thread"></div>
+        </div>
+        <div class="ai-tts" id="aiTts">
+          <i data-icon="speaker"></i>
+          <select id="aiTtsMode" class="rfield" data-i18n-title="ai.tts.modeTip">
+            <option value="page" data-i18n="ai.tts.modePage"></option>
+            <option value="from" data-i18n="ai.tts.modeFrom"></option>
+            <option value="selection" data-i18n="ai.tts.modeSel"></option>
+          </select>
+          <button id="aiTtsPlay" class="sbtn" data-i18n-title="ai.tts.play"><i data-icon="play"></i></button>
+          <button id="aiTtsStop" class="sbtn" data-i18n-title="ai.tts.stop" disabled><i data-icon="stop"></i></button>
+          <select id="aiTtsRate" class="rfield" data-i18n-title="ai.tts.rateTip">
+            <option value="0.75">0.75×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.25">1.25×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+          </select>
+          <select id="aiTtsVoice" class="rfield ai-voice" data-i18n-title="ai.tts.voiceTip"></select>
+          <span id="aiTtsState" class="ai-tts-state"></span>
+        </div>
+        <div class="ai-compose">
+          <div id="aiSelChip" class="ai-selchip" hidden>
+            <i data-icon="cursor"></i><span id="aiSelText"></span>
+            <button id="aiSelClear" data-i18n-title="ai.selClear"><i data-icon="win-close"></i></button>
+          </div>
+          <div id="aiChips" class="ai-chips">
+            <button class="ai-chip" data-ai-act="explain"><i data-icon="explain"></i><span data-i18n="ai.act.explain"></span></button>
+            <button class="ai-chip" data-ai-act="translate"><i data-icon="translate"></i><span data-i18n="ai.act.translate"></span></button>
+            <button class="ai-chip" data-ai-act="rewrite"><i data-icon="edit-text"></i><span data-i18n="ai.act.rewrite"></span></button>
+            <button class="ai-chip" data-ai-act="improve"><i data-icon="wand"></i><span data-i18n="ai.act.improve"></span></button>
+            <button class="ai-chip" data-ai-act="grammar"><i data-icon="spellcheck"></i><span data-i18n="ai.act.grammar"></span></button>
+            <button class="ai-chip" data-ai-act="redact"><i data-icon="redact"></i><span data-i18n="ai.act.redact"></span></button>
+            <button class="ai-chip" id="aiChipCompare" data-ai-act="compare" hidden><i data-icon="compare"></i><span data-i18n="ai.act.compare"></span></button>
+          </div>
+          <div class="ai-inputrow">
+            <textarea id="aiInput" rows="1" data-i18n-placeholder="ai.inputPh"></textarea>
+            <button id="aiSend" class="ai-send" data-i18n-title="ai.send"><i data-icon="send"></i></button>
+            <button id="aiStop" class="ai-send stop" data-i18n-title="ai.stop" hidden><i data-icon="stop"></i></button>
+          </div>
+          <div class="ai-disclaimer" data-i18n="ai.disclaimer"></div>
+        </div>
+      </aside>
     </div>
 
     <!-- ===== Thanh đáy ===== -->
@@ -381,11 +687,27 @@
         <div class="menu submenu" id="recentMenu"></div>
       </div>
       <button class="mitem" data-proxy="quickSave"><i data-icon="save"></i><span data-i18n="files.save"></span><kbd>Ctrl+S</kbd></button>
+      <button class="mitem" id="printItem"><i data-icon="printer"></i><span data-i18n="sx.print"></span><kbd>Ctrl+P</kbd></button>
       <div class="msep"></div>
+      <div class="mitem has-sub"><i data-icon="file-plus"></i><span data-i18n="create.newMenu"></span><i data-icon="chevron-right" class="mchev"></i>
+        <div class="menu submenu">
+          <button class="mitem" data-proxy="cvNewBlank"><i data-icon="file-blank"></i><span data-i18n="create.blank"></span></button>
+          <button class="mitem" data-proxy="cvNewImages"><i data-icon="file-image"></i><span data-i18n="create.fromImages"></span></button>
+          <button class="mitem" data-proxy="cvNewWeb"><i data-icon="globe"></i><span data-i18n="create.fromWeb"></span></button>
+          <button class="mitem" data-proxy="cvOffice"><i data-icon="file-import"></i><span data-i18n="create.fromOffice"></span></button>
+          <button class="mitem" data-proxy="cvCombineBtn"><i data-icon="merge"></i><span data-i18n="create.combine"></span></button>
+        </div>
+      </div>
       <div class="mitem has-sub"><i data-icon="file-export"></i><span data-i18n="files.exportAs"></span><i data-icon="chevron-right" class="mchev"></i>
         <div class="menu submenu">
           <button class="mitem" data-proxy="cvDocx"><i data-icon="file-word"></i><span data-i18n="ribbon.convert.toWord"></span></button>
+          <button class="mitem" data-proxy="cvXlsx"><i data-icon="file-excel"></i><span data-i18n="create.exp.toExcel"></span></button>
+          <button class="mitem" data-proxy="cvPptx"><i data-icon="file-ppt"></i><span data-i18n="create.exp.toPpt"></span></button>
           <button class="mitem" data-proxy="cvPng"><i data-icon="file-image"></i><span data-i18n="ribbon.convert.toPng"></span></button>
+          <button class="mitem" data-proxy="cvJpeg"><i data-icon="file-image"></i><span data-i18n="create.exp.toJpeg"></span></button>
+          <button class="mitem" data-proxy="cvTiff"><i data-icon="file-image"></i><span data-i18n="create.exp.toTiff"></span></button>
+          <button class="mitem" data-proxy="cvHtml"><i data-icon="file-code"></i><span data-i18n="create.exp.toHtml"></span></button>
+          <button class="mitem" data-proxy="cvRtf"><i data-icon="file-word"></i><span data-i18n="create.exp.toRtf"></span></button>
           <button class="mitem" data-proxy="cvTxt"><i data-icon="file-text"></i><span data-i18n="ribbon.convert.toTxt"></span></button>
         </div>
       </div>
@@ -396,6 +718,7 @@
         </div>
       </div>
       <button class="mitem" data-proxy="secOptimize"><i data-icon="compress"></i><span data-i18n="files.compress"></span></button>
+      <button class="mitem" data-proxy="cmpOpen"><i data-icon="compare"></i><span data-i18n="cmp.menu"></span></button>
       <div class="msep"></div>
       <button class="mitem" id="docPropsItem"><i data-icon="file-info"></i><span data-i18n="files.properties"></span></button>
       <div class="msep"></div>
@@ -416,6 +739,46 @@
       <button class="mitem" data-theme-set="system"><span class="mcheck"></span><i data-icon="theme-system"></i><span data-i18n="shell.themeSystem"></span></button>
     </div>
 
+    <!-- Menu thả xuống của Page Marks (Thêm / Cập nhật / Gỡ) -->
+    <div id="pmMenu" class="menu mini-menu hidden" role="menu"></div>
+    <!-- Popover Tạo PDF / Xuất ảnh (features/create.js) -->
+    <div id="cvCreateMenu" class="menu mini-menu cr-menu hidden" role="menu">
+      <button class="mitem" id="cvNewImages"><i data-icon="file-image"></i><span data-i18n="create.fromImages"></span></button>
+      <button class="mitem" id="cvOffice" data-i18n-title="ribbon.convert.officeTip"><i data-icon="file-import"></i><span data-i18n="create.fromOffice"></span></button>
+      <button class="mitem" id="cvNewText"><i data-icon="file-text"></i><span data-i18n="create.fromText"></span></button>
+      <button class="mitem" id="cvNewWeb"><i data-icon="globe"></i><span data-i18n="create.fromWeb"></span></button>
+      <button class="mitem" id="cvNewScan"><i data-icon="scanner"></i><span data-i18n="create.fromScanner"></span></button>
+      <button class="mitem" id="cvNewClipboard"><i data-icon="clipboard"></i><span data-i18n="create.fromClipboard"></span></button>
+      <button class="mitem" id="cvNewBlank"><i data-icon="file-blank"></i><span data-i18n="create.blank"></span></button>
+      <div class="msep"></div>
+      <button class="mitem" id="cvNewCombine"><i data-icon="merge"></i><span data-i18n="create.combine"></span></button>
+    </div>
+    <div id="cvImageMenu" class="menu mini-menu cr-menu hidden" role="menu">
+      <button class="mitem" id="cvPng"><i data-icon="file-image"></i><span data-i18n="create.exp.png"></span></button>
+      <button class="mitem" id="cvJpeg"><i data-icon="file-image"></i><span data-i18n="create.exp.jpeg"></span></button>
+      <button class="mitem" id="cvTiff"><i data-icon="file-image"></i><span data-i18n="create.exp.tiff"></span></button>
+      <div class="msep"></div>
+      <button class="mitem" id="cvRtf"><i data-icon="file-word"></i><span data-i18n="create.exp.rtf"></span></button>
+    </div>
+    <!-- Form: menu Nhập / Xuất / Đặt lại (features/formx.js) -->
+    <div id="fxImportMenu" class="menu mini-menu hidden" role="menu">
+      <button class="mitem" data-fx-import="fdf"><i data-icon="file-import"></i><span data-i18n="fx.fmt.fdf"></span></button>
+      <button class="mitem" data-fx-import="xfdf"><i data-icon="file-import"></i><span data-i18n="fx.fmt.xfdf"></span></button>
+      <button class="mitem" data-fx-import="csv"><i data-icon="file-import"></i><span data-i18n="fx.fmt.csv"></span></button>
+      <button class="mitem" data-fx-import="txt"><i data-icon="file-import"></i><span data-i18n="fx.fmt.txt"></span></button>
+    </div>
+    <div id="fxExportMenu" class="menu mini-menu hidden" role="menu">
+      <button class="mitem" data-fx-export="fdf"><i data-icon="export"></i><span data-i18n="fx.fmt.fdf"></span></button>
+      <button class="mitem" data-fx-export="xfdf"><i data-icon="export"></i><span data-i18n="fx.fmt.xfdf"></span></button>
+      <button class="mitem" data-fx-export="xml"><i data-icon="export"></i><span data-i18n="fx.fmt.xml"></span></button>
+      <button class="mitem" data-fx-export="csv"><i data-icon="export"></i><span data-i18n="fx.fmt.csv"></span></button>
+      <button class="mitem" data-fx-export="txt"><i data-icon="export"></i><span data-i18n="fx.fmt.txt"></span></button>
+    </div>
+    <div id="fxResetMenu" class="menu mini-menu hidden" role="menu">
+      <button class="mitem" data-fx-reset="defaults"><i data-icon="reset"></i><span data-i18n="fx.resetDefaults"></span></button>
+      <button class="mitem" data-fx-reset="clear"><i data-icon="redact-clear"></i><span data-i18n="fx.clearAll"></span></button>
+    </div>
+
     <div id="modalOverlay" class="modal-overlay hidden">
       <div id="modalBox" class="modal-box"></div>
     </div>
@@ -431,6 +794,9 @@
       <div class="boot-note" data-i18n="shell.booting"></div>
     </div>
 
+    <!-- Nội dung in (features/signx.js) — chỉ hiện khi in. -->
+    <div id="printRoot" aria-hidden="true"></div>
+
     <script src="i18n.js"></script>
     <script src="i18n/part-0-shell.js"></script>
     <script src="i18n/part-1.js"></script>
@@ -442,11 +808,28 @@
     <script src="i18n/part-7.js"></script>
     <script src="i18n/part-bookmarks.js"></script>
     <script src="i18n/part-annot.js"></script>
+    <script src="i18n/part-compare.js"></script>
+    <script src="i18n/part-pagex.js"></script>
+    <script src="i18n/part-docsec.js"></script>
+    <script src="i18n/part-editx.js"></script>
+    <script src="i18n/part-ai.js"></script>
+    <script src="i18n/part-create.js"></script>
+    <script src="i18n/part-formx.js"></script>
+    <script src="i18n/part-signx.js"></script>
     <script src="icons.js"></script>
     <script src="main.js"></script>
     <script src="shell.js"></script>
     <script src="shell-extras.js"></script>
     <script src="features/bookmarks.js"></script>
     <script src="features/annot.js"></script>
+    <script src="features/compare.js"></script>
+    <script src="features/pagex.js"></script>
+    <script src="features/docsec.js"></script>
+    <script src="features/editx.js"></script>
+    <script src="features/ai.js"></script>
+    <script src="features/create.js"></script>
+    <script src="features/formx.js"></script>
+    <script src="features/signx.js"></script>
+    <script src="features/ribbon-fit.js"></script>
   </body>
 </html>

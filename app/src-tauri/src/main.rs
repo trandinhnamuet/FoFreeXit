@@ -9,6 +9,14 @@ use serde::Serialize;
 use tauri_plugin_dialog::DialogExt;
 
 mod cmd_bookmarks;
+mod cmd_compare;
+mod cmd_pagex;
+mod cmd_docsec;
+mod cmd_editx;
+mod cmd_ai;
+mod cmd_create;
+mod cmd_formx;
+mod cmd_signx;
 
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
@@ -518,159 +526,12 @@ fn organize_materialize(
     Ok(tmp.to_string_lossy().into_owned())
 }
 
-fn parse_anchor(s: &str) -> Result<ff_engine::Anchor, String> {
-    use ff_engine::Anchor::*;
-    Ok(match s {
-        "top-left" => TopLeft,
-        "top-center" => TopCenter,
-        "top-right" => TopRight,
-        "middle-left" => MiddleLeft,
-        "center" => Center,
-        "middle-right" => MiddleRight,
-        "bottom-left" => BottomLeft,
-        "bottom-center" => BottomCenter,
-        "bottom-right" => BottomRight,
-        other => return Err(format!("vị trí neo không hợp lệ: {other}")),
-    })
-}
-
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WatermarkDto {
-    text: String,
-    font_size: f32,
-    color: [u8; 4],
-    #[serde(default)]
-    bold: bool,
-    #[serde(default)]
-    italic: bool,
-    #[serde(default)]
-    rotation_deg: f32,
-    anchor: String,
-    #[serde(default)]
-    pages: Vec<u16>,
-}
-
-/// Thêm watermark văn bản vào `input`, ghi ra `output`.
-#[tauri::command]
-fn watermark_add(
-    input: String,
-    spec: WatermarkDto,
-    output: String,
-    password: Option<String>,
-) -> Result<(), String> {
-    let pdfium = pdfium()?;
-    let anchor = parse_anchor(&spec.anchor)?;
-    let ws = ff_engine::WatermarkSpec {
-        text: spec.text,
-        font_size: spec.font_size,
-        color: spec.color,
-        bold: spec.bold,
-        italic: spec.italic,
-        rotation_deg: spec.rotation_deg,
-        anchor,
-        pages: spec.pages,
-    };
-    ff_engine::add_watermark(&pdfium, std::path::Path::new(&input), &ws, std::path::Path::new(&output), password.as_deref())
-        .map_err(|e| e.to_string())
-}
-
-#[derive(serde::Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct HeaderFooterDto {
-    #[serde(default)]
-    top_left: String,
-    #[serde(default)]
-    top_center: String,
-    #[serde(default)]
-    top_right: String,
-    #[serde(default)]
-    bottom_left: String,
-    #[serde(default)]
-    bottom_center: String,
-    #[serde(default)]
-    bottom_right: String,
-    font_size: f32,
-    color: [u8; 4],
-    margin_pt: f32,
-    #[serde(default)]
-    bold: bool,
-    #[serde(default)]
-    italic: bool,
-    #[serde(default)]
-    date: String,
-    #[serde(default)]
-    pages: Vec<u16>,
-}
-
-/// Thêm header/footer (gồm đánh số trang qua token {page}/{total}) vào `input`.
-#[tauri::command]
-fn header_footer_add(
-    input: String,
-    spec: HeaderFooterDto,
-    output: String,
-    password: Option<String>,
-) -> Result<(), String> {
-    let pdfium = pdfium()?;
-    let hf = ff_engine::HeaderFooterSpec {
-        top_left: spec.top_left,
-        top_center: spec.top_center,
-        top_right: spec.top_right,
-        bottom_left: spec.bottom_left,
-        bottom_center: spec.bottom_center,
-        bottom_right: spec.bottom_right,
-        font_size: spec.font_size,
-        color: spec.color,
-        margin_pt: spec.margin_pt,
-        bold: spec.bold,
-        italic: spec.italic,
-        date: spec.date,
-        pages: spec.pages,
-    };
-    ff_engine::add_header_footer(&pdfium, std::path::Path::new(&input), &hf, std::path::Path::new(&output), password.as_deref())
-        .map_err(|e| e.to_string())
-}
-
-fn render_temp_page(pdfium: &pdfium_render::prelude::Pdfium, path: &std::path::Path, page: u16, width: u32) -> Result<String, String> {
+pub(crate) fn render_temp_page(pdfium: &pdfium_render::prelude::Pdfium, path: &std::path::Path, page: u16, width: u32) -> Result<String, String> {
     let rendered = ff_engine::render::render_page(pdfium, path, page, width, None).map_err(|e| e.to_string())?;
     let mut buf = Cursor::new(Vec::new());
     rendered.image.write_to(&mut buf, image::ImageFormat::Png).map_err(|e| e.to_string())?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(buf.get_ref());
     Ok(format!("data:image/png;base64,{b64}"))
-}
-
-/// Xem trước watermark trên 1 trang: áp vào file tạm rồi render, không sửa `input`.
-#[tauri::command]
-fn preview_watermark(input: String, page: u16, spec: WatermarkDto, width: u32) -> Result<String, String> {
-    let pdfium = pdfium()?;
-    let anchor = parse_anchor(&spec.anchor)?;
-    let ws = ff_engine::WatermarkSpec {
-        text: spec.text, font_size: spec.font_size, color: spec.color,
-        bold: spec.bold, italic: spec.italic, rotation_deg: spec.rotation_deg,
-        anchor, pages: vec![page],
-    };
-    let tmp = std::env::temp_dir().join(format!("ff_preview_wm_{}.pdf", std::process::id()));
-    ff_engine::add_watermark(&pdfium, std::path::Path::new(&input), &ws, &tmp, None).map_err(|e| e.to_string())?;
-    let result = render_temp_page(&pdfium, &tmp, page, width);
-    let _ = std::fs::remove_file(&tmp);
-    result
-}
-
-/// Xem trước header/footer trên 1 trang: áp vào file tạm rồi render, không sửa `input`.
-#[tauri::command]
-fn preview_header_footer(input: String, page: u16, spec: HeaderFooterDto, width: u32) -> Result<String, String> {
-    let pdfium = pdfium()?;
-    let hf = ff_engine::HeaderFooterSpec {
-        top_left: spec.top_left, top_center: spec.top_center, top_right: spec.top_right,
-        bottom_left: spec.bottom_left, bottom_center: spec.bottom_center, bottom_right: spec.bottom_right,
-        font_size: spec.font_size, color: spec.color, margin_pt: spec.margin_pt,
-        bold: spec.bold, italic: spec.italic, date: spec.date, pages: vec![page],
-    };
-    let tmp = std::env::temp_dir().join(format!("ff_preview_hf_{}.pdf", std::process::id()));
-    ff_engine::add_header_footer(&pdfium, std::path::Path::new(&input), &hf, &tmp, None).map_err(|e| e.to_string())?;
-    let result = render_temp_page(&pdfium, &tmp, page, width);
-    let _ = std::fs::remove_file(&tmp);
-    result
 }
 
 // ---------- Phase 4: Sửa nội dung (Edit) ----------
@@ -693,6 +554,9 @@ struct ObjectInfoDto {
     font_embedded: Option<bool>,
     font_size: Option<f32>,
     color: Option<[u8; 4]>,
+    /// Viền/nền/độ mờ/góc xoay/kích thước ảnh (panel Format — cmd_editx).
+    #[serde(flatten)]
+    extra: cmd_editx::ObjExtraDto,
 }
 
 /// Liệt kê page object của 1 trang để UI vẽ overlay chỉnh sửa.
@@ -704,6 +568,7 @@ fn edit_list_objects(path: String, page: u16, password: Option<String>) -> Resul
     Ok(objs
         .into_iter()
         .map(|o| ObjectInfoDto {
+            extra: cmd_editx::obj_extra(&o), // đứng ĐẦU: mượn `o` trước khi các field bị move
             index: o.index,
             kind: o.kind.as_str().to_string(),
             rect: RectDto { left: o.rect.left, bottom: o.rect.bottom, right: o.rect.right, top: o.rect.top },
@@ -858,6 +723,9 @@ struct EditOpDto {
     /// mang style). None/thiếu = khối 1 style.
     #[serde(default)]
     rich_lines: Option<Vec<Vec<RichSegDto>>>,
+    /// Field của op object mới (rotate/flip/cropImage/addShape/arrange...).
+    #[serde(flatten)]
+    extra: cmd_editx::EditExtraDto,
 }
 
 /// 1 đoạn cùng style trong reflow nhiều-style. `bold`/`italic`: override
@@ -927,7 +795,7 @@ fn edit_op_from_dto(d: EditOpDto) -> Result<ff_engine::EditOp, String> {
             height_pt: d.height_pt,
             image_path: d.image_path,
         },
-        other => return Err(format!("op sửa nội dung không hỗ trợ: {other}")),
+        other => return cmd_editx::edit_op_extra(other, d.index, d.indices, &d.extra),
     })
 }
 
@@ -1539,6 +1407,7 @@ fn main() {
     }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(cmd_ai::AiState::default())
         .setup(|app| {
             // Cửa sổ tạo ẨN (tauri.conf.json visible:false) — UI gọi show()
             // khi frontend SẴN SÀNG để user không thấy khung trắng đơ lúc
@@ -1576,10 +1445,15 @@ fn main() {
             organize_merge,
             organize_split,
             organize_materialize,
-            watermark_add,
-            header_footer_add,
-            preview_watermark,
-            preview_header_footer,
+            cmd_pagex::pagex_stamp_add,
+            cmd_pagex::pagex_stamp_preview,
+            cmd_pagex::pagex_hf_add,
+            cmd_pagex::pagex_hf_preview,
+            cmd_pagex::pagex_bates_add,
+            cmd_pagex::pagex_marks_scan,
+            cmd_pagex::pagex_marks_remove,
+            cmd_pagex::pagex_pick_pdfs,
+            cmd_pagex::pagex_pick_stamp_file,
             edit_list_objects,
             edit_font_data,
             app_font_data,
@@ -1588,6 +1462,7 @@ fn main() {
             edit_preview,
             edit_cleanup,
             edit_flatten_to_temp,
+            cmd_editx::editx_extract_image,
             redact_apply,
             security_encrypt,
             security_decrypt,
@@ -1602,6 +1477,16 @@ fn main() {
             form_create,
             form_export,
             form_import_fdf,
+            cmd_formx::formx_widgets,
+            cmd_formx::formx_apply,
+            cmd_formx::formx_reset,
+            cmd_formx::formx_recognize,
+            cmd_formx::formx_export,
+            cmd_formx::formx_import,
+            cmd_formx::formx_read_data,
+            cmd_formx::formx_pick_export,
+            cmd_formx::formx_pick_import,
+            cmd_formx::formx_open_url,
             ocr_run,
             convert_images,
             convert_txt,
@@ -1629,6 +1514,67 @@ fn main() {
             cmd_annot::annot_default_author,
             cmd_annot::annot_pick_stamp_image,
             cmd_annot::annot_image_preview,
+            cmd_compare::compare_run,
+            cmd_compare::compare_cancel,
+            cmd_compare::compare_export_report,
+            cmd_docsec::redact_search,
+            cmd_docsec::redact_apply_styled,
+            cmd_docsec::sanitize_examine,
+            cmd_docsec::sanitize_apply,
+            cmd_docsec::attach_list,
+            cmd_docsec::attach_extract,
+            cmd_docsec::attach_open,
+            cmd_docsec::attach_apply,
+            cmd_docsec::pick_files,
+            cmd_docsec::pick_save_file,
+            cmd_docsec::docprops_read,
+            cmd_docsec::docprops_write,
+            cmd_docsec::a11y_check,
+            cmd_docsec::a11y_fix,
+            cmd_docsec::a11y_figures,
+            cmd_docsec::a11y_set_alt,
+            cmd_ai::ai_get_settings,
+            cmd_ai::ai_save_settings,
+            cmd_ai::ai_test_connection,
+            cmd_ai::ai_chat,
+            cmd_ai::ai_cancel,
+            cmd_ai::ai_doc_pages,
+            cmd_ai::ai_find_pii,
+            cmd_ai::ai_pick_pdfs,
+            cmd_ai::ai_export_text,
+            cmd_create::create_from_images,
+            cmd_create::create_blank,
+            cmd_create::create_from_text,
+            cmd_create::create_from_web,
+            cmd_create::create_from_office,
+            cmd_create::create_combine,
+            cmd_create::create_source_info,
+            cmd_create::create_tools_status,
+            cmd_create::create_scan_page,
+            cmd_create::create_clipboard_image,
+            cmd_create::create_cleanup,
+            cmd_create::pick_images,
+            cmd_create::pick_text_file,
+            cmd_create::pick_html_file,
+            cmd_create::pick_combine_files,
+            cmd_create::export_run,
+            cmd_create::ocr_run_ex,
+            cmd_create::ocr_images,
+            cmd_signx::signx_read_image,
+            cmd_signx::signx_id_info,
+            cmd_signx::signx_create_pfx,
+            cmd_signx::signx_pick_id,
+            cmd_signx::signx_pick_save_pfx,
+            cmd_signx::signx_list_fields,
+            cmd_signx::signx_sign,
+            cmd_signx::signx_verify,
+            cmd_signx::fillsign_apply,
+            cmd_signx::print_render_page,
+            cmd_signx::batch_run,
+            cmd_signx::batch_cancel,
+            cmd_signx::batch_validate,
+            cmd_signx::batch_pick_files,
+            cmd_signx::batch_list_folder
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");

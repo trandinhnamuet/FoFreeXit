@@ -22,6 +22,14 @@ image = "0.25"
 pdfium-render = { version = "0.8", default-features = false, features = ["pdfium_7350", "thread_safe", "image"] }
 lopdf = "0.36"
 ff-engine = { path = "../../crates/ff-engine" }
+# AI Assistant (cmd_ai.rs): HTTPS tới api.anthropic.com. rustls + ring (không
+# cần OpenSSL/CMake/NASM trên Windows); roots Mozilla + kho chứng chỉ hệ thống
+# (proxy doanh nghiệp tự ký).
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "rustls-tls-native-roots", "charset", "http2"] }
+tokio = { version = "1", features = ["sync", "macros", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [profile.release]
 opt-level = "s"

@@ -48,6 +48,40 @@ fn obj_rect(obj: &PdfPageObject) -> Option<Rect> {
     })
 }
 
+/// Căn lề chữ phủ trên vùng redact.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RedactAlign {
+    Left,
+    Center,
+    Right,
+}
+
+/// Giao diện vùng đã redact (Foxit: Redaction Properties › Appearance): màu
+/// tô, chữ phủ ("[ĐÃ XOÁ]"…), màu/cỡ chữ (None = tự co), lặp chữ phủ kín vùng,
+/// căn lề. Mặc định: khối đen, không chữ.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RedactStyle {
+    pub fill: [u8; 3],
+    pub overlay_text: Option<String>,
+    pub text_color: [u8; 3],
+    pub font_size: Option<f32>,
+    pub repeat: bool,
+    pub align: RedactAlign,
+}
+
+impl Default for RedactStyle {
+    fn default() -> Self {
+        RedactStyle {
+            fill: [0, 0, 0],
+            overlay_text: None,
+            text_color: [255, 255, 255],
+            font_size: None,
+            repeat: false,
+            align: RedactAlign::Center,
+        }
+    }
+}
+
 /// Xoá thật nội dung trong các vùng `areas` (điểm PDF) trên trang `page_index`,
 /// ghi ra `output`. Trả về số object đã xoá/bôi đen (để UI báo cáo).
 pub fn redact_areas(
@@ -58,7 +92,38 @@ pub fn redact_areas(
     output: &Path,
     password: Option<&str>,
 ) -> Result<usize, EngineError> {
+    redact_areas_styled(pdfium, input, page_index, areas, false, &RedactStyle::default(), output, password)
+}
+
+/// Như `redact_areas` nhưng có giao diện tuỳ chọn (`style`) và chế độ bôi đen
+/// NGUYÊN TRANG (`whole_page`: xoá mọi object + chú thích của trang, phủ khối
+/// màu toàn MediaBox — Foxit "Redact Page"). Chú thích (comment/link/field)
+/// chạm vùng redact cũng bị xoá khỏi trang.
+#[allow(clippy::too_many_arguments)]
+pub fn redact_areas_styled(
+    pdfium: &Pdfium,
+    input: &Path,
+    page_index: u16,
+    areas: &[Rect],
+    whole_page: bool,
+    style: &RedactStyle,
+    output: &Path,
+    password: Option<&str>,
+) -> Result<usize, EngineError> {
     let err = |e: PdfiumError| EngineError::Pdfium(format!("redact: {e}"));
+    let mut areas_owned: Vec<Rect> = areas.to_vec();
+    if whole_page {
+        let doc = pdfium
+            .load_pdf_from_file(input, password)
+            .map_err(|e| EngineError::Pdfium(e.to_string()))?;
+        let page = doc
+            .pages()
+            .get(page_index)
+            .map_err(|e| EngineError::Pdfium(format!("không lấy được trang {page_index}: {e}")))?;
+        let r = page.boundaries().media().map(|b| b.bounds).unwrap_or_else(|_| page.page_size());
+        areas_owned = vec![Rect { left: r.left().value, bottom: r.bottom().value, right: r.right().value, top: r.top().value }];
+    }
+    let areas: &[Rect] = &areas_owned;
 
     // Char boxes của trang (đọc TRƯỚC khi mở document ghi) — để tỉa text theo
     // KÝ TỰ: chỉ xoá ký tự nằm trong vùng redact, giữ phần còn lại đúng chỗ.
@@ -83,6 +148,11 @@ pub fn redact_areas(
             .get(page_index)
             .map_err(|e| EngineError::Pdfium(format!("không lấy được trang {page_index}: {e}")))?;
         for (i, obj) in page.objects().iter().enumerate() {
+            if whole_page {
+                // Nguyên trang: xoá MỌI object (kể cả nằm ngoài MediaBox).
+                to_remove.push(i);
+                continue;
+            }
             let Some(b) = obj_rect(&obj) else { continue };
             let cuts: Vec<Rect> = areas.iter().filter_map(|a| intersection(a, &b)).collect();
             if cuts.is_empty() {
@@ -139,6 +209,20 @@ pub fn redact_areas(
         trim_tokens.push(token);
     }
 
+    // Font cho chữ phủ (Noto đóng gói / font hệ thống có tiếng Việt).
+    let overlay: Option<String> = style.overlay_text.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let mut overlay_font: Option<(PdfFontToken, Vec<u8>)> = None;
+    if overlay.is_some() {
+        let bytes = crate::annot::find_font_bytes(false, false)
+            .ok_or_else(|| EngineError::Pdfium("không tìm thấy font để vẽ chữ phủ redact".into()))?;
+        let token = document
+            .fonts_mut()
+            .load_true_type_from_bytes(&bytes, true)
+            .map_err(|e| EngineError::Pdfium(format!("nạp font chữ phủ: {e}")))?;
+        overlay_font = Some((token, bytes));
+    }
+    let mut removed_annots = 0usize;
+
     let touched = to_remove.len();
     // ---- Pha GHI (mượn trang mut).
     {
@@ -190,24 +274,130 @@ pub fn redact_areas(
                 .map_err(err)?;
         }
 
-        // Khối đen phủ mỗi vùng — dấu hiệu thị giác chuẩn của redaction.
+        // Khối màu phủ mỗi vùng — dấu hiệu thị giác chuẩn của redaction.
+        let [fr, fg, fb] = style.fill;
         for a in areas {
             page.objects_mut()
                 .create_path_object_rect(
                     PdfRect::new_from_values(a.bottom, a.left, a.top, a.right),
                     None,
                     None,
-                    Some(PdfColor::new(0, 0, 0, 255)),
+                    Some(PdfColor::new(fr, fg, fb, 255)),
                 )
                 .map_err(err)?;
         }
 
+        // Chữ phủ (overlay text) vẽ SAU khối màu.
+        if let (Some(text), Some((token, face_bytes))) = (overlay.as_deref(), overlay_font.as_ref()) {
+            if let Ok(face) = ttf_parser::Face::parse(face_bytes, 0) {
+                let [tr, tg, tb] = style.text_color;
+                for a in areas {
+                    for (s, x, y, size) in layout_overlay(text, &face, a, style) {
+                        let mut o = page
+                            .objects_mut()
+                            .create_text_object(PdfPoints::new(x), PdfPoints::new(y), s, *token, PdfPoints::new(size))
+                            .map_err(err)?;
+                        o.set_fill_color(PdfColor::new(tr, tg, tb, 255)).map_err(err)?;
+                    }
+                }
+            }
+        }
+
         page.regenerate_content().map_err(err)?;
+
+        // Chú thích chạm vùng redact (comment, link, field…) cũng phải đi —
+        // nội dung/giá trị của chúng nằm ngay trong file.
+        loop {
+            let victim = page.annotations().iter().position(|an| {
+                whole_page
+                    || an
+                        .bounds()
+                        .map(|q| {
+                            let r = Rect { left: q.left().value, bottom: q.bottom().value, right: q.right().value, top: q.top().value };
+                            areas.iter().any(|a| intersection(a, &r).is_some())
+                        })
+                        .unwrap_or(false)
+            });
+            let Some(idx) = victim else { break };
+            let Ok(an) = page.annotations().get(idx) else { break };
+            if page.annotations_mut().delete_annotation(an).is_err() {
+                break;
+            }
+            removed_annots += 1;
+        }
     }
     document
         .save_to_file(output)
         .map_err(|e| EngineError::Pdfium(format!("lưu file: {}", crate::pdfium_msg(&e))))?;
-    Ok(touched)
+    Ok(touched + removed_annots)
+}
+
+/// Bề rộng chuỗi (điểm) ở cỡ `size` theo metrics font.
+fn text_width(face: &ttf_parser::Face, s: &str, size: f32) -> f32 {
+    let upem = face.units_per_em().max(1) as f32;
+    s.chars()
+        .map(|c| {
+            face.glyph_index(c)
+                .and_then(|g| face.glyph_hor_advance(g))
+                .map(|a| a as f32)
+                .unwrap_or(upem * 0.5)
+        })
+        .sum::<f32>()
+        * size
+        / upem
+}
+
+/// Dàn chữ phủ trong vùng `a`: trả các (chuỗi, x, baseline, cỡ). Cỡ None →
+/// tự co vừa vùng (như Foxit "Auto-size text to fit redaction region"); lặp →
+/// nhiều hàng, mỗi hàng lặp chữ kín bề ngang.
+fn layout_overlay(text: &str, face: &ttf_parser::Face, a: &Rect, style: &RedactStyle) -> Vec<(String, f32, f32, f32)> {
+    let w = (a.right - a.left).max(0.0);
+    let h = (a.top - a.bottom).max(0.0);
+    if w < 2.0 || h < 2.0 {
+        return Vec::new();
+    }
+    let pad = (h * 0.08).clamp(0.5, 3.0);
+    let unit_w = text_width(face, text, 1.0).max(0.01);
+    let fit_w = (w - 2.0 * pad) / unit_w;
+    let mut size = match style.font_size {
+        Some(s) if s > 0.0 => s,
+        _ => ((h - 2.0 * pad) * 0.8).min(if style.repeat { f32::MAX } else { fit_w }).min(48.0),
+    };
+    // Cỡ cố định mà không vừa → co lại (không để chữ tràn khỏi vùng).
+    size = size.min(fit_w).min((h - 2.0 * pad) * 0.9);
+    if size < 3.0 {
+        return Vec::new();
+    }
+    let asc = face.ascender() as f32 / face.units_per_em().max(1) as f32;
+    let desc = -(face.descender() as f32) / face.units_per_em().max(1) as f32;
+    let line_h = size * (asc + desc).max(1.0) * 1.05;
+    let place = |s: String, y: f32| {
+        let tw = text_width(face, &s, size);
+        let x = match style.align {
+            RedactAlign::Left => a.left + pad,
+            RedactAlign::Center => a.left + (w - tw) / 2.0,
+            RedactAlign::Right => a.right - pad - tw,
+        };
+        (s, x, y, size)
+    };
+    if !style.repeat {
+        // Căn giữa theo chiều dọc (theo hộp ascent+descent).
+        let y = a.bottom + (h - size * (asc + desc)) / 2.0 + size * desc;
+        return vec![place(text.to_string(), y)];
+    }
+    let sep = " ";
+    let unit = format!("{text}{sep}");
+    let per_row = (((w - 2.0 * pad) + text_width(face, sep, size)) / text_width(face, &unit, size)).floor().max(1.0) as usize;
+    let rows = ((h - 2.0 * pad) / line_h).floor().max(1.0) as usize;
+    let row_str = vec![text; per_row].join(sep);
+    let block_h = rows as f32 * line_h;
+    let top0 = a.top - (h - block_h) / 2.0;
+    (0..rows)
+        .map(|r| {
+            let y = top0 - line_h * r as f32 - size * asc;
+            place(row_str.clone(), y)
+        })
+        .collect()
 }
 
 /// Lập kế hoạch tỉa 1 text object theo ký tự. Trả None nếu không chắc chắn

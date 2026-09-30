@@ -7,20 +7,38 @@
 pub mod annot;
 pub mod bookmarks;
 pub mod annot_ext;
+pub mod compare;
+pub mod compare_report;
+pub mod batch;
 pub mod convert;
+pub mod create;
 pub mod edit;
+pub mod editobj;
+pub mod export;
+pub mod fillsign;
 mod cffwrap;
 mod fontfix;
 mod formsurgery;
+mod pagemark_cos;
 mod tounicode;
 pub(crate) mod fontmatch;
 pub mod form;
 pub mod links;
+mod formap;
+pub mod formdata;
+pub mod formrecog;
+pub mod formx;
 pub mod meta;
 pub mod ocr;
 pub mod organize;
 pub mod qpdf;
 pub mod redact;
+pub mod redact_search;
+pub mod sanitize;
+pub mod attachments;
+pub mod docprops;
+pub mod a11y;
+pub(crate) mod pdfobj;
 pub mod render;
 pub mod sign;
 pub mod split;
@@ -40,7 +58,15 @@ pub use annot_ext::{
     save_annotations, update_annotations, AnnotDetail, AnnotMeta, AnnotRef, AnnotSaveRequest,
     AnnotUpdate, ReplySpec, ShapeKind, ShapeSpec, StampSpec,
 };
-pub use edit::{apply_edits, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
+pub use compare::{
+    compare_documents, diff_regions, Change, ChangeKind, CompareMode, CompareOptions, CompareProgress,
+    CompareResult, CompareSummary, PagePair, RawImage, COMPARE_CANCELLED,
+};
+pub use compare_report::{export_compare_report, ReportInfo, ReportLabels, ReportStats};
+pub use edit::{apply_edits, extract_image, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
+// ShapeKind/ShapeSpec của editobj (hình vẽ trong nội dung trang) trùng tên với
+// annot_ext (chú thích) → re-export với tiền tố Edit.
+pub use editobj::{ArrangeMode, PathStyle, ShapeKind as EditShapeKind, ShapeSpec as EditShapeSpec};
 pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};
 pub use organize::{
     build_document, delete_pages, extract_pages, identity_plan, merge_files, rotate_pages,
@@ -51,18 +77,59 @@ pub use qpdf::{
     find_qpdf, optimize_save, repair, Permissions,
 };
 pub use convert::{
-    export_docx, export_images, export_text, find_soffice, office_to_pdf, pdf_to_docx_via_soffice,
+    export_docx, export_docx_pages, export_images, export_text, find_soffice, office_to_pdf,
+    pdf_to_docx_via_soffice, pdf_to_pptx_via_soffice,
+    text_to_docx,
 };
 pub use form::{
     create_form_fields, export_csv, export_fdf, fill_form_fields, flatten_form, import_fdf,
     list_form_fields, parse_fdf, FieldKind, FieldValue, FormField, NewField,
 };
-pub use ocr::{find_tesseract, ocr_add_text_layer, ocr_page_words, OcrWord};
-pub use redact::redact_areas;
-pub use sign::{generate_self_signed_id, sign_pdf, verify_signatures, SignatureCheck};
+pub use ocr::{
+    find_tesseract, ocr_add_text_layer, ocr_document, ocr_images_to_pdf, ocr_page_words, ocr_page_words_ex,
+    OcrOptions, OcrReport, OcrWord,
+};
+pub use create::{
+    blank_pdf, combine_files, find_browser, html_to_pdf, image_page_count, images_to_pdf, source_kind,
+    standard_page_size, text_to_pdf, CombineOptions, ImagePdfOptions, Orientation, PageSizeMode, TextPdfOptions,
+};
+pub use export::{
+    export_html, export_page_images, export_pptx, export_rtf, export_text_range, export_tiff, export_xlsx,
+    resolve_pages, subset_to_temp, HtmlMode, PptxOptions, RasterFormat,
+};
+pub use redact::{redact_areas, redact_areas_styled, RedactAlign, RedactStyle};
+pub use redact_search::{iban_valid, luhn_valid, search_redact, RedactHit, RedactPattern, RedactSearchSpec};
+pub use sanitize::{examine_document, sanitize_document, FormAction, SanitizeOptions, SanitizeReport};
+pub use attachments::{
+    apply_attachment_ops, extract_attachment, is_risky_file_name, list_attachments, Attachment, AttachmentOp,
+};
+pub use docprops::{
+    read_properties, write_properties, DocProperties, DocPropsUpdate, FontInfo, InitialView, SecurityInfo,
+};
+pub use a11y::{
+    check_accessibility, fix_accessibility, list_figures, set_alt_texts, A11yCheck, A11yFixes, CheckStatus, FigureInfo,
+};
+pub use formdata::{export_form_data, import_form_data, parse_xfdf, read_form_data};
+pub use formrecog::{recognize_fields, FieldProposal};
+pub use formx::{
+    apply_form_changes, create_fields, fill_form, list_widgets, reset_form, ButtonAction, FieldEdit,
+    FieldSpec, FillValue, WidgetInfo,
+};
+pub use sign::{
+    build_pfx, generate_self_signed_id, generate_self_signed_pfx, identity_info, list_signature_fields,
+    load_identity_file, sign_pdf, sign_pdf_ex, verify_signatures, CertDetails, Identity, IdentityInfo,
+    SigAppearance, SigFieldInfo, SignRequest, SignatureCheck,
+};
+pub use batch::{run_batch, validate_steps, BatchEvent, BatchFileResult, BatchStep, ConvertFormat};
+// MarkKind của fillsign trùng tên watermark::MarkKind → tiền tố Fill.
+pub use fillsign::{apply_fill_sign, FillItem, MarkKind as FillMarkKind};
 pub use render::{bind_pdfium, page_count, page_render_mismatch, render_page_png, PageImage};
 pub use text::{extract_text, page_char_boxes, search, CharBox, Rect, SearchHit};
-pub use watermark::{add_header_footer, add_watermark, Anchor, HeaderFooterSpec, WatermarkSpec};
+pub use watermark::{
+    add_background, add_bates, add_header_footer, add_watermark, preview_page_mark, remove_page_marks,
+    scan_page_marks, Anchor, BatesFormat, BatesRange, FontChoice, HeaderFooterSpec, MarkCounts, MarkKind,
+    PageMarkJob, PageSubset, StampSource, TextStyle, WatermarkSpec,
+};
 
 /// Chuỗi lỗi PDFium dễ đọc. `PdfiumError` của pdfium-render in Display bằng
 /// Debug (vd `IoError(Os { code: 3, kind: NotFound, ... })`); lỗi IO thì dùng

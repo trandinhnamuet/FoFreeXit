@@ -17,3 +17,7 @@ ENV FOFREEXIT_PDFIUM_PATH=/opt/pdfium/lib \
     FOFREEXIT_QPDF_PATH=/usr/bin/qpdf \
     CARGO_TARGET_DIR=/target
 WORKDIR /src
+# Kiểm tra biên dịch code riêng Windows (#[cfg(windows)]) từ Linux:
+#   run.ps1 cargo check --target x86_64-pc-windows-gnu --manifest-path app/src-tauri/Cargo.toml
+RUN apt-get update && apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64 \
+    && rm -rf /var/lib/apt/lists/* && rustup target add x86_64-pc-windows-gnu

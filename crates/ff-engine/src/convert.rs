@@ -122,13 +122,28 @@ pub fn export_docx(
     output: &Path,
     password: Option<&str>,
 ) -> Result<(), EngineError> {
-    let dims = crate::meta::page_dims(pdfium, input, password)?;
+    export_docx_pages(pdfium, input, output, &[], password)
+}
+
+/// Như `export_docx`, chỉ các trang `pages` (0-based; rỗng = mọi trang).
+pub fn export_docx_pages(
+    pdfium: &Pdfium,
+    input: &Path,
+    output: &Path,
+    pages: &[u16],
+    password: Option<&str>,
+) -> Result<(), EngineError> {
+    let total = crate::render::page_count(pdfium, input, password)?;
+    let list = crate::export::resolve_pages(total, pages);
+    if list.is_empty() {
+        return Err(EngineError::Pdfium("không có trang nào trong phạm vi đã chọn".into()));
+    }
     let mut body = String::new();
-    for (i, d) in dims.iter().enumerate() {
+    for (i, &p) in list.iter().enumerate() {
         if i > 0 {
             body.push_str(r#"<w:p><w:r><w:br w:type="page"/></w:r></w:p>"#);
         }
-        for line in page_lines(pdfium, input, d.index, password)? {
+        for line in page_lines(pdfium, input, p, password)? {
             // w:sz theo half-point.
             let half_points = (line.size_pt * 2.0).round().clamp(8.0, 144.0) as u32;
             body.push_str(&format!(
@@ -158,12 +173,12 @@ pub fn export_docx(
     Ok(())
 }
 
-fn xml_escape(s: &str) -> String {
+pub(crate) fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
 /// Zip tối giản, method STORE (0), đủ chuẩn để Word/LibreOffice/unzip đọc.
-fn build_zip_stored(entries: &[(&str, &[u8])]) -> Vec<u8> {
+pub(crate) fn build_zip_stored(entries: &[(&str, &[u8])]) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let mut central: Vec<u8> = Vec::new();
     let mut offsets: Vec<u32> = Vec::new();
@@ -252,6 +267,22 @@ pub fn find_soffice() -> Result<PathBuf, EngineError> {
             return Ok(candidate);
         }
     }
+    // Vị trí cài chuẩn (bộ cài LibreOffice trên Windows không thêm vào PATH).
+    if cfg!(windows) {
+        for var in ["ProgramFiles", "ProgramFiles(x86)"] {
+            if let Ok(base) = std::env::var(var) {
+                let p = PathBuf::from(base).join(r"LibreOffice\program\soffice.exe");
+                if p.is_file() {
+                    return Ok(p);
+                }
+            }
+        }
+    } else if cfg!(target_os = "macos") {
+        let p = PathBuf::from("/Applications/LibreOffice.app/Contents/MacOS/soffice");
+        if p.is_file() {
+            return Ok(p);
+        }
+    }
     if Command::new(exe).arg("--version").output().is_ok() {
         return Ok(PathBuf::from(exe));
     }
@@ -322,6 +353,82 @@ pub fn pdf_to_docx_via_soffice(input: &Path, out_dir: &Path) -> Result<PathBuf, 
     let out = converted_path(input, out_dir, "docx");
     if !out.is_file() {
         return Err(EngineError::Pdfium("soffice không tạo được DOCX".into()));
+    }
+    Ok(out)
+}
+
+/// Văn bản thuần (Markdown nhẹ: `#`/`##`/`###` tiêu đề, `**đậm**`, dòng `---`
+/// = ngắt trang) → DOCX. Dùng cho AI Assistant (xuất bản dịch / tóm tắt).
+pub fn text_to_docx(text: &str, output: &Path) -> Result<(), EngineError> {
+    let mut body = String::new();
+    for raw in text.replace("\r\n", "\n").split('\n') {
+        let line = raw.trim_end();
+        if line.trim() == "---" || line.contains('\u{c}') {
+            body.push_str(r#"<w:p><w:r><w:br w:type="page"/></w:r></w:p>"#);
+            continue;
+        }
+        let (content, heading_hp) = if let Some(s) = line.strip_prefix("### ") {
+            (s, Some(26u32))
+        } else if let Some(s) = line.strip_prefix("## ") {
+            (s, Some(30))
+        } else if let Some(s) = line.strip_prefix("# ") {
+            (s, Some(36))
+        } else {
+            (line, None)
+        };
+        body.push_str("<w:p>");
+        // Tách **đậm** thành các run; tiêu đề thì đậm cả dòng.
+        for (i, seg) in content.split("**").enumerate() {
+            if seg.is_empty() {
+                continue;
+            }
+            let mut rpr = String::new();
+            if heading_hp.is_some() || i % 2 == 1 {
+                rpr.push_str("<w:b/>");
+            }
+            if let Some(hp) = heading_hp {
+                rpr.push_str(&format!(r#"<w:sz w:val="{hp}"/><w:szCs w:val="{hp}"/>"#));
+            }
+            let rpr = if rpr.is_empty() { String::new() } else { format!("<w:rPr>{rpr}</w:rPr>") };
+            body.push_str(&format!(
+                r#"<w:r>{rpr}<w:t xml:space="preserve">{}</w:t></w:r>"#,
+                xml_escape(seg)
+            ));
+        }
+        body.push_str("</w:p>");
+    }
+    let document_xml = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>{body}<w:sectPr/></w:body></w:document>"#
+    );
+    const CONTENT_TYPES: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#;
+    const RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#;
+    let entries: Vec<(&str, &[u8])> = vec![
+        ("[Content_Types].xml", CONTENT_TYPES.as_bytes()),
+        ("_rels/.rels", RELS.as_bytes()),
+        ("word/document.xml", document_xml.as_bytes()),
+    ];
+    std::fs::write(output, build_zip_stored(&entries))?;
+    Ok(())
+}
+
+/// PDF → PowerPoint qua LibreOffice (import PDF của Impress: hình + chữ thành
+/// shape sửa được). Trả đường dẫn PPTX tạo ra trong `out_dir`.
+pub fn pdf_to_pptx_via_soffice(input: &Path, out_dir: &Path) -> Result<PathBuf, EngineError> {
+    std::fs::create_dir_all(out_dir)?;
+    run_soffice(&[
+        "--infilter=impress_pdf_import",
+        "--convert-to",
+        "pptx:Impress MS PowerPoint 2007 XML",
+        "--outdir",
+        &out_dir.to_string_lossy(),
+        &input.to_string_lossy(),
+    ])?;
+    let out = converted_path(input, out_dir, "pptx");
+    if !out.is_file() {
+        return Err(EngineError::Pdfium("soffice không tạo được PPTX".into()));
     }
     Ok(out)
 }

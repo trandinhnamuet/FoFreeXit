@@ -159,6 +159,8 @@ I18N.add("en", {
   // ---------- Thuộc tính tài liệu ----------
   $("docPropsItem").addEventListener("click", () => {
     Shell.closeMenus();
+    // Hộp thoại đầy đủ, sửa được (features/docsec.js); bản chỉ-đọc dưới đây là dự phòng.
+    if (window.DocSec) { DocSec.openProperties(); return; }
     const docPath = lastLoaded || state.path;
     if (!docPath || !state.pages.length) { $("status").textContent = t("x.noDoc"); return; }
     const p0 = state.pages[0];

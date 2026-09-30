@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use ff_engine::{Anchor, HeaderFooterSpec, Rect, WatermarkSpec};
+use ff_engine::{Anchor, HeaderFooterSpec, Rect, StampSource, TextStyle, WatermarkSpec};
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -141,16 +141,16 @@ fn text_union(pdf: &pdfium_render::prelude::Pdfium, path: &Path, needle: &str) -
 }
 
 fn watermark(text: &str) -> WatermarkSpec {
-    WatermarkSpec {
+    let mut spec = WatermarkSpec::text(text);
+    spec.source = StampSource::Text {
         text: text.to_string(),
-        font_size: 24.0,
-        color: [200, 0, 0, 255],
-        bold: false,
-        italic: false,
-        rotation_deg: 0.0,
-        anchor: Anchor::Center,
-        pages: vec![0],
-    }
+        style: TextStyle { font_size: 24.0, color: [200, 0, 0], ..Default::default() },
+    };
+    spec.rotation_deg = 0.0;
+    spec.opacity = 1.0;
+    spec.anchor = Anchor::Center;
+    spec.pages = vec![0];
+    spec
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn header_footer_inside_crop_box() {
         bottom_center: "HFCROP".into(),
         font_size: 12.0,
         color: [0, 0, 0, 255],
-        margin_pt: 20.0,
+        margin_bottom: 20.0,
         pages: vec![0],
         ..Default::default()
     };

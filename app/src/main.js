@@ -2174,14 +2174,23 @@ function openInsertDialog() {
     <div id="insBlankOpts">
       <label>${t("org.paperSize")}</label>
       <select id="insPaper">
-        <option value="612x792">Letter</option>
+        <option value="same">${t("pagex.insSameSize")}</option>
         <option value="595x842">A4</option>
+        <option value="612x792">Letter</option>
+        <option value="612x1008">Legal</option>
+        <option value="420x595">A5</option>
+        <option value="842x1191">A3</option>
         <option value="custom">${t("org.customSize")}</option>
       </select>
       <div class="row" id="insCustomSize" style="display:none">
         <div><label>${t("org.widthPt")}</label><input type="number" id="insW" value="612"></div>
         <div><label>${t("org.heightPt")}</label><input type="number" id="insH" value="792"></div>
       </div>
+      <div class="radiorow" id="insOrient" style="display:none">
+        <label><input type="radio" name="insOrient" value="portrait" checked> ${t("pagex.portrait")}</label>
+        <label><input type="radio" name="insOrient" value="landscape"> ${t("pagex.landscape")}</label>
+      </div>
+      <div class="row"><div><label>${t("pagex.insCount")}</label><input type="number" id="insCount" value="1" min="1" max="500"></div><div></div></div>
     </div>
     <div id="insFileOpts" style="display:none">
       <label>${t("org.sourceFile")}</label>
@@ -2207,6 +2216,7 @@ function openInsertDialog() {
   }));
   box.querySelector("#insPaper").addEventListener("change", (e) => {
     box.querySelector("#insCustomSize").style.display = e.target.value === "custom" ? "flex" : "none";
+    box.querySelector("#insOrient").style.display = ["custom", "same"].includes(e.target.value) ? "none" : "";
   });
   box.querySelector("#insPickFile").addEventListener("click", async () => {
     const p = await invoke("pick_pdf");
@@ -2223,10 +2233,22 @@ function openInsertDialog() {
       if (paper === "custom") {
         w = Number(box.querySelector("#insW").value) || 612;
         h = Number(box.querySelector("#insH").value) || 792;
+      } else if (paper === "same") {
+        // Cùng cỡ trang đang chọn (hoặc trang hiện tại) — mặc định của Foxit.
+        const ref = state.pagePlan[state.orgSelected.size ? Math.min(...state.orgSelected) : Math.min(state.current || 0, state.pagePlan.length - 1)];
+        const d = ref && ref.kind === "blank" ? ref : (ref && !ref.source && state.pages[ref.srcIndex]) || { widthPt: 612, heightPt: 792 };
+        [w, h] = [d.widthPt, d.heightPt];
+        if (ref && ((ref.rotationDelta || 0) % 180) !== 0) [w, h] = [h, w];
       } else {
         [w, h] = paper.split("x").map(Number);
       }
-      newEntries = [{ kind: "blank", widthPt: w, heightPt: h, rotationDelta: 0, crop: null }];
+      // Hướng giấy: đổi chiều nếu cần (không áp khi tự nhập kích thước).
+      if (paper !== "custom" && paper !== "same") {
+        const land = box.querySelector('input[name=insOrient]:checked').value === "landscape";
+        if (land !== (w > h)) [w, h] = [h, w];
+      }
+      const count = Math.max(1, Math.min(500, Number(box.querySelector("#insCount").value) || 1));
+      newEntries = Array.from({ length: count }, () => ({ kind: "blank", widthPt: w, heightPt: h, rotationDelta: 0, crop: null }));
     } else {
       if (!insertFile) { box.querySelector("#insErr").textContent = t("org.needSource"); return; }
       let count;
@@ -2402,177 +2424,6 @@ function openSplitDialog() {
       closeModal();
     } catch (e) {
       box.querySelector("#splitErr").textContent = t("orgx.err", { e });
-    }
-  });
-}
-
-async function openWatermarkDialog() {
-  const base = await materializeBaseInput();
-  const previewPage = base.isTemp ? (state.orgSelected.size ? Math.min(...state.orgSelected) : 0) : state.current;
-  const box = openModal(t("orgx.wmTitle"), `
-    ${base.isTemp ? MATERIALIZED_NOTE : ""}
-    <label>${t("orgx.wmText")}</label>
-    <input type="text" id="wmText" value="CONFIDENTIAL">
-    <div class="row">
-      <div><label>${t("orgx.fontSize")}</label><input type="number" id="wmSize" value="36"></div>
-      <div><label>${t("orgx.colorRgb")}</label><input type="text" id="wmColor" value="200,0,0"></div>
-      <div><label>${t("orgx.wmAlpha")}</label><input type="number" id="wmAlpha" value="120" min="0" max="255"></div>
-    </div>
-    <div class="row">
-      <label><input type="checkbox" id="wmBold"> ${t("orgx.bold")}</label>
-      <label><input type="checkbox" id="wmItalic"> ${t("orgx.italic")}</label>
-    </div>
-    <label>${t("orgx.wmRotate")}</label>
-    <input type="number" id="wmRotate" value="45">
-    <label>${t("common.position")}</label>
-    <div class="anchor9" id="wmAnchor">
-      ${["top-left", "top-center", "top-right", "middle-left", "center", "middle-right", "bottom-left", "bottom-center", "bottom-right"]
-        .map((a) => `<button type="button" data-a="${a}" class="${a === "center" ? "cur" : ""}">●</button>`).join("")}
-    </div>
-    <label>${t("orgx.wmPages")}</label>
-    <input type="text" id="wmPages" placeholder="${t("orgx.pagesAll")}">
-    <div class="foot">
-      <button id="wmPreview" type="button"><i data-icon="eye"></i>${t("orgx.preview")}</button>
-      <button id="wmCancel">${t("common.cancel")}</button><button id="wmOk" class="primary">${t("common.apply")}</button>
-    </div>
-    <div class="err" id="wmErr"></div>
-  `);
-  let anchor = "center";
-  box.querySelector("#wmAnchor").addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-a]");
-    if (!btn) return;
-    anchor = btn.dataset.a;
-    box.querySelectorAll("#wmAnchor button").forEach((b) => b.classList.toggle("cur", b === btn));
-  });
-  function buildSpec() {
-    const [r, g, b] = box.querySelector("#wmColor").value.split(",").map((x) => Number(x.trim()) || 0);
-    return {
-      text: box.querySelector("#wmText").value || "",
-      fontSize: Number(box.querySelector("#wmSize").value) || 36,
-      color: [r, g, b, Number(box.querySelector("#wmAlpha").value) || 120],
-      bold: box.querySelector("#wmBold").checked,
-      italic: box.querySelector("#wmItalic").checked,
-      rotationDeg: Number(box.querySelector("#wmRotate").value) || 0,
-      anchor,
-      pages: box.querySelector("#wmPages").value.trim()
-        ? parsePageRange(box.querySelector("#wmPages").value.trim(), base.pageCount)
-        : [],
-    };
-  }
-  box.querySelector("#wmPreview").addEventListener("click", async () => {
-    try {
-      const url = await invoke("preview_watermark", { input: base.path, page: previewPage, spec: buildSpec(), width: 500 });
-      let img = box.querySelector("#wmPreviewImg");
-      if (!img) {
-        img = document.createElement("img");
-        img.id = "wmPreviewImg";
-        img.style.maxWidth = "100%";
-        img.style.marginTop = "8px";
-        box.insertBefore(img, box.querySelector(".foot"));
-      }
-      img.src = url;
-    } catch (e) {
-      box.querySelector("#wmErr").textContent = t("orgx.previewErr", { e });
-    }
-  });
-  box.querySelector("#wmCancel").addEventListener("click", closeModal);
-  box.querySelector("#wmOk").addEventListener("click", async () => {
-    const out = await invoke("pick_save_pdf");
-    if (!out) return;
-    try {
-      await invoke("watermark_add", { input: base.path, spec: buildSpec(), output: out, password: null });
-      $("status").textContent = t("orgx.wmDone", { name: shortName(out) });
-      closeModal();
-      loadDocument(out);
-    } catch (e) {
-      box.querySelector("#wmErr").textContent = t("orgx.err", { e });
-    }
-  });
-}
-
-async function openHeaderFooterDialog() {
-  const base = await materializeBaseInput();
-  const previewPage = base.isTemp ? (state.orgSelected.size ? Math.min(...state.orgSelected) : 0) : state.current;
-  const box = openModal(t("orgx.hfTitle"), `
-    ${base.isTemp ? MATERIALIZED_NOTE : ""}
-    <div class="row">
-      <div><label>${t("orgx.hfTL")}</label><input type="text" id="hfTL"></div>
-      <div><label>${t("orgx.hfTC")}</label><input type="text" id="hfTC"></div>
-      <div><label>${t("orgx.hfTR")}</label><input type="text" id="hfTR"></div>
-    </div>
-    <div class="row">
-      <div><label>${t("orgx.hfBL")}</label><input type="text" id="hfBL"></div>
-      <div><label>${t("orgx.hfBC")}</label><input type="text" id="hfBC" value="${t("orgx.hfBCDefault", { page: "{page}", total: "{total}" })}"></div>
-      <div><label>${t("orgx.hfBR")}</label><input type="text" id="hfBR"></div>
-    </div>
-    <p class="status">${t("orgx.hfInsertTok")}
-      <button type="button" data-tok="{page}">{page}</button>
-      <button type="button" data-tok="{total}">{total}</button>
-      <button type="button" data-tok="{date}">{date}</button>
-    </p>
-    <div class="row">
-      <div><label>${t("orgx.fontSize")}</label><input type="number" id="hfSize" value="10"></div>
-      <div><label>${t("orgx.hfMargin")}</label><input type="number" id="hfMargin" value="20"></div>
-      <div><label>${t("orgx.colorRgb")}</label><input type="text" id="hfColor" value="0,0,0"></div>
-    </div>
-    <label>${t("orgx.hfPages")}</label>
-    <input type="text" id="hfPages" placeholder="${t("orgx.pagesAll")}">
-    <div class="foot">
-      <button id="hfPreview" type="button"><i data-icon="eye"></i>${t("orgx.preview")}</button>
-      <button id="hfCancel">${t("common.cancel")}</button><button id="hfOk" class="primary">${t("common.apply")}</button>
-    </div>
-    <div class="err" id="hfErr"></div>
-  `);
-  let lastFocused = box.querySelector("#hfBC");
-  box.querySelectorAll("input[type=text]").forEach((inp) => inp.addEventListener("focus", () => { lastFocused = inp; }));
-  box.querySelectorAll("button[data-tok]").forEach((btn) => btn.addEventListener("click", () => {
-    if (lastFocused) { lastFocused.value += btn.dataset.tok; lastFocused.focus(); }
-  }));
-  function buildSpec() {
-    const [r, g, b] = box.querySelector("#hfColor").value.split(",").map((x) => Number(x.trim()) || 0);
-    return {
-      topLeft: box.querySelector("#hfTL").value,
-      topCenter: box.querySelector("#hfTC").value,
-      topRight: box.querySelector("#hfTR").value,
-      bottomLeft: box.querySelector("#hfBL").value,
-      bottomCenter: box.querySelector("#hfBC").value,
-      bottomRight: box.querySelector("#hfBR").value,
-      fontSize: Number(box.querySelector("#hfSize").value) || 10,
-      color: [r, g, b, 255],
-      marginPt: Number(box.querySelector("#hfMargin").value) || 20,
-      date: new Date().toLocaleDateString(I18N.lang === "vi" ? "vi-VN" : "en-US"),
-      pages: box.querySelector("#hfPages").value.trim()
-        ? parsePageRange(box.querySelector("#hfPages").value.trim(), base.pageCount)
-        : [],
-    };
-  }
-  box.querySelector("#hfPreview").addEventListener("click", async () => {
-    try {
-      const url = await invoke("preview_header_footer", { input: base.path, page: previewPage, spec: buildSpec(), width: 500 });
-      let img = box.querySelector("#hfPreviewImg");
-      if (!img) {
-        img = document.createElement("img");
-        img.id = "hfPreviewImg";
-        img.style.maxWidth = "100%";
-        img.style.marginTop = "8px";
-        box.insertBefore(img, box.querySelector(".foot"));
-      }
-      img.src = url;
-    } catch (e) {
-      box.querySelector("#hfErr").textContent = t("orgx.previewErr", { e });
-    }
-  });
-  box.querySelector("#hfCancel").addEventListener("click", closeModal);
-  box.querySelector("#hfOk").addEventListener("click", async () => {
-    const out = await invoke("pick_save_pdf");
-    if (!out) return;
-    try {
-      await invoke("header_footer_add", { input: base.path, spec: buildSpec(), output: out, password: null });
-      $("status").textContent = t("orgx.hfDone", { name: shortName(out) });
-      closeModal();
-      loadDocument(out);
-    } catch (e) {
-      box.querySelector("#hfErr").textContent = t("orgx.err", { e });
     }
   });
 }
@@ -2876,6 +2727,7 @@ function buildEditOverlay() {
     });
     ov.appendChild(box);
   });
+  if (window.editx) editx.decorateOverlay(ov); // khung hình vẽ (path) — features/editx.js
   refreshEditSelection();
 }
 
@@ -2884,11 +2736,12 @@ function buildEditOverlay() {
 function refreshEditSelection() {
   const ov = $("editOverlay");
   ov.querySelectorAll(".edit-box").forEach((box) => {
-    const isSel = Number(box.dataset.index) === state.editSel;
+    const isSel = Number(box.dataset.index) === state.editSel ||
+      !!(window.editx && editx.isSelected(Number(box.dataset.index)));
     box.classList.toggle("selected", isSel);
     const existing = box.querySelector(".ed-handle");
     const o = state.editObjects.find((x) => x.index === Number(box.dataset.index));
-    const resizable = o && (o.kind === "image" || o.kind === "form");
+    const resizable = o && (o.kind === "image" || o.kind === "form" || o.kind === "path");
     if (isSel && resizable && !existing) {
       const h = document.createElement("div");
       h.className = "ed-handle";
@@ -2910,6 +2763,7 @@ function editArmedHint() {
 }
 
 function selectEditObject(index, runIndices) {
+  if (window.editx && editx.beforeSelect(index, runIndices)) return; // Shift+click: chọn nhiều
   state.editSel = index != null && index >= 0 ? index : null;
   state.editSelRuns = state.editSel != null ? (runIndices || [state.editSel]) : [];
   const o = state.editObjects.find((x) => x.index === state.editSel);
@@ -2940,6 +2794,7 @@ function selectEditObject(index, runIndices) {
     $("edBold").classList.remove("on");
     $("edItalic").classList.remove("on");
   }
+  if (window.editx) editx.afterSelect(o);
   refreshEditSelection();
 }
 
@@ -3942,6 +3797,10 @@ function promptAddText(pdfX, pdfY) {
   inp.style.fontSize = Math.max(10, size * s) + "px";
   inp.style.fontFamily = cssFontStack(family);
   inp.style.color = rgbCss(state.editColor);
+  if (window.editx) {
+    inp.style.fontWeight = editx.addTextStyle.bold ? "700" : "400";
+    inp.style.fontStyle = editx.addTextStyle.italic ? "italic" : "normal";
+  }
   ov.appendChild(inp);
   inp.focus();
   let done = false;
@@ -3954,7 +3813,8 @@ function promptAddText(pdfX, pdfY) {
         op: "addText", x: pdfX, y: pdfY, text,
         fontSize: size, color: [state.editColor[0], state.editColor[1], state.editColor[2], 255],
         fontFamily: family,
-        bold: null, italic: null,
+        bold: window.editx ? editx.addTextStyle.bold : null,
+        italic: window.editx ? editx.addTextStyle.italic : null,
       });
     }
   };
@@ -3982,29 +3842,35 @@ function onEditBoxMouseDown(e, o, runs) {
     return;
   }
   const box = e.currentTarget;
+  // Đang chọn NHIỀU (Shift+click / quét chọn) và bấm vào 1 khung trong nhóm →
+  // kéo cả nhóm (editx trả mọi khung + mọi run của nhóm).
+  const group = (window.editx && editx.dragGroup(box)) || { boxes: [box], runs: runIndices };
   const startX = e.clientX, startY = e.clientY;
-  const left0 = parseFloat(box.style.left), top0 = parseFloat(box.style.top);
+  const pos0 = group.boxes.map((b) => [parseFloat(b.style.left), parseFloat(b.style.top)]);
   let moved = false;
   const onMove = (ev) => {
     const dx = ev.clientX - startX, dy = ev.clientY - startY;
     if (!moved && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
       moved = true;
-      box.classList.add("dragging");
+      group.boxes.forEach((b) => b.classList.add("dragging"));
     }
     if (moved) {
-      box.style.left = left0 + dx + "px";
-      box.style.top = top0 + dy + "px";
+      group.boxes.forEach((b, k) => {
+        b.style.left = pos0[k][0] + dx + "px";
+        b.style.top = pos0[k][1] + dy + "px";
+      });
     }
   };
   const onUp = (ev) => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
-    box.classList.remove("dragging");
+    group.boxes.forEach((b) => b.classList.remove("dragging"));
     if (!moved) return;
     // CSS y xuống = PDF y giảm; trang xoay thì trục view ↔ PDF đổi theo /Rotate.
     const { dx, dy } = viewDeltaToPdf(state.pages[state.editPage],
       (ev.clientX - startX) / state.editScale, (ev.clientY - startY) / state.editScale);
-    stageEditOps(runIndices.map((i) => ({ op: "transform", index: i, dx, dy, sx: 1, sy: 1 })));
+    const ops = group.runs.map((i) => ({ op: "transform", index: i, dx, dy, sx: 1, sy: 1 }));
+    if (window.editx) editx.stageKeep(ops, dx, dy); else stageEditOps(ops);
   };
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);
@@ -4133,74 +3999,7 @@ async function toggleConvMode() {
   }
 }
 
-async function runOcrAction() {
-  const lang = $("cvLang").value || "vie+eng";
-  const out = await invoke("pick_save_pdf");
-  if (!out) return;
-  $("convHint").textContent = t("conv.ocrRunning");
-  try {
-    const n = await invoke("ocr_run", { input: state.path, lang, output: out });
-    $("status").textContent = t("conv.ocrDone", { n, file: shortName(out) });
-    $("convHint").textContent = "";
-    loadDocument(out);
-  } catch (e) {
-    actionMsg("convHint", t("conv.errOcr", { e }));
-  }
-}
-
-async function exportPngAction() {
-  const dir = await invoke("pick_dir");
-  if (!dir) return;
-  try {
-    const files = await invoke("convert_images", { input: state.path, outDir: dir, dpi: 150 });
-    $("status").textContent = t("conv.pngDone", { n: files.length, dir });
-  } catch (e) {
-    actionMsg("convHint", t("conv.errPng", { e }));
-  }
-}
-
-async function exportTxtAction() {
-  const base = shortName(state.path).replace(/\.pdf$/i, "");
-  const out = await invoke("pick_save_as", { ext: "txt", name: base + ".txt" });
-  if (!out) return;
-  try {
-    await invoke("convert_txt", { input: state.path, output: out });
-    $("status").textContent = t("conv.txtDone", { file: shortName(out) });
-  } catch (e) {
-    actionMsg("convHint", t("conv.errTxt", { e }));
-  }
-}
-
-async function exportDocxAction() {
-  const base = shortName(state.path).replace(/\.pdf$/i, "");
-  const out = await invoke("pick_save_as", { ext: "docx", name: base + ".docx" });
-  if (!out) return;
-  actionMsg("convHint", t("conv.docxRunning"));
-  try {
-    const engine = await invoke("convert_docx", { input: state.path, output: out });
-    const note = engine === "libreoffice" ? t("conv.engineLibreOffice") : t("conv.engineBasic");
-    $("status").textContent = t("conv.docxDone", { engine: note, file: shortName(out) });
-    $("convHint").textContent = "";
-  } catch (e) {
-    actionMsg("convHint", t("conv.errDocx", { e }));
-  }
-}
-
-async function officeToPdfAction() {
-  const src = await invoke("pick_office_file");
-  if (!src) return;
-  const dir = await invoke("pick_dir");
-  if (!dir) return;
-  $("convHint").textContent = t("conv.officeRunning");
-  try {
-    const out = await invoke("office_convert", { input: src, outDir: dir });
-    $("status").textContent = t("conv.officeDone", { file: shortName(out) });
-    $("convHint").textContent = "";
-    loadDocument(out);
-  } catch (e) {
-    actionMsg("convHint", t("conv.errOffice", { e }));
-  }
-}
+// OCR / Xuất / Tạo PDF của tab Chuyển đổi: xem features/create.js.
 
 // ---------- Phase 6: Form (AcroForm) ----------
 
@@ -4420,15 +4219,19 @@ async function applyRedactions() {
   if (!state.redactMarks.length) return;
   const out = await invoke("pick_save_pdf");
   if (!out) return;
-  // Gom theo trang: [{page, rects: [[l,b,r,t], ...]}]
+  // Gom theo trang: [{page, rects: [[l,b,r,t], ...], whole}] — whole = che nguyên trang.
   const byPage = new Map();
   for (const m of state.redactMarks) {
-    if (!byPage.has(m.page)) byPage.set(m.page, []);
-    byPage.get(m.page).push([m.rect.left, m.rect.bottom, m.rect.right, m.rect.top]);
+    if (!byPage.has(m.page)) byPage.set(m.page, { page: m.page, rects: [], whole: false });
+    const e = byPage.get(m.page);
+    if (m.whole) e.whole = true;
+    else e.rects.push([m.rect.left, m.rect.bottom, m.rect.right, m.rect.top]);
   }
-  const areas = [...byPage.entries()].map(([page, rects]) => ({ page, rects }));
+  const areas = [...byPage.values()];
+  // Giao diện vùng che (màu, chữ phủ…) do features/docsec.js quản lý.
+  const style = window.DocSec ? DocSec.redactStyle() : null;
   try {
-    const n = await invoke("redact_apply", { input: state.path, areas, output: out, password: null });
+    const n = await invoke("redact_apply_styled", { input: state.path, areas, style, output: out, password: null });
     clearRedactMarks();
     setTool(null);
     $("status").textContent = t("sec.redactDone", { n, file: shortName(out) });
@@ -4737,8 +4540,9 @@ $("viewport").addEventListener(
 $("tabThumbs").addEventListener("click", () => switchTab("thumbs"));
 $("tabOutline").addEventListener("click", () => switchTab("outline"));
 $("tabComments").addEventListener("click", () => switchTab("comments"));
+$("tabAttach").addEventListener("click", () => switchTab("attachments"));
 function switchTab(which) {
-  for (const [tab, panel] of [["tabThumbs", "thumbs"], ["tabOutline", "outline"], ["tabComments", "comments"]]) {
+  for (const [tab, panel] of [["tabThumbs", "thumbs"], ["tabOutline", "outline"], ["tabComments", "comments"], ["tabAttach", "attachments"]]) {
     const on = panel === which;
     $(tab).classList.toggle("active", on);
     $(panel).classList.toggle("hidden", !on);
@@ -4783,8 +4587,6 @@ $("orgExtract").addEventListener("click", openExtractDialog);
 $("orgReplace").addEventListener("click", openReplaceDialog);
 $("orgMerge").addEventListener("click", openMergeDialog);
 $("orgSplit").addEventListener("click", openSplitDialog);
-$("orgWatermark").addEventListener("click", openWatermarkDialog);
-$("orgHeaderFooter").addEventListener("click", openHeaderFooterDialog);
 $("orgSave").addEventListener("click", orgSaveChanges);
 $("modalOverlay").addEventListener("click", (e) => {
   if (e.target.id === "modalOverlay") closeModal();
@@ -4792,11 +4594,6 @@ $("modalOverlay").addEventListener("click", (e) => {
 
 // OCR & Chuyển đổi (Phase 7)
 $("convModeBtn").addEventListener("click", toggleConvMode);
-$("cvOcr").addEventListener("click", runOcrAction);
-$("cvPng").addEventListener("click", exportPngAction);
-$("cvTxt").addEventListener("click", exportTxtAction);
-$("cvDocx").addEventListener("click", exportDocxAction);
-$("cvOffice").addEventListener("click", officeToPdfAction);
 
 // Form (Phase 6)
 $("formModeBtn").addEventListener("click", toggleFormMode);
@@ -4815,9 +4612,10 @@ $("secEncrypt").addEventListener("click", openEncryptDialog);
 $("secDecrypt").addEventListener("click", openDecryptDialog);
 $("secStripMeta").addEventListener("click", stripMetadataAction);
 $("secOptimize").addEventListener("click", optimizeSaveAction);
-$("secCreateId").addEventListener("click", openCreateIdDialog);
-$("secSign").addEventListener("click", openSignDialog);
-$("secVerify").addEventListener("click", () => verifySignaturesAction());
+// Chữ ký số nâng cao (PFX, chữ ký hiển thị, bảng xác thực) ở features/signx.js.
+$("secCreateId").addEventListener("click", () => (window.SignX ? SignX.createId() : openCreateIdDialog()));
+$("secSign").addEventListener("click", () => (window.SignX ? SignX.sign() : openSignDialog()));
+$("secVerify").addEventListener("click", () => (window.SignX ? SignX.verify() : verifySignaturesAction()));
 
 // Sửa nội dung (Phase 4)
 $("editModeBtn").addEventListener("click", toggleEditMode);
