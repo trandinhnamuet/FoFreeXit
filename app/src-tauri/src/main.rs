@@ -8,6 +8,8 @@ use base64::Engine as _;
 use serde::Serialize;
 use tauri_plugin_dialog::DialogExt;
 
+mod cmd_formx;
+
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1584,6 +1586,16 @@ fn main() {
             form_create,
             form_export,
             form_import_fdf,
+            cmd_formx::formx_widgets,
+            cmd_formx::formx_apply,
+            cmd_formx::formx_reset,
+            cmd_formx::formx_recognize,
+            cmd_formx::formx_export,
+            cmd_formx::formx_import,
+            cmd_formx::formx_read_data,
+            cmd_formx::formx_pick_export,
+            cmd_formx::formx_pick_import,
+            cmd_formx::formx_open_url,
             ocr_run,
             convert_images,
             convert_txt,

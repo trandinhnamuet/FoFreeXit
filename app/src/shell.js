@@ -54,6 +54,7 @@
     if (state.annotSpecs.length > 0 && !$("saveAnnots").disabled) parts.push(t("shell.dirtyAnnots", { n: state.annotSpecs.length }));
     if (orgDirty()) parts.push(t("shell.dirtyPages"));
     if (state.redactMarks.length > 0) parts.push(t("shell.dirtyRedact", { n: state.redactMarks.length }));
+    if (window.FormX && FormX.dirtyCount()) parts.push(t("fx.dirty", { n: FormX.dirtyCount() }));
     return parts;
   }
   // true = không có gì chưa lưu, hoặc người dùng đồng ý bỏ (một hộp xác nhận duy nhất).

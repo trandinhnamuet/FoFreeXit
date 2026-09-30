@@ -177,16 +177,41 @@
 
       <!-- FORM -->
       <div class="rpanel hidden" data-tab="form" id="formBar">
+        <div class="rgroup rgroup-stack fx-tools">
+          <div class="rrow">
+            <button class="fx-tool" data-fx-tool="text" data-i18n-title="fx.tool.textTip"><i data-icon="field-text"></i><span data-i18n="fx.tool.text"></span></button>
+            <button class="fx-tool" data-fx-tool="checkbox" data-i18n-title="fx.tool.checkboxTip"><i data-icon="field-check"></i><span data-i18n="fx.tool.checkbox"></span></button>
+            <button class="fx-tool" data-fx-tool="radio" data-i18n-title="fx.tool.radioTip"><i data-icon="field-radio"></i><span data-i18n="fx.tool.radio"></span></button>
+            <button class="fx-tool" data-fx-tool="combo" data-i18n-title="fx.tool.comboTip"><i data-icon="field-combo"></i><span data-i18n="fx.tool.combo"></span></button>
+          </div>
+          <div class="rrow">
+            <button class="fx-tool" data-fx-tool="list" data-i18n-title="fx.tool.listTip"><i data-icon="field-list"></i><span data-i18n="fx.tool.list"></span></button>
+            <button class="fx-tool" data-fx-tool="button" data-i18n-title="fx.tool.buttonTip"><i data-icon="field-button"></i><span data-i18n="fx.tool.button"></span></button>
+            <button class="fx-tool" data-fx-tool="date" data-i18n-title="fx.tool.dateTip"><i data-icon="field-date"></i><span data-i18n="fx.tool.date"></span></button>
+            <button class="fx-tool" data-fx-tool="signature" data-i18n-title="fx.tool.signatureTip"><i data-icon="field-sig"></i><span data-i18n="fx.tool.signature"></span></button>
+          </div>
+          <div class="rgroup-label" data-i18n="fx.group.create"></div>
+        </div>
+        <span class="rsep"></span>
         <div class="rgroup">
-          <button class="rbtn" id="fmFill" data-i18n-title="ribbon.form.fillTip"><i data-icon="form-fill"></i><span><span data-i18n="ribbon.form.fill"></span> (<span id="fmCount">0</span>)</span></button>
-          <button class="rbtn" id="fmCreate" data-i18n-title="ribbon.form.createTip"><i data-icon="field-add"></i><span data-i18n="ribbon.form.create"></span></button>
+          <button class="rbtn" id="fxRecognize" data-i18n-title="fx.recognizeTip"><i data-icon="wand"></i><span data-i18n="fx.recognize"></span></button>
+          <button class="rbtn" id="fxHighlight" data-i18n-title="fx.highlightTip"><i data-icon="field-highlight"></i><span data-i18n="fx.highlight"></span></button>
+          <button class="rbtn" id="fxDesign" data-i18n-title="fx.designTip"><i data-icon="field-edit"></i><span data-i18n="fx.design"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="fmFill" data-i18n-title="ribbon.form.fillTip"><i data-icon="form-fill"></i><span><span data-i18n="fx.fillList"></span> (<span id="fmCount">0</span>)</span></button>
+          <button class="rbtn" id="fxReset" data-i18n-title="fx.resetTip"><i data-icon="reset"></i><span data-i18n="fx.reset"></span></button>
           <button class="rbtn" id="fmFlatten" data-i18n-title="ribbon.form.flattenTip"><i data-icon="flatten"></i><span data-i18n="ribbon.form.flatten"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
-          <button class="rbtn" id="fmExportFdf" data-i18n-title="ribbon.form.exportFdfTip"><i data-icon="export"></i><span data-i18n="ribbon.form.exportFdf"></span></button>
-          <button class="rbtn" id="fmExportCsv" data-i18n-title="ribbon.form.exportCsvTip"><i data-icon="table"></i><span data-i18n="ribbon.form.exportCsv"></span></button>
-          <button class="rbtn" id="fmImportFdf" data-i18n-title="ribbon.form.importFdfTip"><i data-icon="import"></i><span data-i18n="ribbon.form.importFdf"></span></button>
+          <button class="rbtn" id="fxImport" data-i18n-title="fx.importTip"><i data-icon="import"></i><span><span data-i18n="fx.import"></span> ▾</span></button>
+          <button class="rbtn" id="fxExport" data-i18n-title="fx.exportTip"><i data-icon="export"></i><span><span data-i18n="fx.export"></span> ▾</span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn primary" id="fxSave" data-i18n-title="fx.saveTip" disabled><i data-icon="save"></i><span><span data-i18n="fx.save"></span> (<span id="fxDirtyN">0</span>)</span></button>
         </div>
         <span class="spacer"></span>
         <span id="formHint" class="rhint"></span>
@@ -274,6 +299,10 @@
       <button id="organizeModeBtn"></button>
       <button id="editModeBtn"></button>
       <button id="formModeBtn"></button>
+      <button id="fmCreate"></button>
+      <button id="fmExportFdf"></button>
+      <button id="fmExportCsv"></button>
+      <button id="fmImportFdf"></button>
       <button id="secModeBtn"></button>
       <button id="convModeBtn"></button>
     </div>
@@ -378,6 +407,25 @@
       <button class="mitem" data-theme-set="system"><span class="mcheck"></span><i data-icon="theme-system"></i><span data-i18n="shell.themeSystem"></span></button>
     </div>
 
+    <!-- Form: menu Nhập / Xuất / Đặt lại (features/formx.js) -->
+    <div id="fxImportMenu" class="menu mini-menu hidden" role="menu">
+      <button class="mitem" data-fx-import="fdf"><i data-icon="file-import"></i><span data-i18n="fx.fmt.fdf"></span></button>
+      <button class="mitem" data-fx-import="xfdf"><i data-icon="file-import"></i><span data-i18n="fx.fmt.xfdf"></span></button>
+      <button class="mitem" data-fx-import="csv"><i data-icon="file-import"></i><span data-i18n="fx.fmt.csv"></span></button>
+      <button class="mitem" data-fx-import="txt"><i data-icon="file-import"></i><span data-i18n="fx.fmt.txt"></span></button>
+    </div>
+    <div id="fxExportMenu" class="menu mini-menu hidden" role="menu">
+      <button class="mitem" data-fx-export="fdf"><i data-icon="export"></i><span data-i18n="fx.fmt.fdf"></span></button>
+      <button class="mitem" data-fx-export="xfdf"><i data-icon="export"></i><span data-i18n="fx.fmt.xfdf"></span></button>
+      <button class="mitem" data-fx-export="xml"><i data-icon="export"></i><span data-i18n="fx.fmt.xml"></span></button>
+      <button class="mitem" data-fx-export="csv"><i data-icon="export"></i><span data-i18n="fx.fmt.csv"></span></button>
+      <button class="mitem" data-fx-export="txt"><i data-icon="export"></i><span data-i18n="fx.fmt.txt"></span></button>
+    </div>
+    <div id="fxResetMenu" class="menu mini-menu hidden" role="menu">
+      <button class="mitem" data-fx-reset="defaults"><i data-icon="reset"></i><span data-i18n="fx.resetDefaults"></span></button>
+      <button class="mitem" data-fx-reset="clear"><i data-icon="redact-clear"></i><span data-i18n="fx.clearAll"></span></button>
+    </div>
+
     <div id="modalOverlay" class="modal-overlay hidden">
       <div id="modalBox" class="modal-box"></div>
     </div>
@@ -402,9 +450,11 @@
     <script src="i18n/part-5.js"></script>
     <script src="i18n/part-6.js"></script>
     <script src="i18n/part-7.js"></script>
+    <script src="i18n/part-formx.js"></script>
     <script src="icons.js"></script>
     <script src="main.js"></script>
     <script src="shell.js"></script>
     <script src="shell-extras.js"></script>
+    <script src="features/formx.js"></script>
   </body>
 </html>

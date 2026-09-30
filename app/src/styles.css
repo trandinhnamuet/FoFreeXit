@@ -773,3 +773,133 @@ body.ribbon-collapsed .tabrow { border-bottom: 1px solid var(--border); }
 .pagenum { width: 4ch; text-align: center; }
 .cs { border-width: 0; box-shadow: inset 0 0 0 1px rgba(127,127,127,.35); }
 .cs.cur { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+
+/* ===================== Form mức Foxit (features/formx.js) ===================== */
+/* Ribbon: 8 công cụ tạo trường, 2 hàng nút nhỏ (icon + nhãn). */
+.fx-tools { padding: 0 4px; }
+.fx-tools .rrow { gap: 2px; }
+.fx-tool {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 24px; padding: 0 7px 0 5px; border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--text-2); white-space: nowrap; min-width: 84px;
+}
+.fx-tool svg.ic { width: 16px; height: 16px; color: var(--text-2); }
+.fx-tool:hover { background: var(--hover); color: var(--text); }
+.fx-tool:hover svg.ic { color: var(--accent); }
+.fx-tool.armed { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-soft-2); }
+.fx-tool.armed svg.ic { color: var(--accent); }
+
+/* Lớp phủ trên trang (trên textlayer để nhận chuột). */
+.fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.fx-layer > * { pointer-events: auto; }
+body.tool-active .fx-layer, body.tool-active .fx-layer > * { pointer-events: none; }
+body.fx-arming .page-slot, body.fx-arming .fx-layer > * { cursor: crosshair; }
+body.fx-arming .fx-layer > .fx-d { pointer-events: none; }
+
+/* Ô điền: vô hình (thấy appearance thật của PDF) cho tới khi focus / đã sửa. */
+.fx-w { position: absolute; box-sizing: border-box; }
+.fx-w .fx-ctl {
+  position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box;
+  margin: 0; border: 0 solid transparent; border-radius: 0; outline: none;
+  font-family: Helvetica, Arial, "Segoe UI", sans-serif; line-height: 1.15;
+  opacity: 0; resize: none; overflow: hidden; box-shadow: none;
+  cursor: text; min-height: 0; min-width: 0;
+}
+.fx-w .fx-ctl::placeholder { color: var(--faint); opacity: .7; }
+.fx-w input.fx-ctl { padding-block: 0; }
+.fx-w select.fx-ctl { cursor: pointer; appearance: auto; padding: 0 2px; }
+.fx-w textarea.fx-ctl { overflow: auto; }
+.fx-w.fx-dirty .fx-ctl, .fx-w.fx-focus .fx-ctl { opacity: 1; }
+.fx-w.fx-focus { box-shadow: 0 0 0 2px var(--accent); z-index: 1; }
+.fx-w.fx-ro .fx-ctl { cursor: default; }
+body.fx-hl .fx-w:not(.fx-focus):not(.fx-dirty) { background: rgba(var(--accent-rgb), .16); }
+body.fx-hl .fx-w:not(.fx-focus):hover { background: rgba(var(--accent-rgb), .26); }
+body.fx-hl .fx-w.fx-req { box-shadow: inset 0 0 0 1px var(--danger); }
+.fx-w.fx-missing { box-shadow: 0 0 0 2px var(--danger) !important; }
+/* Checkbox / radio: ký hiệu vẽ bằng CSS khi đã sửa. */
+.fx-k-checkbox .fx-ctl, .fx-k-radio .fx-ctl { cursor: pointer; text-align: center; user-select: none; }
+.fx-k-checkbox .fx-ctl.on::after, .fx-k-radio .fx-ctl.on::after { content: attr(data-mark); }
+.fx-k-radio { border-radius: 50%; }
+.fx-k-button .fx-ctl, .fx-k-signature .fx-ctl { cursor: pointer; display: flex; align-items: center; justify-content: center; }
+body.fx-hl .fx-k-button:not(.fx-focus), body.fx-hl .fx-k-signature:not(.fx-focus) { background: rgba(var(--accent-rgb), .10); }
+.fx-k-button .fx-ctl:active { filter: brightness(.9); }
+/* Nút lịch trong ô ngày. */
+.fx-cal {
+  position: absolute; right: 1px; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 18px; max-height: calc(100% - 2px); padding: 0; z-index: 2;
+  display: none; align-items: center; justify-content: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text-2);
+}
+.fx-cal svg.ic { width: 13px; height: 13px; }
+.fx-w:hover .fx-cal, .fx-w.fx-focus .fx-cal { display: inline-flex; }
+.fx-datepick { position: absolute; opacity: 0; width: 1px; height: 1px; right: 0; bottom: 0; pointer-events: none; border: 0; padding: 0; }
+
+/* Chế độ sửa trường: khung nét đứt + tên, chọn → tay nắm + thanh nhỏ. */
+.fx-d {
+  position: absolute; box-sizing: border-box; cursor: move;
+  border: 1px dashed var(--accent); background: rgba(var(--accent-rgb), .12);
+}
+.fx-d:hover { background: rgba(var(--accent-rgb), .2); }
+.fx-d.fx-new { border-style: solid; }
+.fx-d.fx-prop { border-color: var(--warn); background: rgba(201, 130, 0, .14); border-style: dashed; }
+.fx-d.fx-ghost { pointer-events: none; opacity: .7; }
+.fx-d.fx-sel { border: 1.5px solid var(--accent); background: rgba(var(--accent-rgb), .18); z-index: 2; }
+.fx-dn {
+  position: absolute; left: 0; top: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  padding: 0 3px; font-size: 10px; line-height: 13px; white-space: nowrap;
+  color: var(--on-accent); background: var(--accent-fill); pointer-events: none;
+}
+.fx-d.fx-prop .fx-dn { background: var(--warn); }
+.fx-k-checkbox > .fx-dn, .fx-k-radio > .fx-dn { top: auto; bottom: 100%; max-width: none; }
+.fx-px {
+  position: absolute; right: -8px; top: -8px; width: 16px; height: 16px; padding: 0;
+  border-radius: 50%; font-size: 12px; line-height: 14px; text-align: center;
+  background: var(--surface); color: var(--danger); border: 1px solid var(--danger);
+}
+.fx-h {
+  position: absolute; width: 8px; height: 8px; box-sizing: border-box;
+  background: var(--surface); border: 1.5px solid var(--accent); border-radius: 2px;
+}
+.fx-h-nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.fx-h-ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.fx-h-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.fx-h-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.fx-dbar {
+  position: absolute; left: 0; top: calc(100% + 6px); display: flex; gap: 4px; z-index: 3;
+  padding: 3px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-pop); cursor: default;
+}
+.fx-dbar button { font-size: 12px; padding: 3px 8px; border-radius: 4px; white-space: nowrap; }
+.fx-dbar button:hover { background: var(--hover); }
+.fx-dbar button[data-a="del"] { color: var(--danger); }
+.fx-draw { position: absolute; border: 1.5px dashed var(--accent); background: rgba(var(--accent-rgb), .12); pointer-events: none; }
+
+/* Thanh kết quả nhận diện trường (nổi trên vùng xem). */
+.fx-recog-bar {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 50;
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); font-size: 13px; max-width: calc(100% - 32px);
+}
+.fx-recog-bar button { padding: 5px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+.fx-recog-bar button:hover { background: var(--surface-3); }
+.fx-recog-bar button.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-accent); }
+
+/* Hộp Thuộc tính. */
+.modal-box.fx-props { width: 520px; }
+.fx-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: -4px 0 6px; }
+.modal-box .fx-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 6px 12px; color: var(--muted); }
+.modal-box .fx-tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+.fx-tab { min-height: 230px; }
+.modal-box label.fx-inl { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--text); font-size: 13px; }
+.fx-checks { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; }
+.fx-color { display: flex; align-items: center; gap: 10px; height: 32px; }
+.fx-color input[type="color"] { width: 44px; height: 28px; padding: 0 2px; border-radius: var(--radius-sm); }
+.fx-color input[type="color"]:disabled { opacity: .35; }
+.fx-optadd input { min-width: 0; }
+.modal-box .fx-optadd > button { flex: 0 0 auto; }
+.fx-optlist { margin-top: 8px; }
+.modal-box .fx-optlist select { flex: 1; height: auto; }
+.fx-optbtns { flex: 0 0 96px !important; display: flex; flex-direction: column; gap: 4px; }
+.fx-note { font-size: 12px; margin: 8px 0 0; }
+.fx-foot .fx-left { margin-right: auto; color: var(--danger); }
