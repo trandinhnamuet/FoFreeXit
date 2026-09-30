@@ -24,6 +24,7 @@
         <button class="tab-pill" data-tab="annotate" data-i18n="tab.annotate"></button>
         <button class="tab-pill" data-tab="page" data-i18n="tab.page"></button>
         <button class="tab-pill" data-tab="form" data-i18n="tab.form"></button>
+        <button class="tab-pill" data-tab="fillsign" data-i18n="sx.tab"></button>
         <button class="tab-pill" data-tab="convert" data-i18n="tab.convert"></button>
         <button class="tab-pill" data-tab="protect" data-i18n="tab.protect"></button>
         <button class="tab-pill" data-tab="tools" data-i18n="tab.tools"></button>
@@ -192,6 +193,34 @@
         <span id="formHint" class="rhint"></span>
       </div>
 
+      <!-- FILL & SIGN (features/signx.js) -->
+      <div class="rpanel" data-tab="fillsign" id="fsBar">
+        <div class="rgroup">
+          <button class="rbtn fs-tool" id="fsText" data-fs="text" data-i18n-title="sx.fsTextTip"><i data-icon="text-add"></i><span data-i18n="sx.fsText"></span></button>
+          <button class="rbtn fs-tool" id="fsCheck" data-fs="check" data-i18n-title="sx.fsCheckTip"><i data-icon="check-mark"></i><span data-i18n="sx.fsCheck"></span></button>
+          <button class="rbtn fs-tool" id="fsCross" data-fs="cross" data-i18n-title="sx.fsCrossTip"><i data-icon="cross-mark"></i><span data-i18n="sx.fsCross"></span></button>
+          <button class="rbtn fs-tool" id="fsDot" data-fs="dot" data-i18n-title="sx.fsDotTip"><i data-icon="dot-mark"></i><span data-i18n="sx.fsDot"></span></button>
+          <button class="rbtn fs-tool" id="fsLine" data-fs="line" data-i18n-title="sx.fsLineTip"><i data-icon="line-mark"></i><span data-i18n="sx.fsLine"></span></button>
+          <button class="rbtn fs-tool" id="fsDate" data-fs="date" data-i18n-title="sx.fsDateTip"><i data-icon="calendar"></i><span data-i18n="sx.fsDate"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="fsSig" data-i18n-title="sx.fsSignTip"><i data-icon="signature"></i><span data-i18n="sx.fsSign"></span></button>
+          <button class="rbtn" id="fsInit" data-i18n-title="sx.fsInitialsTip"><i data-icon="initials"></i><span data-i18n="sx.fsInitials"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn primary" id="fsApply" data-i18n-title="sx.fsApplyTip" disabled><i data-icon="save"></i><span><span data-i18n="sx.fsApply"></span> (<span id="fsCount">0</span>)</span></button>
+          <button class="rbtn" id="fsClear" data-i18n-title="sx.fsClearTip" disabled><i data-icon="discard"></i><span data-i18n="sx.fsClear"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" data-proxy="secSign" data-i18n-title="ribbon.protect.signTip"><i data-icon="shield-check"></i><span data-i18n="sx.fsDigital"></span></button>
+        </div>
+        <span class="spacer"></span>
+        <span id="fsHint" class="rhint"></span>
+      </div>
+
       <!-- CONVERT -->
       <div class="rpanel hidden" data-tab="convert" id="convBar">
         <div class="rgroup rgroup-stack">
@@ -248,6 +277,10 @@
           <button class="rbtn" id="secOptimize" data-i18n-title="ribbon.tools.optimizeTip"><i data-icon="compress"></i><span data-i18n="ribbon.tools.optimize"></span></button>
           <button class="rbtn" data-proxy="orgMerge" data-i18n-title="ribbon.page.mergeTip"><i data-icon="merge"></i><span data-i18n="ribbon.page.merge"></span></button>
           <button class="rbtn" data-proxy="orgSplit" data-i18n-title="ribbon.page.splitTip"><i data-icon="split"></i><span data-i18n="ribbon.page.split"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="sxBatch" data-i18n-title="sx.batchTip"><i data-icon="wizard"></i><span data-i18n="sx.batch"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
@@ -343,6 +376,7 @@
         <div class="menu submenu" id="recentMenu"></div>
       </div>
       <button class="mitem" data-proxy="quickSave"><i data-icon="save"></i><span data-i18n="files.save"></span><kbd>Ctrl+S</kbd></button>
+      <button class="mitem" id="printItem"><i data-icon="printer"></i><span data-i18n="sx.print"></span><kbd>Ctrl+P</kbd></button>
       <div class="msep"></div>
       <div class="mitem has-sub"><i data-icon="file-export"></i><span data-i18n="files.exportAs"></span><i data-icon="chevron-right" class="mchev"></i>
         <div class="menu submenu">
@@ -393,6 +427,9 @@
       <div class="boot-note" data-i18n="shell.booting"></div>
     </div>
 
+    <!-- Nội dung in (features/signx.js) — chỉ hiện khi in. -->
+    <div id="printRoot" aria-hidden="true"></div>
+
     <script src="i18n.js"></script>
     <script src="i18n/part-0-shell.js"></script>
     <script src="i18n/part-1.js"></script>
@@ -402,9 +439,11 @@
     <script src="i18n/part-5.js"></script>
     <script src="i18n/part-6.js"></script>
     <script src="i18n/part-7.js"></script>
+    <script src="i18n/part-signx.js"></script>
     <script src="icons.js"></script>
     <script src="main.js"></script>
     <script src="shell.js"></script>
     <script src="shell-extras.js"></script>
+    <script src="features/signx.js"></script>
   </body>
 </html>

@@ -8,6 +8,8 @@ use base64::Engine as _;
 use serde::Serialize;
 use tauri_plugin_dialog::DialogExt;
 
+mod cmd_signx;
+
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -22,7 +24,7 @@ fn ensure_pdfium_env() {
     }
 }
 
-fn pdfium() -> Result<pdfium_render::prelude::Pdfium, String> {
+pub(crate) fn pdfium() -> Result<pdfium_render::prelude::Pdfium, String> {
     ensure_pdfium_env();
     ff_engine::bind_pdfium().map_err(|e| e.to_string())
 }
@@ -1596,7 +1598,22 @@ fn main() {
             pick_save_pem,
             pick_save_data,
             pick_fdf,
-            pick_image
+            pick_image,
+            cmd_signx::signx_read_image,
+            cmd_signx::signx_id_info,
+            cmd_signx::signx_create_pfx,
+            cmd_signx::signx_pick_id,
+            cmd_signx::signx_pick_save_pfx,
+            cmd_signx::signx_list_fields,
+            cmd_signx::signx_sign,
+            cmd_signx::signx_verify,
+            cmd_signx::fillsign_apply,
+            cmd_signx::print_render_page,
+            cmd_signx::batch_run,
+            cmd_signx::batch_cancel,
+            cmd_signx::batch_validate,
+            cmd_signx::batch_pick_files,
+            cmd_signx::batch_list_folder
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");

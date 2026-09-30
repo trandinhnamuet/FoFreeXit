@@ -5,8 +5,10 @@
 //! ocr... sẽ thêm dần ở các phase sau (xem docs/03-roadmap.md, 04-architecture.md).
 
 pub mod annot;
+pub mod batch;
 pub mod convert;
 pub mod edit;
+pub mod fillsign;
 mod cffwrap;
 mod fontfix;
 mod formsurgery;
@@ -45,7 +47,13 @@ pub use form::{
 };
 pub use ocr::{find_tesseract, ocr_add_text_layer, ocr_page_words, OcrWord};
 pub use redact::redact_areas;
-pub use sign::{generate_self_signed_id, sign_pdf, verify_signatures, SignatureCheck};
+pub use sign::{
+    build_pfx, generate_self_signed_id, generate_self_signed_pfx, identity_info, list_signature_fields,
+    load_identity_file, sign_pdf, sign_pdf_ex, verify_signatures, CertDetails, Identity, IdentityInfo,
+    SigAppearance, SigFieldInfo, SignRequest, SignatureCheck,
+};
+pub use batch::{run_batch, validate_steps, BatchEvent, BatchFileResult, BatchStep, ConvertFormat};
+pub use fillsign::{apply_fill_sign, FillItem, MarkKind};
 pub use render::{bind_pdfium, page_count, page_render_mismatch, render_page_png, PageImage};
 pub use text::{extract_text, page_char_boxes, search, CharBox, Rect, SearchHit};
 pub use watermark::{add_header_footer, add_watermark, Anchor, HeaderFooterSpec, WatermarkSpec};
