@@ -26,6 +26,7 @@
         <button class="tab-pill" data-tab="form" data-i18n="tab.form"></button>
         <button class="tab-pill" data-tab="convert" data-i18n="tab.convert"></button>
         <button class="tab-pill" data-tab="protect" data-i18n="tab.protect"></button>
+        <button class="tab-pill" data-tab="a11y" data-i18n="ds.tab.a11y"></button>
         <button class="tab-pill" data-tab="tools" data-i18n="tab.tools"></button>
         <button class="tab-pill" data-tab="help" data-i18n="tab.help"></button>
       </div>
@@ -223,13 +224,20 @@
       <div class="rpanel hidden" data-tab="protect" id="secBar">
         <div class="rgroup">
           <button class="rbtn atool" id="secRedactTool" data-tool="redact" data-i18n-title="ribbon.protect.redactMarkTip"><i data-icon="redact"></i><span data-i18n="ribbon.protect.redactMark"></span></button>
+          <button class="rbtn" id="secRedactPages" data-i18n-title="ds.rb.redactPagesTip"><i data-icon="redact-page"></i><span data-i18n="ds.rb.redactPages"></span></button>
+          <button class="rbtn" id="secRedactSearch" data-i18n-title="ds.rb.searchRedactTip"><i data-icon="search-redact"></i><span data-i18n="ds.rb.searchRedact"></span></button>
           <button class="rbtn" id="secRedactApply" data-i18n-title="ribbon.protect.redactApplyTip" disabled><i data-icon="redact-apply"></i><span><span data-i18n="ribbon.protect.redactApply"></span> (<span id="redactCount">0</span>)</span></button>
           <button class="rbtn" id="secRedactClear" data-i18n-title="ribbon.protect.redactClearTip" disabled><i data-icon="redact-clear"></i><span data-i18n="ribbon.protect.redactClear"></span></button>
+          <button class="rbtn" id="secRedactOptions" data-i18n-title="ds.rb.redactOptionsTip"><i data-icon="redact-style"></i><span data-i18n="ds.rb.redactOptions"></span></button>
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
           <button class="rbtn" id="secEncrypt" data-i18n-title="ribbon.protect.encryptTip"><i data-icon="lock"></i><span data-i18n="ribbon.protect.encrypt"></span></button>
           <button class="rbtn" id="secDecrypt" data-i18n-title="ribbon.protect.decryptTip"><i data-icon="unlock"></i><span data-i18n="ribbon.protect.decrypt"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="secSanitize" data-i18n-title="ds.rb.sanitizeTip"><i data-icon="sanitize"></i><span data-i18n="ds.rb.sanitize"></span></button>
           <button class="rbtn" id="secStripMeta" data-i18n-title="ribbon.protect.stripMetaTip"><i data-icon="eraser"></i><span data-i18n="ribbon.protect.stripMeta"></span></button>
         </div>
         <span class="rsep"></span>
@@ -240,6 +248,20 @@
         </div>
         <span class="spacer"></span>
         <span id="secHint" class="rhint"></span>
+      </div>
+
+      <!-- ACCESSIBILITY (Trợ năng) -->
+      <div class="rpanel" data-tab="a11y" id="a11yBar">
+        <div class="rgroup">
+          <button class="rbtn" id="a11yFullCheck" data-i18n-title="ds.rb.fullCheckTip"><i data-icon="a11y-check"></i><span data-i18n="ds.rb.fullCheck"></span></button>
+          <button class="rbtn" id="a11yQuickCheck" data-i18n-title="ds.rb.quickCheckTip"><i data-icon="a11y"></i><span data-i18n="ds.rb.quickCheck"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="a11yAltText" data-i18n-title="ds.rb.altTextTip"><i data-icon="alt-text"></i><span data-i18n="ds.rb.altText"></span></button>
+          <button class="rbtn" id="a11yProps" data-i18n-title="ds.rb.docPropsTip"><i data-icon="file-info"></i><span data-i18n="ds.rb.docProps"></span></button>
+        </div>
+        <span class="spacer"></span>
       </div>
 
       <!-- TOOLS -->
@@ -285,6 +307,7 @@
           <button id="tabThumbs" class="tab active" data-i18n-title="side.thumbs"><i data-icon="thumbs"></i></button>
           <button id="tabOutline" class="tab" data-i18n-title="side.outline"><i data-icon="outline"></i></button>
           <button id="tabComments" class="tab" data-i18n-title="side.comments"><i data-icon="comments"></i></button>
+          <button id="tabAttach" class="tab" data-i18n-title="ds.side.attachments"><i data-icon="attach"></i></button>
           <span class="spacer"></span>
           <button id="sidebarToggle" class="tab" data-i18n-title="side.toggle"><i data-icon="sidebar"></i></button>
         </div>
@@ -292,6 +315,7 @@
           <div id="thumbs" class="panel thumbs"></div>
           <div id="outline" class="panel outline hidden"></div>
           <div id="comments" class="panel comments hidden"></div>
+          <div id="attachments" class="panel attachments hidden"></div>
         </div>
       </aside>
 
@@ -402,9 +426,11 @@
     <script src="i18n/part-5.js"></script>
     <script src="i18n/part-6.js"></script>
     <script src="i18n/part-7.js"></script>
+    <script src="i18n/part-docsec.js"></script>
     <script src="icons.js"></script>
     <script src="main.js"></script>
     <script src="shell.js"></script>
     <script src="shell-extras.js"></script>
+    <script src="features/docsec.js"></script>
   </body>
 </html>

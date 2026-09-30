@@ -4269,15 +4269,19 @@ async function applyRedactions() {
   if (!state.redactMarks.length) return;
   const out = await invoke("pick_save_pdf");
   if (!out) return;
-  // Gom theo trang: [{page, rects: [[l,b,r,t], ...]}]
+  // Gom theo trang: [{page, rects: [[l,b,r,t], ...], whole}] — whole = che nguyên trang.
   const byPage = new Map();
   for (const m of state.redactMarks) {
-    if (!byPage.has(m.page)) byPage.set(m.page, []);
-    byPage.get(m.page).push([m.rect.left, m.rect.bottom, m.rect.right, m.rect.top]);
+    if (!byPage.has(m.page)) byPage.set(m.page, { page: m.page, rects: [], whole: false });
+    const e = byPage.get(m.page);
+    if (m.whole) e.whole = true;
+    else e.rects.push([m.rect.left, m.rect.bottom, m.rect.right, m.rect.top]);
   }
-  const areas = [...byPage.entries()].map(([page, rects]) => ({ page, rects }));
+  const areas = [...byPage.values()];
+  // Giao diện vùng che (màu, chữ phủ…) do features/docsec.js quản lý.
+  const style = window.DocSec ? DocSec.redactStyle() : null;
   try {
-    const n = await invoke("redact_apply", { input: state.path, areas, output: out, password: null });
+    const n = await invoke("redact_apply_styled", { input: state.path, areas, style, output: out, password: null });
     clearRedactMarks();
     setTool(null);
     $("status").textContent = t("sec.redactDone", { n, file: shortName(out) });
@@ -4586,8 +4590,9 @@ $("viewport").addEventListener(
 $("tabThumbs").addEventListener("click", () => switchTab("thumbs"));
 $("tabOutline").addEventListener("click", () => switchTab("outline"));
 $("tabComments").addEventListener("click", () => switchTab("comments"));
+$("tabAttach").addEventListener("click", () => switchTab("attachments"));
 function switchTab(which) {
-  for (const [tab, panel] of [["tabThumbs", "thumbs"], ["tabOutline", "outline"], ["tabComments", "comments"]]) {
+  for (const [tab, panel] of [["tabThumbs", "thumbs"], ["tabOutline", "outline"], ["tabComments", "comments"], ["tabAttach", "attachments"]]) {
     const on = panel === which;
     $(tab).classList.toggle("active", on);
     $(panel).classList.toggle("hidden", !on);

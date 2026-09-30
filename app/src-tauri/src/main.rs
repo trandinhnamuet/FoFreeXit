@@ -8,6 +8,8 @@ use base64::Engine as _;
 use serde::Serialize;
 use tauri_plugin_dialog::DialogExt;
 
+mod cmd_docsec;
+
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -22,7 +24,7 @@ fn ensure_pdfium_env() {
     }
 }
 
-fn pdfium() -> Result<pdfium_render::prelude::Pdfium, String> {
+pub(crate) fn pdfium() -> Result<pdfium_render::prelude::Pdfium, String> {
     ensure_pdfium_env();
     ff_engine::bind_pdfium().map_err(|e| e.to_string())
 }
@@ -1596,7 +1598,23 @@ fn main() {
             pick_save_pem,
             pick_save_data,
             pick_fdf,
-            pick_image
+            pick_image,
+            cmd_docsec::redact_search,
+            cmd_docsec::redact_apply_styled,
+            cmd_docsec::sanitize_examine,
+            cmd_docsec::sanitize_apply,
+            cmd_docsec::attach_list,
+            cmd_docsec::attach_extract,
+            cmd_docsec::attach_open,
+            cmd_docsec::attach_apply,
+            cmd_docsec::pick_files,
+            cmd_docsec::pick_save_file,
+            cmd_docsec::docprops_read,
+            cmd_docsec::docprops_write,
+            cmd_docsec::a11y_check,
+            cmd_docsec::a11y_fix,
+            cmd_docsec::a11y_figures,
+            cmd_docsec::a11y_set_alt
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");
