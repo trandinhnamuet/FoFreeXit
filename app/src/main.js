@@ -3991,40 +3991,40 @@ async function applyRedactions() {
     const n = await invoke("redact_apply", { input: state.path, areas, output: out, password: null });
     clearRedactMarks();
     setTool(null);
-    $("status").textContent = `Đã redact (xoá thật) ${n} đối tượng → ${shortName(out)}`;
+    $("status").textContent = t("sec.redactDone", { n, file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = "Lỗi redact: " + e;
+    $("secHint").textContent = t("sec.errRedact", { e });
   }
 }
 
 function openEncryptDialog() {
-  const box = openModal("Đặt mật khẩu (AES-256)", `
-    <label>Mật khẩu mở file (user password)</label>
+  const box = openModal(t("sec.encTitle"), `
+    <label>${t("sec.encUserPw")}</label>
     <input type="password" id="secPw1" autocomplete="new-password">
-    <label>Nhập lại mật khẩu</label>
+    <label>${t("sec.encUserPw2")}</label>
     <input type="password" id="secPw2" autocomplete="new-password">
-    <label>Mật khẩu chủ sở hữu (owner — để trống = dùng mật khẩu mở)</label>
+    <label>${t("sec.encOwnerPw")}</label>
     <input type="password" id="secPwOwner" autocomplete="new-password">
-    <label>Quyền hạn khi mở bằng mật khẩu user</label>
+    <label>${t("sec.encPerms")}</label>
     <div class="row">
-      <label><input type="checkbox" id="secPermPrint" checked> In</label>
-      <label><input type="checkbox" id="secPermModify" checked> Sửa nội dung</label>
+      <label><input type="checkbox" id="secPermPrint" checked> ${t("sec.permPrint")}</label>
+      <label><input type="checkbox" id="secPermModify" checked> ${t("sec.permModify")}</label>
     </div>
     <div class="row">
-      <label><input type="checkbox" id="secPermExtract" checked> Sao chép text/ảnh</label>
-      <label><input type="checkbox" id="secPermAnnotate" checked> Chú thích/điền form</label>
+      <label><input type="checkbox" id="secPermExtract" checked> ${t("sec.permExtract")}</label>
+      <label><input type="checkbox" id="secPermAnnotate" checked> ${t("sec.permAnnotate")}</label>
     </div>
     <div class="err" id="secEncErr"></div>
-    <div class="foot"><button id="secEncCancel">Huỷ</button><button id="secEncOk" class="primary">Mã hoá…</button></div>
+    <div class="foot"><button id="secEncCancel">${t("common.cancel")}</button><button id="secEncOk" class="primary">${t("sec.encOk")}</button></div>
   `);
   box.querySelector("#secEncCancel").addEventListener("click", closeModal);
   box.querySelector("#secEncOk").addEventListener("click", async () => {
     const p1 = box.querySelector("#secPw1").value;
     const p2 = box.querySelector("#secPw2").value;
     const err = box.querySelector("#secEncErr");
-    if (!p1) { err.textContent = "Mật khẩu không được để trống."; return; }
-    if (p1 !== p2) { err.textContent = "Hai lần nhập không khớp."; return; }
+    if (!p1) { err.textContent = t("sec.errPwEmpty"); return; }
+    if (p1 !== p2) { err.textContent = t("sec.errPwMismatch"); return; }
     const out = await invoke("pick_save_pdf");
     if (!out) return;
     try {
@@ -4039,27 +4039,27 @@ function openEncryptDialog() {
         allowAnnotate: box.querySelector("#secPermAnnotate").checked,
       });
       closeModal();
-      $("status").textContent = `Đã mã hoá AES-256 → ${shortName(out)}`;
-      $("secHint").textContent = "File mã hoá đã lưu riêng — file đang mở giữ nguyên.";
+      $("status").textContent = t("sec.encDone", { file: shortName(out) });
+      $("secHint").textContent = t("sec.encSavedSeparately");
     } catch (e) {
-      err.textContent = "Lỗi: " + e;
+      err.textContent = t("sec.err", { e });
     }
   });
 }
 
 function openDecryptDialog() {
-  const box = openModal("Gỡ mật khẩu", `
-    <p class="muted">Chọn file PDF đang có mật khẩu, nhập mật khẩu hiện tại, lưu ra bản không mã hoá.</p>
-    <label>Mật khẩu hiện tại</label>
+  const box = openModal(t("sec.decTitle"), `
+    <p class="muted">${t("sec.decIntro")}</p>
+    <label>${t("sec.decCurrentPw")}</label>
     <input type="password" id="secDecPw" autocomplete="current-password">
     <div class="err" id="secDecErr"></div>
-    <div class="foot"><button id="secDecCancel">Huỷ</button><button id="secDecOk" class="primary">Chọn file &amp; gỡ…</button></div>
+    <div class="foot"><button id="secDecCancel">${t("common.cancel")}</button><button id="secDecOk" class="primary">${t("sec.decOk")}</button></div>
   `);
   box.querySelector("#secDecCancel").addEventListener("click", closeModal);
   box.querySelector("#secDecOk").addEventListener("click", async () => {
     const pw = box.querySelector("#secDecPw").value;
     const err = box.querySelector("#secDecErr");
-    if (!pw) { err.textContent = "Cần nhập mật khẩu hiện tại."; return; }
+    if (!pw) { err.textContent = t("sec.errDecPwEmpty"); return; }
     const inp = await invoke("pick_pdf");
     if (!inp) return;
     const out = await invoke("pick_save_pdf");
@@ -4067,10 +4067,10 @@ function openDecryptDialog() {
     try {
       await invoke("security_decrypt", { input: inp, password: pw, output: out });
       closeModal();
-      $("status").textContent = `Đã gỡ mật khẩu → ${shortName(out)}`;
+      $("status").textContent = t("sec.decDone", { file: shortName(out) });
       loadDocument(out);
     } catch (e) {
-      err.textContent = "Lỗi (mật khẩu sai?): " + e;
+      err.textContent = t("sec.errDec", { e });
     }
   });
 }
@@ -4080,10 +4080,10 @@ async function stripMetadataAction() {
   if (!out) return;
   try {
     await invoke("security_strip_metadata", { input: state.path, output: out });
-    $("status").textContent = `Đã xoá metadata (/Info + XMP) → ${shortName(out)}`;
+    $("status").textContent = t("sec.stripDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = "Lỗi xoá metadata: " + e;
+    $("secHint").textContent = t("sec.errStrip", { e });
   }
 }
 
@@ -4092,52 +4092,52 @@ async function optimizeSaveAction() {
   if (!out) return;
   try {
     await invoke("security_optimize", { input: state.path, output: out });
-    $("status").textContent = `Đã lưu tối ưu (nén + dọn rác) → ${shortName(out)}`;
+    $("status").textContent = t("sec.optimizeDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = "Lỗi lưu tối ưu: " + e;
+    $("secHint").textContent = t("sec.errOptimize", { e });
   }
 }
 
 // --- Chữ ký số (Phase 5 iteration 2) ---
 
 function openCreateIdDialog() {
-  const box = openModal("Tạo Digital ID tự ký", `
-    <p class="muted">Tạo chứng chỉ tự ký (RSA-2048) để ký thử. Nếu có chữ ký của tổ chức phát hành (PFX/PEM) thì dùng thẳng nó ở bước Ký số.</p>
-    <label>Tên hiển thị trong chữ ký</label>
-    <input type="text" id="idCn" placeholder="Nguyễn Văn A">
+  const box = openModal(t("sig.idTitle"), `
+    <p class="muted">${t("sig.idIntro")}</p>
+    <label>${t("sig.idCnLabel")}</label>
+    <input type="text" id="idCn" placeholder="${t("sig.namePlaceholder")}">
     <div class="err" id="idErr"></div>
-    <div class="foot"><button id="idCancel">Huỷ</button><button id="idOk" class="primary">Tạo &amp; lưu…</button></div>
+    <div class="foot"><button id="idCancel">${t("common.cancel")}</button><button id="idOk" class="primary">${t("sig.idOk")}</button></div>
   `);
   box.querySelector("#idCancel").addEventListener("click", closeModal);
   box.querySelector("#idOk").addEventListener("click", async () => {
     const cn = box.querySelector("#idCn").value.trim();
-    if (!cn) { box.querySelector("#idErr").textContent = "Cần nhập tên."; return; }
+    if (!cn) { box.querySelector("#idErr").textContent = t("sig.errIdName"); return; }
     const out = await invoke("pick_save_pem");
     if (!out) return;
     try {
       await invoke("sig_create_id", { commonName: cn, output: out });
       closeModal();
-      $("secHint").textContent = `Đã tạo Digital ID → ${shortName(out)} (dùng ở bước Ký số)`;
+      $("secHint").textContent = t("sig.idDone", { file: shortName(out) });
     } catch (e) {
-      box.querySelector("#idErr").textContent = "Lỗi: " + e;
+      box.querySelector("#idErr").textContent = t("sig.err", { e });
     }
   });
 }
 
 function openSignDialog() {
-  const box = openModal("Ký số tài liệu", `
-    <label>Tên người ký (hiện trong chữ ký)</label>
-    <input type="text" id="sgName" placeholder="Nguyễn Văn A">
-    <label>Lý do ký</label>
+  const box = openModal(t("sig.signTitle"), `
+    <label>${t("sig.signerLabel")}</label>
+    <input type="text" id="sgName" placeholder="${t("sig.namePlaceholder")}">
+    <label>${t("sig.reasonLabel")}</label>
     <input type="text" id="sgReason" value="Tôi đồng ý với nội dung tài liệu">
-    <label>Digital ID (.pem)</label>
+    <label>${t("sig.idFileLabel")}</label>
     <div class="row">
-      <input type="text" id="sgId" readonly placeholder="Chưa chọn — bấm Chọn…">
-      <button id="sgPickId">Chọn…</button>
+      <input type="text" id="sgId" readonly placeholder="${t("sig.idNotChosen")}">
+      <button id="sgPickId">${t("common.browse")}</button>
     </div>
     <div class="err" id="sgErr"></div>
-    <div class="foot"><button id="sgCancel">Huỷ</button><button id="sgOk" class="primary">Ký &amp; lưu…</button></div>
+    <div class="foot"><button id="sgCancel">${t("common.cancel")}</button><button id="sgOk" class="primary">${t("sig.signOk")}</button></div>
   `);
   let idPath = null;
   box.querySelector("#sgPickId").addEventListener("click", async () => {
@@ -4149,19 +4149,19 @@ function openSignDialog() {
     const name = box.querySelector("#sgName").value.trim();
     const reason = box.querySelector("#sgReason").value.trim();
     const err = box.querySelector("#sgErr");
-    if (!name) { err.textContent = "Cần nhập tên người ký."; return; }
-    if (!idPath) { err.textContent = "Cần chọn Digital ID (.pem)."; return; }
+    if (!name) { err.textContent = t("sig.errSignerEmpty"); return; }
+    if (!idPath) { err.textContent = t("sig.errNoId"); return; }
     const out = await invoke("pick_save_pdf");
     if (!out) return;
     try {
       await invoke("sig_sign", { input: state.path, idPem: idPath, reason, signerName: name, output: out });
       closeModal();
-      $("status").textContent = `Đã ký số → ${shortName(out)}`;
+      $("status").textContent = t("sig.signDone", { file: shortName(out) });
       loadDocument(out);
       // Tự kiểm tra chữ ký vừa tạo.
       verifySignaturesAction(out);
     } catch (e) {
-      err.textContent = "Lỗi ký: " + e;
+      err.textContent = t("sig.errSign", { e });
     }
   });
 }
@@ -4172,30 +4172,30 @@ async function verifySignaturesAction(pathOverride) {
   try {
     checks = await invoke("sig_verify", { input: target });
   } catch (e) {
-    $("secHint").textContent = "Lỗi kiểm tra: " + e;
+    $("secHint").textContent = t("sig.errVerify", { e });
     return;
   }
   const rows = checks.length
     ? checks
         .map((c, i) => {
           const badge = c.valid
-            ? '<span class="sig-ok">✓ Hợp lệ</span>'
-            : '<span class="sig-bad">✗ Không hợp lệ</span>';
+            ? `<span class="sig-ok">✓ ${t("sig.valid")}</span>`
+            : `<span class="sig-bad">✗ ${t("sig.invalid")}</span>`;
           const detail = [];
-          if (!c.cryptoValid) detail.push("chữ ký sai");
-          if (!c.digestMatches) detail.push("nội dung đã bị sửa");
-          if (!c.coversDocument) detail.push("có phần thêm sau khi ký");
+          if (!c.cryptoValid) detail.push(t("sig.detailCrypto"));
+          if (!c.digestMatches) detail.push(t("sig.detailDigest"));
+          if (!c.coversDocument) detail.push(t("sig.detailCoverage"));
           return `<tr><td>${i + 1}</td><td>${(c.signer || "").replace(/</g, "&lt;")}</td><td>${badge}</td>
             <td class="muted">${detail.join("; ")}</td></tr>`;
         })
         .join("")
-    : `<tr><td colspan="4" class="muted">Tài liệu chưa có chữ ký số nào.</td></tr>`;
-  const box = openModal("Kết quả kiểm tra chữ ký", `
+    : `<tr><td colspan="4" class="muted">${t("sig.none")}</td></tr>`;
+  const box = openModal(t("sig.verifyTitle"), `
     <table class="sig-table">
-      <thead><tr><th>#</th><th>Người ký</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead>
+      <thead><tr><th>#</th><th>${t("sig.colSigner")}</th><th>${t("sig.colStatus")}</th><th>${t("sig.colNote")}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="foot"><button id="sigClose" class="primary">Đóng</button></div>
+    <div class="foot"><button id="sigClose" class="primary">${t("common.close")}</button></div>
   `);
   box.querySelector("#sigClose").addEventListener("click", closeModal);
 }
@@ -4216,7 +4216,7 @@ if (window.__TAURI__.event) {
     const paths = (e.payload && e.payload.paths) || [];
     const pdf = paths.find((p) => /\.pdf$/i.test(p));
     if (!pdf) {
-      if (paths.length) $("status").textContent = "Chỉ mở được file .pdf";
+      if (paths.length) $("status").textContent = t("ev.onlyPdf");
       return;
     }
     if (state.editMode) exitEditMode();
@@ -4383,7 +4383,7 @@ $("edAddText").addEventListener("click", () => {
   state.editArm = state.editArm === "text" ? null : "text";
   $("edAddText").classList.toggle("armed", state.editArm === "text");
   $("editOverlay").classList.toggle("armed", !!state.editArm);
-  $("editHint").textContent = state.editArm === "text" ? "Bấm lên trang để đặt chữ" : "";
+  $("editHint").textContent = state.editArm === "text" ? t("ev.addTextHint") : "";
 });
 $("edAddImage").addEventListener("click", armAddImage);
 $("edDelete").addEventListener("click", deleteSelectedEditObject);
