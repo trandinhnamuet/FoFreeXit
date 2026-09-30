@@ -57,6 +57,10 @@ const ICONS = (() => {
     "compress": '<path d="M4 12h16"/><path d="M12 3v5.5M9 5.8l3 2.7 3-2.7"/><path d="M12 21v-5.5M9 18.2l3-2.7 3 2.7"/>',
     "flatten": '<path d="M12 3l8.5 4.5L12 12 3.5 7.5z"/><path d="M3.5 12L12 16.5 20.5 12"/><path d="M3.5 16.5L12 21l8.5-4.5"/>',
 
+    // ---- So sánh tài liệu ----
+    "compare": '<rect x="3" y="3.5" width="7.5" height="17" rx="1.6"/><rect x="13.5" y="3.5" width="7.5" height="17" rx="1.6"/><path d="M5.5 8h2.5M5.5 11.5h2.5M16 8h2.5M16 15h2.5"/>' + bar(15.5, 10.6, 3.5, 2, 0.6),
+    "swap": '<path d="M4 8.5h15l-3.5-3.5"/><path d="M20 15.5H5l3.5 3.5"/>',
+
     // ---- Xem ----
     "zoom-in": '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/><path d="M8 10.5h5M10.5 8v5"/>',
     "zoom-out": '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/><path d="M8 10.5h5"/>',

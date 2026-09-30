@@ -251,6 +251,10 @@
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
+          <button class="rbtn" id="cmpOpen" data-i18n-title="cmp.btnTip"><i data-icon="compare"></i><span data-i18n="cmp.btn"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
           <button class="rbtn" data-action="find" data-i18n-title="ribbon.home.findTip"><i data-icon="search-doc"></i><span data-i18n="ribbon.home.find"></span></button>
           <button class="rbtn" data-proxy="copyPage" data-i18n-title="ribbon.home.copyTip"><i data-icon="copy"></i><span data-i18n="ribbon.home.copy"></span></button>
           <button class="rbtn" data-proxy="readingBtn" data-i18n-title="shell.reading"><i data-icon="eye"></i><span data-i18n="ribbon.tools.reading"></span></button>
@@ -311,6 +315,49 @@
           </div>
         </div>
       </main>
+
+      <!-- So sánh tài liệu: màn hình kết quả riêng (2 cột đồng bộ + bảng khác biệt). -->
+      <main id="compareStage" class="compare-stage hidden">
+        <div class="cmp-bar">
+          <div class="cmp-title"><i data-icon="compare"></i><span data-i18n="cmp.resultTitle"></span></div>
+          <span class="cmp-sep"></span>
+          <button id="cmpPrev" data-i18n-title="cmp.prevTip"><i data-icon="chevron-up"></i></button>
+          <span id="cmpPos" class="cmp-pos">0/0</span>
+          <button id="cmpNext" data-i18n-title="cmp.nextTip"><i data-icon="chevron-down"></i></button>
+          <span class="cmp-sep"></span>
+          <button id="cmpZoomOut" data-i18n-title="shell.zoomOut"><i data-icon="zoom-minus"></i></button>
+          <span id="cmpZoomLbl" class="cmp-zoomlbl">100%</span>
+          <button id="cmpZoomIn" data-i18n-title="shell.zoomIn"><i data-icon="zoom-plus"></i></button>
+          <span class="spacer"></span>
+          <button id="cmpRerun" data-i18n-title="cmp.rerunTip"><i data-icon="compare"></i><span data-i18n="cmp.rerun"></span></button>
+          <button id="cmpExport" class="primary" data-i18n-title="cmp.exportTip"><i data-icon="file-export"></i><span data-i18n="cmp.export"></span></button>
+          <button id="cmpClose" data-i18n-title="cmp.closeTip"><i data-icon="win-close"></i><span data-i18n="cmp.close"></span></button>
+        </div>
+        <div class="cmp-main">
+          <div class="cmp-docs">
+            <div class="cmp-heads">
+              <div class="cmp-head"><span class="cmp-tag" data-i18n="cmp.old"></span><span id="cmpOldHead" class="cmp-fn"></span></div>
+              <div class="cmp-head"><span class="cmp-tag new" data-i18n="cmp.new"></span><span id="cmpNewHead" class="cmp-fn"></span></div>
+            </div>
+            <div id="cmpScroll" class="cmp-scroll"><div id="cmpRows" class="cmp-rows"></div></div>
+          </div>
+          <aside class="cmp-panel">
+            <div class="cmp-sum">
+              <div id="cmpTotal" class="cmp-total"></div>
+              <div id="cmpChips" class="cmp-chips"></div>
+            </div>
+            <div id="cmpList" class="cmp-list" tabindex="0"></div>
+          </aside>
+        </div>
+        <div id="cmpBusy" class="cmp-busy hidden">
+          <div class="cmp-busy-box">
+            <div class="boot-spin"></div>
+            <div id="cmpBusyText" class="cmp-busy-text"></div>
+            <div class="cmp-prog"><div id="cmpBusyFill"></div></div>
+            <button id="cmpBusyCancel" data-i18n="common.cancel"></button>
+          </div>
+        </div>
+      </main>
     </div>
 
     <!-- ===== Thanh đáy ===== -->
@@ -358,6 +405,7 @@
         </div>
       </div>
       <button class="mitem" data-proxy="secOptimize"><i data-icon="compress"></i><span data-i18n="files.compress"></span></button>
+      <button class="mitem" data-proxy="cmpOpen"><i data-icon="compare"></i><span data-i18n="cmp.menu"></span></button>
       <div class="msep"></div>
       <button class="mitem" id="docPropsItem"><i data-icon="file-info"></i><span data-i18n="files.properties"></span></button>
       <div class="msep"></div>
@@ -402,9 +450,11 @@
     <script src="i18n/part-5.js"></script>
     <script src="i18n/part-6.js"></script>
     <script src="i18n/part-7.js"></script>
+    <script src="i18n/part-compare.js"></script>
     <script src="icons.js"></script>
     <script src="main.js"></script>
     <script src="shell.js"></script>
     <script src="shell-extras.js"></script>
+    <script src="features/compare.js"></script>
   </body>
 </html>

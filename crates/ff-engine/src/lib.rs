@@ -5,6 +5,8 @@
 //! ocr... sẽ thêm dần ở các phase sau (xem docs/03-roadmap.md, 04-architecture.md).
 
 pub mod annot;
+pub mod compare;
+pub mod compare_report;
 pub mod convert;
 pub mod edit;
 mod cffwrap;
@@ -26,6 +28,11 @@ pub mod watermark;
 pub use annot::{
     apply_annotations, count_annotations, list_annotations, AnnotInfo, AnnotKind, AnnotSpec,
 };
+pub use compare::{
+    compare_documents, diff_regions, Change, ChangeKind, CompareMode, CompareOptions, CompareProgress,
+    CompareResult, CompareSummary, PagePair, RawImage, COMPARE_CANCELLED,
+};
+pub use compare_report::{export_compare_report, ReportInfo, ReportLabels, ReportStats};
 pub use edit::{apply_edits, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
 pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};
 pub use organize::{

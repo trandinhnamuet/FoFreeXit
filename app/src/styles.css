@@ -773,3 +773,121 @@ body.ribbon-collapsed .tabrow { border-bottom: 1px solid var(--border); }
 .pagenum { width: 4ch; text-align: center; }
 .cs { border-width: 0; box-shadow: inset 0 0 0 1px rgba(127,127,127,.35); }
 .cs.cur { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+
+/* ---------- So sánh tài liệu (Compare) ---------- */
+.compare-stage { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--canvas); position: relative; }
+.cmp-bar {
+  flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+  background: var(--chrome); border-bottom: 1px solid var(--border);
+}
+.cmp-bar button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; font-size: 12.5px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text);
+}
+.cmp-bar button:hover:not(:disabled) { background: var(--surface-3); }
+.cmp-bar button:disabled { opacity: .45; cursor: default; }
+.cmp-bar button.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-accent); font-weight: 600; }
+.cmp-bar button.primary:hover:not(:disabled) { background: var(--accent-fill-hover); }
+.cmp-bar svg.ic { width: 16px; height: 16px; }
+.cmp-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: var(--text); }
+.cmp-title svg.ic { color: var(--accent); }
+.cmp-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.cmp-pos, .cmp-zoomlbl { min-width: 52px; text-align: center; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.cmp-main { flex: 1; display: flex; min-height: 0; }
+.cmp-docs { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.cmp-heads {
+  flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 6px 12px;
+  background: var(--chrome-2); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-2);
+}
+.cmp-head { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
+.cmp-fn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-tag { flex: none; padding: 1px 9px; border-radius: 999px; font-weight: 600; font-size: 11px; background: var(--surface-3); color: var(--text-2); }
+.cmp-tag.new { background: var(--accent-soft); color: var(--accent); }
+.cmp-scroll { flex: 1; overflow: auto; min-height: 0; scroll-padding: 24px; }
+.cmp-rows { display: flex; flex-direction: column; gap: 18px; padding: 16px 12px 28px; }
+.cmp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.cmp-cell { display: flex; justify-content: center; min-width: 0; }
+.cmp-page { position: relative; flex: none; background: #fff; box-shadow: var(--shadow-page); }
+.cmp-page img { display: block; width: 100%; height: 100%; user-select: none; }
+.cmp-pn {
+  position: absolute; top: 6px; right: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px;
+  background: var(--surface); color: var(--muted); box-shadow: var(--shadow-soft); pointer-events: none;
+}
+.cmp-missing {
+  flex: none; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+  border: 2px dashed var(--border-strong); border-radius: var(--radius); color: var(--muted); font-size: 13px; text-align: center;
+}
+.cmp-ov { position: absolute; inset: 0; }
+.cmp-mk { position: absolute; cursor: pointer; border-radius: 2px; mix-blend-mode: multiply; }
+.cmp-mk.k-inserted { background: color-mix(in srgb, var(--success) 38%, transparent); }
+.cmp-mk.k-deleted { background: color-mix(in srgb, var(--danger) 34%, transparent); }
+.cmp-mk.k-replaced { background: color-mix(in srgb, var(--warn) 40%, transparent); }
+.cmp-mk.k-graphics { mix-blend-mode: normal; border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.cmp-mk.caret { mix-blend-mode: normal; border-radius: 1px; }
+.cmp-mk.caret.k-inserted { background: var(--success); }
+.cmp-mk.caret.k-deleted { background: var(--danger); }
+.cmp-mk.caret.k-replaced { background: var(--warn); }
+.cmp-mk.full { mix-blend-mode: normal; border-radius: 0; }
+.cmp-mk.full.k-pageInserted { border: 3px solid var(--success); background: color-mix(in srgb, var(--success) 7%, transparent); }
+.cmp-mk.full.k-pageDeleted { border: 3px solid var(--danger); background: color-mix(in srgb, var(--danger) 7%, transparent); }
+.cmp-mk.sel { outline: 2px solid var(--accent); outline-offset: 2px; mix-blend-mode: normal; z-index: 2; animation: cmpPulse 1.2s var(--ease) 2; }
+.cmp-mk.off { display: none; }
+@keyframes cmpPulse { 50% { outline-offset: 5px; } }
+.cmp-panel { width: 320px; flex: none; display: flex; flex-direction: column; min-height: 0; background: var(--chrome); border-left: 1px solid var(--border); }
+.cmp-sum { flex: none; padding: 12px; border-bottom: 1px solid var(--border); }
+.cmp-total { font-weight: 600; font-size: 13px; margin-bottom: 8px; color: var(--text); }
+.cmp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cmp-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text);
+}
+.cmp-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.cmp-chip:not(.on) { opacity: .45; }
+.cmp-chip:not(.on) .cmp-dot { background: var(--faint) !important; }
+.cmp-dot { width: 9px; height: 9px; border-radius: 50%; }
+.cmp-list { flex: 1; overflow: auto; padding: 6px; outline: none; }
+.cmp-item {
+  display: block; width: 100%; text-align: left; padding: 8px 10px; margin-bottom: 2px; cursor: pointer;
+  border: 1px solid transparent; border-radius: var(--radius-sm); background: none; color: var(--text);
+}
+.cmp-item:hover { background: var(--hover); }
+.cmp-item.sel { background: var(--accent-soft); border-color: var(--accent-soft-2); }
+.cmp-item-top { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.cmp-badge { flex: none; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 4px; color: #fff; }
+.cmp-pg { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cmp-snip {
+  margin-top: 4px; font-size: 12px; line-height: 1.45; color: var(--text-2); word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.cmp-snip del { color: var(--danger); }
+.cmp-snip ins { color: var(--success); text-decoration: none; font-weight: 600; }
+.cmp-arrow { color: var(--muted); margin: 0 5px; }
+.cmp-empty { padding: 32px 16px; text-align: center; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+/* Màu theo loại: chip, badge */
+.k-inserted .cmp-dot, .cmp-badge.k-inserted, .k-pageInserted .cmp-dot, .cmp-badge.k-pageInserted { background: var(--success); }
+.k-deleted .cmp-dot, .cmp-badge.k-deleted, .k-pageDeleted .cmp-dot, .cmp-badge.k-pageDeleted { background: var(--danger); }
+.k-replaced .cmp-dot, .cmp-badge.k-replaced { background: var(--warn); }
+.k-graphics .cmp-dot, .cmp-badge.k-graphics { background: var(--accent-fill); }
+.cmp-busy { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--canvas) 72%, transparent); }
+.cmp-busy-box {
+  width: min(380px, 90%); padding: 22px 24px 18px; text-align: center; display: flex; flex-direction: column; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop);
+}
+.cmp-busy-text { margin-top: 12px; font-size: 13px; color: var(--text-2); }
+.cmp-prog { width: 100%; height: 6px; margin: 12px 0 14px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.cmp-prog > div { height: 100%; width: 0; background: var(--accent-fill); transition: width 120ms linear; }
+.cmp-busy-box button { padding: 5px 16px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); }
+body.comparing .bb-center, body.comparing .bb-right { visibility: hidden; }
+/* Hộp thoại so sánh */
+.modal-box:has(.cmp-dlg) { width: min(560px, calc(100vw - 48px)); }
+.cmp-file { display: flex; gap: 8px; align-items: center; }
+.cmp-fname {
+  flex: 1; min-width: 0; min-height: 32px; padding: 7px 10px; box-sizing: border-box; font-size: 13px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cmp-fname.empty { color: var(--faint); }
+.cmp-file button, .cmp-swaprow button { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.cmp-file button svg.ic, .cmp-swaprow button svg.ic { width: 15px; height: 15px; }
+.cmp-swaprow { margin-top: 8px; }
+.cmp-modes, .cmp-checks { display: flex; flex-wrap: wrap; gap: 4px 18px; }

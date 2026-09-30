@@ -8,6 +8,8 @@ use base64::Engine as _;
 use serde::Serialize;
 use tauri_plugin_dialog::DialogExt;
 
+mod cmd_compare;
+
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -22,7 +24,7 @@ fn ensure_pdfium_env() {
     }
 }
 
-fn pdfium() -> Result<pdfium_render::prelude::Pdfium, String> {
+pub(crate) fn pdfium() -> Result<pdfium_render::prelude::Pdfium, String> {
     ensure_pdfium_env();
     ff_engine::bind_pdfium().map_err(|e| e.to_string())
 }
@@ -1596,7 +1598,10 @@ fn main() {
             pick_save_pem,
             pick_save_data,
             pick_fdf,
-            pick_image
+            pick_image,
+            cmd_compare::compare_run,
+            cmd_compare::compare_cancel,
+            cmd_compare::compare_export_report
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");
