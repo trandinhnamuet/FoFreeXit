@@ -35,16 +35,17 @@ fn tmp(name: &str) -> PathBuf {
 /// Crop gốc KHÁC (0,0) — phần trên trang, nơi có tiêu đề.
 const CROP: Rect = Rect { left: 30.0, bottom: 300.0, right: 612.0, top: 792.0 };
 
-fn make_rotated(out: &Path) {
-    ff_engine::rotate_pages(&pdfium(), &fixture(), &[0], 90, out, None).expect("rotate_pages");
+// Nhận Pdfium của test: bind lần 2 trong cùng tiến trình (thread_safe) sẽ chờ
+// khoá toàn cục mà instance đầu đang giữ → treo vĩnh viễn.
+fn make_rotated(pdf: &pdfium_render::prelude::Pdfium, out: &Path) {
+    ff_engine::rotate_pages(pdf, &fixture(), &[0], 90, out, None).expect("rotate_pages");
 }
 
-fn make_cropped(out: &Path, crop: Rect, rotation_delta: i32) {
-    let pdf = pdfium();
-    let mut plan = ff_engine::identity_plan(&pdf, &fixture(), None).expect("identity plan");
+fn make_cropped(pdf: &pdfium_render::prelude::Pdfium, out: &Path, crop: Rect, rotation_delta: i32) {
+    let mut plan = ff_engine::identity_plan(pdf, &fixture(), None).expect("identity plan");
     plan[0].crop = Some(crop);
     plan[0].rotation_delta = rotation_delta;
-    ff_engine::build_document(&pdf, &fixture(), &plan, out, None).expect("build_document crop");
+    ff_engine::build_document(pdf, &fixture(), &plan, out, None).expect("build_document crop");
 }
 
 fn close(a: f32, b: f32) -> bool {
@@ -55,7 +56,7 @@ fn close(a: f32, b: f32) -> bool {
 fn rotated_page_keeps_text_and_search() {
     let pdf = pdfium();
     let out = tmp("ff_rot_text.pdf");
-    make_rotated(&out);
+    make_rotated(&pdf, &out);
 
     let t = ff_engine::extract_text(&pdf, &out, 0, None).expect("text");
     assert!(t.contains("FoFreeXit Test Document"), "trang xoay mất tiêu đề: {t:?}");
@@ -71,7 +72,7 @@ fn rotated_page_keeps_text_and_search() {
 fn cropped_page_keeps_text_and_search() {
     let pdf = pdfium();
     let out = tmp("ff_crop_text.pdf");
-    make_cropped(&out, CROP, 0);
+    make_cropped(&pdf, &out, CROP, 0);
 
     let t = ff_engine::extract_text(&pdf, &out, 0, None).expect("text");
     assert!(t.contains("FoFreeXit Test Document"), "trang crop mất tiêu đề: {t:?}");
@@ -97,7 +98,7 @@ fn page_dims_report_rotation_and_box() {
 
     // Xoay 90: width/height hiển thị đổi chỗ, hộp CHƯA xoay giữ nguyên.
     let rot = tmp("ff_rot_dims.pdf");
-    make_rotated(&rot);
+    make_rotated(&pdf, &rot);
     let d = ff_engine::page_dims(&pdf, &rot, None).expect("dims rot");
     assert_eq!(d[0].rotation, 90);
     assert!(close(d[0].width_pt, 792.0) && close(d[0].height_pt, 612.0), "{:?}", d[0]);
@@ -106,7 +107,7 @@ fn page_dims_report_rotation_and_box() {
 
     // Crop: hộp = CropBox (gốc lệch), width/height hiển thị = kích thước crop.
     let crop = tmp("ff_crop_dims.pdf");
-    make_cropped(&crop, CROP, 0);
+    make_cropped(&pdf, &crop, CROP, 0);
     let d = ff_engine::page_dims(&pdf, &crop, None).expect("dims crop");
     assert_eq!(d[0].rotation, 0);
     assert!(close(d[0].box_left, 30.0) && close(d[0].box_bottom, 300.0), "{:?}", d[0]);
@@ -115,7 +116,7 @@ fn page_dims_report_rotation_and_box() {
 
     // Crop + xoay 90.
     let both = tmp("ff_crop_rot_dims.pdf");
-    make_cropped(&both, CROP, 90);
+    make_cropped(&pdf, &both, CROP, 90);
     let d = ff_engine::page_dims(&pdf, &both, None).expect("dims both");
     assert_eq!(d[0].rotation, 90);
     assert!(close(d[0].box_left, 30.0) && close(d[0].box_bottom, 300.0), "{:?}", d[0]);
@@ -158,7 +159,7 @@ fn watermark_centered_inside_crop_box() {
     let crop = Rect { left: 300.0, bottom: 400.0, right: 592.0, top: 772.0 };
     let src = tmp("ff_wm_crop_src.pdf");
     let out = tmp("ff_wm_crop_out.pdf");
-    make_cropped(&src, crop, 0);
+    make_cropped(&pdf, &src, crop, 0);
     ff_engine::add_watermark(&pdf, &src, &watermark("WMCROP"), &out, None).expect("watermark");
 
     let (l, b, r, t) = text_union(&pdf, &out, "WMCROP");
@@ -175,7 +176,7 @@ fn watermark_upright_and_centered_on_rotated_page() {
     let pdf = pdfium();
     let src = tmp("ff_wm_rot_src.pdf");
     let out = tmp("ff_wm_rot_out.pdf");
-    make_rotated(&src);
+    make_rotated(&pdf, &src);
     ff_engine::add_watermark(&pdf, &src, &watermark("WMROTATED"), &out, None).expect("watermark");
 
     let (l, b, r, t) = text_union(&pdf, &out, "WMROTATED");
@@ -191,7 +192,7 @@ fn header_footer_inside_crop_box() {
     let pdf = pdfium();
     let src = tmp("ff_hf_crop_src.pdf");
     let out = tmp("ff_hf_crop_out.pdf");
-    make_cropped(&src, CROP, 0);
+    make_cropped(&pdf, &src, CROP, 0);
     let spec = HeaderFooterSpec {
         bottom_center: "HFCROP".into(),
         font_size: 12.0,
