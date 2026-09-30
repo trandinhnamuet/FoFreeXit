@@ -1,3 +1,39 @@
-// Từ điển vùng 1 của main.js — do agent i18n viết.
-I18N.add("vi", {});
-I18N.add("en", {});
+// Từ điển vùng 1 của main.js (viewer).
+I18N.add("vi", {
+  "viewer.docInfo": "{n} trang · {name}",
+  "viewer.errOpen": "Lỗi mở tài liệu: {e}",
+  "viewer.errPick": "Lỗi chọn tệp: {e}",
+  "viewer.pageN": "Trang {n}",
+  "viewer.pageAlt": "Trang {n}",
+  "viewer.errRender": "Lỗi hiển thị trang {n}: {e}",
+  "viewer.noOutline": "Tài liệu không có mục lục",
+  "viewer.untitled": "(không có tiêu đề)",
+  "viewer.searchErrShort": "lỗi",
+  "viewer.errSearch": "Lỗi tìm kiếm: {e}",
+  "viewer.hintNote": "Bấm lên trang để đặt ghi chú",
+  "viewer.hintRedact": "Kéo chuột quét vùng cần che — nội dung sẽ bị XOÁ THẬT khi áp dụng",
+  "viewer.hintMarkup": "Kéo chọn văn bản trên trang để đánh dấu (bấm lại nút để tắt)",
+  "viewer.hintDraw": "Kéo chuột trên trang để vẽ",
+  "viewer.deleteTip": "Xoá (Delete)",
+  "viewer.textPlaceholder": "Văn bản…",
+  "viewer.redactMarkTip": "Bấm để bỏ đánh dấu che",
+});
+I18N.add("en", {
+  "viewer.docInfo": "{n} pages · {name}",
+  "viewer.errOpen": "Could not open document: {e}",
+  "viewer.errPick": "Could not select file: {e}",
+  "viewer.pageN": "Page {n}",
+  "viewer.pageAlt": "Page {n}",
+  "viewer.errRender": "Could not render page {n}: {e}",
+  "viewer.noOutline": "This document has no bookmarks",
+  "viewer.untitled": "(untitled)",
+  "viewer.searchErrShort": "error",
+  "viewer.errSearch": "Search failed: {e}",
+  "viewer.hintNote": "Click on the page to place a note",
+  "viewer.hintRedact": "Drag to mark the area to redact — content is PERMANENTLY removed when applied",
+  "viewer.hintMarkup": "Drag to select text on the page (click the button again to turn off)",
+  "viewer.hintDraw": "Drag on the page to draw",
+  "viewer.deleteTip": "Delete (Del)",
+  "viewer.textPlaceholder": "Text…",
+  "viewer.redactMarkTip": "Click to remove this redaction mark",
+});

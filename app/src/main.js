@@ -103,7 +103,7 @@ async function loadDocument(path) {
     buildPages();
     buildThumbnails();
     buildOutline(meta.outline);
-    $("status").textContent = `${meta.pageCount} trang · ${shortName(path)}`;
+    $("status").textContent = t("viewer.docInfo", { n: meta.pageCount, name: shortName(path) });
     updatePageTotal();
     updateCurrentPage();
     updateZoomLabel();
@@ -122,7 +122,7 @@ async function loadDocument(path) {
     state.orgThumbs = new Map();
     if (state.organizeMode) buildOrganizeGrid();
   } catch (e) {
-    $("status").textContent = "Lỗi mở tài liệu: " + e;
+    $("status").textContent = t("viewer.errOpen", { e });
   }
 }
 
@@ -151,7 +151,7 @@ async function openFile() {
     const path = await invoke("pick_pdf");
     if (path) loadDocument(path);
   } catch (e) {
-    $("status").textContent = "Lỗi chọn file: " + e;
+    $("status").textContent = t("viewer.errPick", { e });
   }
 }
 
@@ -173,7 +173,7 @@ function buildPages() {
 
     const ph = document.createElement("div");
     ph.className = "ph";
-    ph.textContent = `Trang ${p.index + 1}`;
+    ph.textContent = t("viewer.pageN", { n: p.index + 1 });
     slot.appendChild(ph);
 
     const overlay = document.createElement("div");
@@ -241,7 +241,7 @@ async function renderSlot(idx) {
     drawAnnotsForPage(idx);
   } catch (e) {
     slot.dataset.renderedZoom = ""; // cho phép thử lại
-    $("status").textContent = "Lỗi render trang " + (idx + 1) + ": " + e;
+    $("status").textContent = t("viewer.errRender", { n: idx + 1, e });
   }
 }
 
@@ -408,14 +408,14 @@ function buildOutline(items) {
   const box = $("outline");
   box.innerHTML = "";
   if (!items.length) {
-    box.innerHTML = `<div class="oitem" style="color:#777">Không có outline</div>`;
+    box.innerHTML = `<div class="oitem" style="color:#777">${t("viewer.noOutline")}</div>`;
     return;
   }
   for (const it of items) {
     const el = document.createElement("div");
     el.className = "oitem";
     el.style.paddingLeft = 6 + it.level * 14 + "px";
-    el.textContent = it.title || "(không tiêu đề)";
+    el.textContent = it.title || t("viewer.untitled");
     if (it.pageIndex != null) {
       el.addEventListener("click", () => goToPage(it.pageIndex));
     } else {
@@ -554,7 +554,7 @@ async function fillRoSlot(idx) {
     if (!img) {
       img = document.createElement("img");
       img.className = "edit-ro";
-      img.alt = "trang " + (idx + 1);
+      img.alt = t("viewer.pageAlt", { n: idx + 1 });
       slot.appendChild(img);
     }
     img.src = url;
@@ -747,8 +747,8 @@ async function runSearch() {
     if (hits.length) gotoHit(0);
     drawHighlightsForVisible();
   } catch (e) {
-    $("searchCount").textContent = "lỗi";
-    $("status").textContent = "Lỗi tìm kiếm: " + e;
+    $("searchCount").textContent = t("viewer.searchErrShort");
+    $("status").textContent = t("viewer.errSearch", { e });
   }
 }
 
@@ -823,12 +823,12 @@ function setTool(tool) {
   document.body.classList.toggle("tool-mark", isTextMarkupTool(state.tool));
   $("annotHint").textContent = state.tool
     ? state.tool === "note"
-      ? "Bấm lên trang để đặt ghi chú"
+      ? t("viewer.hintNote")
       : state.tool === "redact"
-        ? "Kéo chuột quét vùng cần bôi đen — nội dung sẽ bị XOÁ THẬT khi Áp dụng"
+        ? t("viewer.hintRedact")
         : isTextMarkupTool(state.tool)
-          ? "Kéo chọn văn bản trên trang để tô (bấm lại nút để tắt)"
-          : "Kéo chuột trên trang để vẽ"
+          ? t("viewer.hintMarkup")
+          : t("viewer.hintDraw")
     : "";
 }
 
@@ -933,7 +933,7 @@ function drawAnnotsForPage(idx) {
             const del = document.createElement("div");
             del.className = "a-del";
             del.textContent = "✕";
-            del.title = "Xoá (Delete)";
+            del.title = t("viewer.deleteTip");
             del.addEventListener("click", (ev) => { ev.stopPropagation(); deleteSpec(s.id); });
             el.appendChild(del);
           }
@@ -961,7 +961,7 @@ function drawAnnotsForPage(idx) {
       el.style.fontWeight = s.bold ? "bold" : "normal";
       el.style.fontStyle = s.italic ? "italic" : "normal";
       el.style.textDecoration = s.underline ? "underline" : "none";
-      el.textContent = s.contents || "Văn bản…";
+      el.textContent = s.contents || t("viewer.textPlaceholder");
       Object.assign(el.style, { left: left + "px", top: top + "px", width: Math.max(w, 40) + "px", minHeight: h + "px" });
       el.addEventListener("dblclick", (ev) => { ev.stopPropagation(); editTextBox(s); });
     } else if (s.kind === "note") {
@@ -979,7 +979,7 @@ function drawAnnotsForPage(idx) {
       const del = document.createElement("div");
       del.className = "a-del";
       del.textContent = "✕";
-      del.title = "Xoá (Delete)";
+      del.title = t("viewer.deleteTip");
       del.addEventListener("click", (ev) => { ev.stopPropagation(); deleteSpec(s.id); });
       el.appendChild(del);
     }
@@ -997,7 +997,7 @@ function drawAnnotsForPage(idx) {
       width: (m.rect.right - m.rect.left) * scale + "px",
       height: (m.rect.top - m.rect.bottom) * scale + "px",
     });
-    el.title = "Bấm để bỏ đánh dấu redact";
+    el.title = t("viewer.redactMarkTip");
     el.addEventListener("click", (ev) => {
       ev.stopPropagation();
       const i = state.redactMarks.indexOf(m);
@@ -1122,7 +1122,7 @@ function showFmtBar(spec, editorEl) {
 
   const sizes = [8, 10, 12, 14, 18, 24, 32, 48];
   const sizeSel = document.createElement("select");
-  sizeSel.title = "Cỡ chữ";
+  sizeSel.title = t("annot.fontSize");
   for (const s of sizes) {
     const o = document.createElement("option");
     o.value = s; o.textContent = s;
@@ -1191,11 +1191,11 @@ function openNotePopup(spec) {
   pop.style.left = r.right + 6 + "px";
   pop.style.top = r.top + "px";
   pop.innerHTML = `
-    <div class="np-head"><span>Ghi chú</span><span class="np-close">✕</span></div>
-    <textarea class="np-text" placeholder="Nhập nội dung ghi chú…">${escapeHtml(spec.contents || "")}</textarea>
+    <div class="np-head"><span>${t("annot.note")}</span><span class="np-close">✕</span></div>
+    <textarea class="np-text" placeholder="${t("annot.notePlaceholder")}">${escapeHtml(spec.contents || "")}</textarea>
     <div class="np-foot">
-      <button class="np-color"><span class="sw" style="background:${rgbCss(spec.color)}"></span>Màu</button>
-      <button class="np-del">🗑 Xoá</button>
+      <button class="np-color"><span class="sw" style="background:${rgbCss(spec.color)}"></span>${t("common.color")}</button>
+      <button class="np-del">🗑 ${t("common.delete")}</button>
     </div>`;
   document.body.appendChild(pop);
   notePopupEl = pop;
@@ -1253,7 +1253,7 @@ function openColorPopover(anchor, currentRgb, onPick) {
 
   if (state.recentColors.length) {
     const lbl = document.createElement("div");
-    lbl.className = "clbl"; lbl.textContent = "Gần đây";
+    lbl.className = "clbl"; lbl.textContent = t("annot.recentColors");
     pop.appendChild(lbl);
     const rg = document.createElement("div");
     rg.className = "cgrid";
@@ -1263,7 +1263,7 @@ function openColorPopover(anchor, currentRgb, onPick) {
 
   const custom = document.createElement("label");
   custom.className = "ccustom";
-  custom.innerHTML = `Tuỳ chọn… <input type="color" value="${rgbToHex(currentRgb)}">`;
+  custom.innerHTML = `${t("annot.customColor")} <input type="color" value="${rgbToHex(currentRgb)}">`;
   custom.querySelector("input").addEventListener("input", (e) => {
     const rgb = hexToRgb(e.target.value);
     pushRecentColor(rgb);
@@ -1516,10 +1516,10 @@ async function saveAnnots() {
     const n = state.annotSpecs.length;
     state.annotSpecs = [];
     updateAnnotCount();
-    $("status").textContent = `Đã lưu ${n} chú thích → ${shortName(out)}`;
+    $("status").textContent = t("annot.saved", { n, file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("status").textContent = "Lỗi lưu chú thích: " + e;
+    $("status").textContent = t("annot.saveErr", { e });
   }
 }
 
@@ -1527,12 +1527,12 @@ function buildComments() {
   const box = $("comments");
   box.innerHTML = "";
   if (!state.annotSpecs.length) {
-    box.innerHTML = `<div class="empty">Chưa có chú thích chưa lưu. Chọn công cụ ở thanh trên và vẽ lên trang, rồi bấm "Lưu chú thích".</div>`;
+    box.innerHTML = `<div class="empty">${t("annot.emptyList")}</div>`;
     return;
   }
   const labels = {
-    highlight: "Tô sáng", underline: "Gạch chân", strikeout: "Gạch ngang",
-    square: "Khung", freetext: "Text box", note: "Ghi chú",
+    highlight: t("annot.kind.highlight"), underline: t("annot.kind.underline"), strikeout: t("annot.kind.strikeout"),
+    square: t("annot.kind.square"), freetext: t("annot.kind.freetext"), note: t("annot.kind.note"),
   };
   for (const s of state.annotSpecs) {
     const el = document.createElement("div");
@@ -1540,7 +1540,7 @@ function buildComments() {
     el.innerHTML =
       `<span class="cdel">✕</span>` +
       `<span class="csw" style="background:${rgbCss(s.color)}"></span>` +
-      `<span class="ckind">${labels[s.kind] || s.kind}</span> · trang ${s.pageIndex + 1}` +
+      `<span class="ckind">${labels[s.kind] || s.kind}</span> · ${t("annot.onPage", { n: s.pageIndex + 1 })}` +
       (s.contents ? `<br><span class="ctxt">${escapeHtml(s.contents)}</span>` : "");
     el.addEventListener("click", (ev) => {
       if (ev.target.classList.contains("cdel")) {
@@ -1561,9 +1561,9 @@ async function copyCurrentPage() {
   try {
     const txt = await invoke("page_text", { path: state.path, page: state.current });
     await navigator.clipboard.writeText(txt);
-    $("status").textContent = `Đã copy text trang ${state.current + 1} (${txt.length} ký tự)`;
+    $("status").textContent = t("annot.copied", { n: state.current + 1, chars: txt.length });
   } catch (e) {
-    $("status").textContent = "Lỗi copy: " + e;
+    $("status").textContent = t("annot.copyErr", { e });
   }
 }
 
@@ -1671,9 +1671,11 @@ async function materializeBaseInput() {
   });
   return { path, isTemp: true, pageCount: state.pagePlan.length };
 }
-const MATERIALIZED_NOTE =
-  `<p class="status">Đang dùng bản xem trước đã gồm các thay đổi tổ chức trang ` +
-  `chưa lưu (chèn/xoá/đảo/xoay/crop) — chưa ghi đè file gốc.</p>`;
+// Object có toString() thay vì chuỗi cố định: chèn vào template `${...}` sẽ gọi
+// t() lúc render → đổi ngôn ngữ trực tiếp vẫn đúng.
+const MATERIALIZED_NOTE = {
+  toString: () => `<p class="status">${t("org.materializedNote")}</p>`,
+};
 
 function orgMovePage(from, to) {
   if (from === to) return;
@@ -1744,8 +1746,8 @@ function buildOrganizeGrid() {
 }
 
 function orgDeleteSelected() {
-  if (!state.orgSelected.size) { $("organizeHint").textContent = "Chưa chọn trang nào để xoá"; return; }
-  if (state.orgSelected.size >= state.pagePlan.length) { $("organizeHint").textContent = "Không thể xoá hết toàn bộ trang"; return; }
+  if (!state.orgSelected.size) { $("organizeHint").textContent = t("org.noSelDelete"); return; }
+  if (state.orgSelected.size >= state.pagePlan.length) { $("organizeHint").textContent = t("org.cannotDeleteAll"); return; }
   pushUndo();
   state.pagePlan = state.pagePlan.filter((_, i) => !state.orgSelected.has(i));
   state.orgSelected = new Set();
@@ -1772,47 +1774,47 @@ async function orgSaveChanges() {
   if (!out) return;
   try {
     await invoke("organize_apply", { mainInput: state.path, plan: state.pagePlan, output: out, password: null });
-    $("status").textContent = `Đã lưu thay đổi tổ chức trang → ${shortName(out)}`;
+    $("status").textContent = t("org.savedTo", { name: shortName(out) });
     exitOrganizeMode();
     loadDocument(out);
   } catch (e) {
-    $("organizeHint").textContent = "Lỗi lưu: " + e;
+    $("organizeHint").textContent = t("org.saveErr", { e });
   }
 }
 
 function openInsertDialog() {
-  const box = openModal("Chèn trang", `
+  const box = openModal(t("org.insertTitle"), `
     <div class="radiorow">
-      <label><input type="radio" name="insKind" value="blank" checked> Trang trắng</label>
-      <label><input type="radio" name="insKind" value="file"> Từ file…</label>
+      <label><input type="radio" name="insKind" value="blank" checked> ${t("org.blankPage")}</label>
+      <label><input type="radio" name="insKind" value="file"> ${t("org.fromFile")}</label>
     </div>
     <div id="insBlankOpts">
-      <label>Cỡ giấy</label>
+      <label>${t("org.paperSize")}</label>
       <select id="insPaper">
         <option value="612x792">Letter</option>
         <option value="595x842">A4</option>
-        <option value="custom">Tuỳ chọn…</option>
+        <option value="custom">${t("org.customSize")}</option>
       </select>
       <div class="row" id="insCustomSize" style="display:none">
-        <div><label>Rộng (pt)</label><input type="number" id="insW" value="612"></div>
-        <div><label>Cao (pt)</label><input type="number" id="insH" value="792"></div>
+        <div><label>${t("org.widthPt")}</label><input type="number" id="insW" value="612"></div>
+        <div><label>${t("org.heightPt")}</label><input type="number" id="insH" value="792"></div>
       </div>
     </div>
     <div id="insFileOpts" style="display:none">
-      <label>File nguồn</label>
-      <button id="insPickFile" type="button">📂 Chọn file…</button>
+      <label>${t("org.sourceFile")}</label>
+      <button id="insPickFile" type="button">📂 ${t("org.pickFile")}</button>
       <span id="insFileName" class="status"></span>
-      <label>Trang (vd 1-3,5 — rỗng = tất cả)</label>
-      <input type="text" id="insRange" placeholder="tất cả">
+      <label>${t("org.rangeLabel")}</label>
+      <input type="text" id="insRange" placeholder="${t("org.rangeAllPh")}">
     </div>
-    <label>Vị trí</label>
+    <label>${t("common.position")}</label>
     <div class="radiorow">
-      <label><input type="radio" name="insPos" value="before" ${state.orgSelected.size ? "" : "disabled"}> Trước trang đang chọn</label>
-      <label><input type="radio" name="insPos" value="after" ${state.orgSelected.size ? "checked" : "disabled"}> Sau trang đang chọn</label>
-      <label><input type="radio" name="insPos" value="end" ${state.orgSelected.size ? "" : "checked"}> Cuối tài liệu</label>
+      <label><input type="radio" name="insPos" value="before" ${state.orgSelected.size ? "" : "disabled"}> ${t("org.posBefore")}</label>
+      <label><input type="radio" name="insPos" value="after" ${state.orgSelected.size ? "checked" : "disabled"}> ${t("org.posAfter")}</label>
+      <label><input type="radio" name="insPos" value="end" ${state.orgSelected.size ? "" : "checked"}> ${t("org.posEnd")}</label>
     </div>
     <div class="err" id="insErr"></div>
-    <div class="foot"><button id="insCancel">Huỷ</button><button id="insOk" class="primary">Chèn</button></div>
+    <div class="foot"><button id="insCancel">${t("common.cancel")}</button><button id="insOk" class="primary">${t("org.insertBtn")}</button></div>
   `);
   let insertFile = null;
   box.querySelectorAll('input[name=insKind]').forEach((r) => r.addEventListener("change", () => {
@@ -1843,18 +1845,18 @@ function openInsertDialog() {
       }
       newEntries = [{ kind: "blank", widthPt: w, heightPt: h, rotationDelta: 0, crop: null }];
     } else {
-      if (!insertFile) { box.querySelector("#insErr").textContent = "Hãy chọn file nguồn."; return; }
+      if (!insertFile) { box.querySelector("#insErr").textContent = t("org.needSource"); return; }
       let count;
       try {
         const meta = await invoke("open_document", { path: insertFile });
         count = meta.pageCount;
       } catch (e) {
-        box.querySelector("#insErr").textContent = "Không mở được file: " + e;
+        box.querySelector("#insErr").textContent = t("org.openErr", { e });
         return;
       }
       const rangeStr = box.querySelector("#insRange").value.trim();
       const indices = rangeStr ? parsePageRange(rangeStr, count) : Array.from({ length: count }, (_, i) => i);
-      if (!indices.length) { box.querySelector("#insErr").textContent = "Phạm vi trang không hợp lệ."; return; }
+      if (!indices.length) { box.querySelector("#insErr").textContent = t("org.badRange"); return; }
       newEntries = indices.map((idx) => ({ kind: "existing", source: insertFile, srcIndex: idx, rotationDelta: 0, crop: null }));
     }
     let at = state.pagePlan.length;
@@ -1869,12 +1871,12 @@ function openInsertDialog() {
 }
 
 function openExtractDialog() {
-  if (!state.orgSelected.size) { $("organizeHint").textContent = "Chưa chọn trang nào để trích"; return; }
-  const box = openModal("Trích trang", `
-    <p>Trích ${state.orgSelected.size} trang đã chọn ra file PDF mới.</p>
-    <label><input type="checkbox" id="extDeleteAfter"> Xoá các trang này khỏi tài liệu sau khi trích</label>
+  if (!state.orgSelected.size) { $("organizeHint").textContent = t("org.noSelExtract"); return; }
+  const box = openModal(t("org.extractTitle"), `
+    <p>${t("org.extractIntro", { n: state.orgSelected.size })}</p>
+    <label><input type="checkbox" id="extDeleteAfter"> ${t("org.extractDeleteAfter")}</label>
     <div class="err" id="extErr"></div>
-    <div class="foot"><button id="extCancel">Huỷ</button><button id="extOk" class="primary">Trích…</button></div>
+    <div class="foot"><button id="extCancel">${t("common.cancel")}</button><button id="extOk" class="primary">${t("org.extractBtn")}</button></div>
   `);
   box.querySelector("#extCancel").addEventListener("click", closeModal);
   box.querySelector("#extOk").addEventListener("click", async () => {
@@ -1890,25 +1892,25 @@ function openExtractDialog() {
         state.orgSelected = new Set();
         buildOrganizeGrid();
       }
-      $("organizeHint").textContent = `Đã trích ra ${shortName(out)}`;
+      $("organizeHint").textContent = t("org.extractedTo", { name: shortName(out) });
       closeModal();
     } catch (e) {
-      box.querySelector("#extErr").textContent = "Lỗi: " + e;
+      box.querySelector("#extErr").textContent = t("org.err", { e });
     }
   });
 }
 
 function openReplaceDialog() {
-  if (!state.orgSelected.size) { $("organizeHint").textContent = "Chưa chọn trang nào để thay"; return; }
-  const box = openModal("Thay trang", `
-    <p>Thay nội dung ${state.orgSelected.size} trang đã chọn bằng trang từ file khác.</p>
-    <label>File nguồn</label>
-    <button id="repPickFile" type="button">📂 Chọn file…</button>
+  if (!state.orgSelected.size) { $("organizeHint").textContent = t("org.noSelReplace"); return; }
+  const box = openModal(t("org.replaceTitle"), `
+    <p>${t("org.replaceIntro", { n: state.orgSelected.size })}</p>
+    <label>${t("org.sourceFile")}</label>
+    <button id="repPickFile" type="button">📂 ${t("org.pickFile")}</button>
     <span id="repFileName" class="status"></span>
-    <label>Trang nguồn (vd 1-3,5 — rỗng = tất cả)</label>
-    <input type="text" id="repRange" placeholder="tất cả">
+    <label>${t("org.srcRangeLabel")}</label>
+    <input type="text" id="repRange" placeholder="${t("org.rangeAllPh")}">
     <div class="err" id="repErr"></div>
-    <div class="foot"><button id="repCancel">Huỷ</button><button id="repOk" class="primary">Thay</button></div>
+    <div class="foot"><button id="repCancel">${t("common.cancel")}</button><button id="repOk" class="primary">${t("org.replaceBtn")}</button></div>
   `);
   let file = null;
   box.querySelector("#repPickFile").addEventListener("click", async () => {
@@ -1917,18 +1919,18 @@ function openReplaceDialog() {
   });
   box.querySelector("#repCancel").addEventListener("click", closeModal);
   box.querySelector("#repOk").addEventListener("click", async () => {
-    if (!file) { box.querySelector("#repErr").textContent = "Hãy chọn file nguồn."; return; }
+    if (!file) { box.querySelector("#repErr").textContent = t("org.needSource"); return; }
     let count;
     try {
       const meta = await invoke("open_document", { path: file });
       count = meta.pageCount;
     } catch (e) {
-      box.querySelector("#repErr").textContent = "Không mở được file: " + e;
+      box.querySelector("#repErr").textContent = t("org.openErr", { e });
       return;
     }
     const rangeStr = box.querySelector("#repRange").value.trim();
     const indices = rangeStr ? parsePageRange(rangeStr, count) : Array.from({ length: count }, (_, i) => i);
-    if (!indices.length) { box.querySelector("#repErr").textContent = "Phạm vi trang không hợp lệ."; return; }
+    if (!indices.length) { box.querySelector("#repErr").textContent = t("org.badRange"); return; }
     const newEntries = indices.map((idx) => ({ kind: "existing", source: file, srcIndex: idx, rotationDelta: 0, crop: null }));
     const sorted = Array.from(state.orgSelected).sort((a, b) => a - b);
     const at = sorted[0];
@@ -1943,19 +1945,19 @@ function openReplaceDialog() {
 
 function openMergeDialog() {
   let files = [];
-  const box = openModal("Trộn file PDF", `
-    <button id="mrgAdd" type="button">➕ Thêm file…</button>
+  const box = openModal(t("orgx.mergeTitle"), `
+    <button id="mrgAdd" type="button">➕ ${t("orgx.addFile")}</button>
     <div id="mrgList" style="margin-top:8px;"></div>
     <div class="err" id="mrgErr"></div>
-    <div class="foot"><button id="mrgCancel">Huỷ</button><button id="mrgOk" class="primary">Trộn…</button></div>
+    <div class="foot"><button id="mrgCancel">${t("common.cancel")}</button><button id="mrgOk" class="primary">${t("orgx.mergeOk")}</button></div>
   `);
   function renderList() {
     box.querySelector("#mrgList").innerHTML = files.map((f, i) =>
       `<div class="row" style="margin-bottom:4px;align-items:center;">` +
       `<span style="flex:3">${i + 1}. ${shortName(f)}</span>` +
-      `<button data-up="${i}" type="button" ${i === 0 ? "disabled" : ""}>↑</button>` +
-      `<button data-down="${i}" type="button" ${i === files.length - 1 ? "disabled" : ""}>↓</button>` +
-      `<button data-rm="${i}" type="button">✕</button></div>`
+      `<button data-up="${i}" type="button" title="${t("orgx.moveUp")}" ${i === 0 ? "disabled" : ""}>↑</button>` +
+      `<button data-down="${i}" type="button" title="${t("orgx.moveDown")}" ${i === files.length - 1 ? "disabled" : ""}>↓</button>` +
+      `<button data-rm="${i}" type="button" title="${t("orgx.remove")}">✕</button></div>`
     ).join("");
   }
   box.querySelector("#mrgAdd").addEventListener("click", async () => {
@@ -1979,26 +1981,26 @@ function openMergeDialog() {
   });
   box.querySelector("#mrgCancel").addEventListener("click", closeModal);
   box.querySelector("#mrgOk").addEventListener("click", async () => {
-    if (files.length < 1) { box.querySelector("#mrgErr").textContent = "Hãy thêm ít nhất 1 file."; return; }
+    if (files.length < 1) { box.querySelector("#mrgErr").textContent = t("orgx.mergeNeedFile"); return; }
     const out = await invoke("pick_save_pdf");
     if (!out) return;
     try {
       await invoke("organize_merge", { files, output: out });
-      $("status").textContent = `Đã trộn ${files.length} file → ${shortName(out)}`;
+      $("status").textContent = t("orgx.mergeDone", { n: files.length, name: shortName(out) });
       closeModal();
     } catch (e) {
-      box.querySelector("#mrgErr").textContent = "Lỗi: " + e;
+      box.querySelector("#mrgErr").textContent = t("orgx.err", { e });
     }
   });
   renderList();
 }
 
 function openSplitDialog() {
-  const box = openModal("Tách file PDF", `
-    <label>Mỗi file tối đa (số trang)</label>
+  const box = openModal(t("orgx.splitTitle"), `
+    <label>${t("orgx.splitPerFile")}</label>
     <input type="number" id="splitN" value="1" min="1">
     <div class="err" id="splitErr"></div>
-    <div class="foot"><button id="splitCancel">Huỷ</button><button id="splitOk" class="primary">Tách…</button></div>
+    <div class="foot"><button id="splitCancel">${t("common.cancel")}</button><button id="splitOk" class="primary">${t("orgx.splitOk")}</button></div>
   `);
   box.querySelector("#splitCancel").addEventListener("click", closeModal);
   box.querySelector("#splitOk").addEventListener("click", async () => {
@@ -2010,10 +2012,10 @@ function openSplitDialog() {
       const outs = await invoke("organize_split", {
         input: state.path, pagesPerFile: n, outDir, baseName: base, password: null,
       });
-      $("status").textContent = `Đã tách thành ${outs.length} file vào ${outDir}`;
+      $("status").textContent = t("orgx.splitDone", { n: outs.length, dir: outDir });
       closeModal();
     } catch (e) {
-      box.querySelector("#splitErr").textContent = "Lỗi: " + e;
+      box.querySelector("#splitErr").textContent = t("orgx.err", { e });
     }
   });
 }
@@ -2021,31 +2023,31 @@ function openSplitDialog() {
 async function openWatermarkDialog() {
   const base = await materializeBaseInput();
   const previewPage = base.isTemp ? (state.orgSelected.size ? Math.min(...state.orgSelected) : 0) : state.current;
-  const box = openModal("Watermark", `
+  const box = openModal(t("orgx.wmTitle"), `
     ${base.isTemp ? MATERIALIZED_NOTE : ""}
-    <label>Nội dung</label>
+    <label>${t("orgx.wmText")}</label>
     <input type="text" id="wmText" value="CONFIDENTIAL">
     <div class="row">
-      <div><label>Cỡ chữ</label><input type="number" id="wmSize" value="36"></div>
-      <div><label>Màu (r,g,b)</label><input type="text" id="wmColor" value="200,0,0"></div>
-      <div><label>Độ mờ (0-255)</label><input type="number" id="wmAlpha" value="120" min="0" max="255"></div>
+      <div><label>${t("orgx.fontSize")}</label><input type="number" id="wmSize" value="36"></div>
+      <div><label>${t("orgx.colorRgb")}</label><input type="text" id="wmColor" value="200,0,0"></div>
+      <div><label>${t("orgx.wmAlpha")}</label><input type="number" id="wmAlpha" value="120" min="0" max="255"></div>
     </div>
     <div class="row">
-      <label><input type="checkbox" id="wmBold"> Đậm</label>
-      <label><input type="checkbox" id="wmItalic"> Nghiêng</label>
+      <label><input type="checkbox" id="wmBold"> ${t("orgx.bold")}</label>
+      <label><input type="checkbox" id="wmItalic"> ${t("orgx.italic")}</label>
     </div>
-    <label>Góc xoay (độ)</label>
+    <label>${t("orgx.wmRotate")}</label>
     <input type="number" id="wmRotate" value="45">
-    <label>Vị trí</label>
+    <label>${t("common.position")}</label>
     <div class="anchor9" id="wmAnchor">
       ${["top-left", "top-center", "top-right", "middle-left", "center", "middle-right", "bottom-left", "bottom-center", "bottom-right"]
         .map((a) => `<button type="button" data-a="${a}" class="${a === "center" ? "cur" : ""}">●</button>`).join("")}
     </div>
-    <label>Trang áp dụng (rỗng = tất cả, vd 1-3,5)</label>
-    <input type="text" id="wmPages" placeholder="tất cả">
+    <label>${t("orgx.wmPages")}</label>
+    <input type="text" id="wmPages" placeholder="${t("orgx.pagesAll")}">
     <div class="foot">
-      <button id="wmPreview" type="button">👁 Xem trước</button>
-      <button id="wmCancel">Huỷ</button><button id="wmOk" class="primary">Áp dụng</button>
+      <button id="wmPreview" type="button">👁 ${t("orgx.preview")}</button>
+      <button id="wmCancel">${t("common.cancel")}</button><button id="wmOk" class="primary">${t("common.apply")}</button>
     </div>
     <div class="err" id="wmErr"></div>
   `);
@@ -2084,7 +2086,7 @@ async function openWatermarkDialog() {
       }
       img.src = url;
     } catch (e) {
-      box.querySelector("#wmErr").textContent = "Lỗi xem trước: " + e;
+      box.querySelector("#wmErr").textContent = t("orgx.previewErr", { e });
     }
   });
   box.querySelector("#wmCancel").addEventListener("click", closeModal);
@@ -2093,11 +2095,11 @@ async function openWatermarkDialog() {
     if (!out) return;
     try {
       await invoke("watermark_add", { input: base.path, spec: buildSpec(), output: out, password: null });
-      $("status").textContent = `Đã thêm watermark → ${shortName(out)}`;
+      $("status").textContent = t("orgx.wmDone", { name: shortName(out) });
       closeModal();
       loadDocument(out);
     } catch (e) {
-      box.querySelector("#wmErr").textContent = "Lỗi: " + e;
+      box.querySelector("#wmErr").textContent = t("orgx.err", { e });
     }
   });
 }
@@ -2105,33 +2107,33 @@ async function openWatermarkDialog() {
 async function openHeaderFooterDialog() {
   const base = await materializeBaseInput();
   const previewPage = base.isTemp ? (state.orgSelected.size ? Math.min(...state.orgSelected) : 0) : state.current;
-  const box = openModal("Header / Footer", `
+  const box = openModal(t("orgx.hfTitle"), `
     ${base.isTemp ? MATERIALIZED_NOTE : ""}
     <div class="row">
-      <div><label>Trên-trái</label><input type="text" id="hfTL"></div>
-      <div><label>Trên-giữa</label><input type="text" id="hfTC"></div>
-      <div><label>Trên-phải</label><input type="text" id="hfTR"></div>
+      <div><label>${t("orgx.hfTL")}</label><input type="text" id="hfTL"></div>
+      <div><label>${t("orgx.hfTC")}</label><input type="text" id="hfTC"></div>
+      <div><label>${t("orgx.hfTR")}</label><input type="text" id="hfTR"></div>
     </div>
     <div class="row">
-      <div><label>Dưới-trái</label><input type="text" id="hfBL"></div>
-      <div><label>Dưới-giữa</label><input type="text" id="hfBC" value="Trang {page}/{total}"></div>
-      <div><label>Dưới-phải</label><input type="text" id="hfBR"></div>
+      <div><label>${t("orgx.hfBL")}</label><input type="text" id="hfBL"></div>
+      <div><label>${t("orgx.hfBC")}</label><input type="text" id="hfBC" value="Trang {page}/{total}"></div>
+      <div><label>${t("orgx.hfBR")}</label><input type="text" id="hfBR"></div>
     </div>
-    <p class="status">Chèn vào ô đang focus:
+    <p class="status">${t("orgx.hfInsertTok")}
       <button type="button" data-tok="{page}">{page}</button>
       <button type="button" data-tok="{total}">{total}</button>
       <button type="button" data-tok="{date}">{date}</button>
     </p>
     <div class="row">
-      <div><label>Cỡ chữ</label><input type="number" id="hfSize" value="10"></div>
-      <div><label>Lề (pt)</label><input type="number" id="hfMargin" value="20"></div>
-      <div><label>Màu (r,g,b)</label><input type="text" id="hfColor" value="0,0,0"></div>
+      <div><label>${t("orgx.fontSize")}</label><input type="number" id="hfSize" value="10"></div>
+      <div><label>${t("orgx.hfMargin")}</label><input type="number" id="hfMargin" value="20"></div>
+      <div><label>${t("orgx.colorRgb")}</label><input type="text" id="hfColor" value="0,0,0"></div>
     </div>
-    <label>Trang áp dụng (rỗng = tất cả)</label>
-    <input type="text" id="hfPages" placeholder="tất cả">
+    <label>${t("orgx.hfPages")}</label>
+    <input type="text" id="hfPages" placeholder="${t("orgx.pagesAll")}">
     <div class="foot">
-      <button id="hfPreview" type="button">👁 Xem trước</button>
-      <button id="hfCancel">Huỷ</button><button id="hfOk" class="primary">Áp dụng</button>
+      <button id="hfPreview" type="button">👁 ${t("orgx.preview")}</button>
+      <button id="hfCancel">${t("common.cancel")}</button><button id="hfOk" class="primary">${t("common.apply")}</button>
     </div>
     <div class="err" id="hfErr"></div>
   `);
@@ -2171,7 +2173,7 @@ async function openHeaderFooterDialog() {
       }
       img.src = url;
     } catch (e) {
-      box.querySelector("#hfErr").textContent = "Lỗi xem trước: " + e;
+      box.querySelector("#hfErr").textContent = t("orgx.previewErr", { e });
     }
   });
   box.querySelector("#hfCancel").addEventListener("click", closeModal);
@@ -2180,11 +2182,11 @@ async function openHeaderFooterDialog() {
     if (!out) return;
     try {
       await invoke("header_footer_add", { input: base.path, spec: buildSpec(), output: out, password: null });
-      $("status").textContent = `Đã thêm header/footer → ${shortName(out)}`;
+      $("status").textContent = t("orgx.hfDone", { name: shortName(out) });
       closeModal();
       loadDocument(out);
     } catch (e) {
-      box.querySelector("#hfErr").textContent = "Lỗi: " + e;
+      box.querySelector("#hfErr").textContent = t("orgx.err", { e });
     }
   });
 }
@@ -2201,21 +2203,21 @@ function openCropDialog(pageIdx, rectPdf) {
     right: p.widthPt - rectPdf.right,
     top: p.heightPt - rectPdf.top,
   };
-  const box = openModal("Crop trang", `
+  const box = openModal(t("orgx.cropTitle"), `
     <div class="row">
-      <div><label>Trái (pt)</label><input type="number" id="cropL" value="${m.left.toFixed(1)}"></div>
-      <div><label>Phải (pt)</label><input type="number" id="cropR" value="${m.right.toFixed(1)}"></div>
+      <div><label>${t("orgx.cropL")}</label><input type="number" id="cropL" value="${m.left.toFixed(1)}"></div>
+      <div><label>${t("orgx.cropR")}</label><input type="number" id="cropR" value="${m.right.toFixed(1)}"></div>
     </div>
     <div class="row">
-      <div><label>Trên (pt)</label><input type="number" id="cropT" value="${m.top.toFixed(1)}"></div>
-      <div><label>Dưới (pt)</label><input type="number" id="cropB" value="${m.bottom.toFixed(1)}"></div>
+      <div><label>${t("orgx.cropT")}</label><input type="number" id="cropT" value="${m.top.toFixed(1)}"></div>
+      <div><label>${t("orgx.cropB")}</label><input type="number" id="cropB" value="${m.bottom.toFixed(1)}"></div>
     </div>
     <div class="radiorow">
-      <label><input type="radio" name="cropScope" value="this" checked> Trang này</label>
-      <label><input type="radio" name="cropScope" value="all"> Tất cả trang</label>
+      <label><input type="radio" name="cropScope" value="this" checked> ${t("orgx.cropThis")}</label>
+      <label><input type="radio" name="cropScope" value="all"> ${t("orgx.cropAll")}</label>
     </div>
-    <p class="status">Áp dụng ngay vào kế hoạch tổ chức trang — vào "🗂 Tổ chức trang" → "💾 Lưu thay đổi" để ghi ra file thật.</p>
-    <div class="foot"><button id="cropCancel">Huỷ</button><button id="cropOk" class="primary">Áp dụng</button></div>
+    <p class="status">${t("orgx.cropNote")}</p>
+    <div class="foot"><button id="cropCancel">${t("common.cancel")}</button><button id="cropOk" class="primary">${t("common.apply")}</button></div>
   `);
   box.querySelector("#cropCancel").addEventListener("click", () => {
     closeModal();
@@ -2238,7 +2240,7 @@ function openCropDialog(pageIdx, rectPdf) {
     closeModal();
     setTool(null);
     drawAnnotsForPage(pageIdx);
-    $("status").textContent = "Đã đặt vùng crop — vào Tổ chức trang > Lưu để ghi ra file thật.";
+    $("status").textContent = window.t("orgx.cropDone");
   });
 }
 
@@ -2251,7 +2253,7 @@ function openCropDialog(pageIdx, rectPdf) {
 const EDIT_STAGE_W = 820; // px bề rộng ảnh trang khi sửa
 
 function enterEditMode(pageIndex) {
-  if (!state.path) { $("status").textContent = "Hãy mở file trước khi sửa nội dung"; return; }
+  if (!state.path) { $("status").textContent = t("edit.openFirst"); return; }
   if (state.organizeMode) exitOrganizeMode();
   state.editMode = true;
   state.editPage = Number.isInteger(pageIndex) ? pageIndex : state.current;
@@ -2365,9 +2367,9 @@ async function loadEditPage() {
     buildEditOverlay();
     $("pageInput").value = state.editPage + 1;
     updateZoomLabel();
-    $("editHint").textContent = `Trang ${state.editPage + 1} · ${objs.length} đối tượng`;
+    $("editHint").textContent = t("edit.pageInfo", { page: state.editPage + 1, count: objs.length });
   } catch (e) {
-    $("editHint").textContent = "Lỗi nạp trang sửa: " + e;
+    $("editHint").textContent = t("edit.errLoadPage", { e });
   }
   $("edSave").disabled = state.editBase === state.path; // chưa có thay đổi nào
   $("edDiscard").disabled = state.editBase === state.path;
@@ -2526,16 +2528,16 @@ function selectEditObject(index, runIndices) {
     if (o.color) { state.editColor = o.color.slice(0, 3); $("edSw").style.background = rgbCss(state.editColor); }
     // Ô font: mặc định "(giữ nguyên: <family gốc>)" — chỉ đổi khi người dùng chọn khác.
     $("edFontFamily").options[0].textContent = o.fontFamily
-      ? `(giữ nguyên: ${o.fontFamily})`
-      : "(giữ nguyên)";
+      ? t("edit.fontKeepNamed", { font: o.fontFamily })
+      : t("edit.fontKeep");
     $("edFontFamily").value = "";
     $("edBold").classList.toggle("on", !!o.fontBold);
     $("edItalic").classList.toggle("on", !!o.fontItalic);
-    const emb = o.fontEmbedded == null ? "" : o.fontEmbedded ? " · font nhúng" : " · font hệ thống";
+    const emb = o.fontEmbedded == null ? "" : o.fontEmbedded ? " · " + t("edit.fontEmbedded") : " · " + t("edit.fontSystem");
     $("editHint").textContent =
       `${o.fontFamily || o.fontName || "?"} · ${Math.round(o.fontSize || 0)}pt${emb}`;
   } else {
-    $("edFontFamily").options[0].textContent = "(giữ nguyên)";
+    $("edFontFamily").options[0].textContent = t("edit.fontKeep");
     $("edBold").classList.remove("on");
     $("edItalic").classList.remove("on");
   }
@@ -2564,7 +2566,7 @@ async function stageEditOps(ops) {
     selectEditObject(-1);
     await loadEditPage();
   } catch (e) {
-    $("editHint").textContent = "Lỗi: " + e;
+    $("editHint").textContent = t("edit.err", { e });
   }
 }
 
@@ -3159,7 +3161,7 @@ function startBlockTextEdit(o, lines, ev) {
   $("edBold").disabled = false;
   $("edItalic").disabled = false;
   $("editHint").textContent =
-    "Sửa cả đoạn — Enter: xuống dòng · Bôi đen + B/I (Ctrl+B/I): đậm/nghiêng từng chữ · Ctrl+Enter: áp dụng · Esc: huỷ";
+    t("edit.hintParagraph");
 
   // Đọc nội dung theo DÒNG từ contenteditable (div/br → \n).
   const readText = () => {
@@ -3225,7 +3227,7 @@ function startBlockTextEdit(o, lines, ev) {
     // thay vì khoảng trống — hết cảm giác "chữ biến mất".
     if (bgSwapped) img.src = prevSrc;
     if (changed) {
-      $("editHint").textContent = "Đang áp dụng thay đổi…";
+      $("editHint").textContent = t("edit.applying");
       // Khối có TỪ 2 STYLE trở lên (thường + đậm/mono...) → gửi kèm đoạn
       // style để engine giữ đúng font/màu từng phần; 1 style → đường cũ
       // (ưu tiên dùng lại chính font object gốc).
@@ -3433,9 +3435,8 @@ function toggleInlineFormat(prop) {
   sel.removeAllRanges(); // DOM đã đổi — bỏ vùng chọn, giữ focus trong ô
   ce.focus();
   $("editHint").textContent = turnOn
-    ? (prop === "bold" ? "Đã in đậm phần bôi đen" : "Đã in nghiêng phần bôi đen") +
-      " — Ctrl+Enter để áp dụng"
-    : "Đã bỏ " + (prop === "bold" ? "in đậm" : "in nghiêng") + " phần bôi đen";
+    ? t(prop === "bold" ? "edit.boldOn" : "edit.italicOn")
+    : t(prop === "bold" ? "edit.boldOff" : "edit.italicOff");
   return true;
 }
 
@@ -3460,7 +3461,7 @@ function applyTextPropToSelected(part) {
   // thuật được sửa/xoá nội dung) — đúp chuột để sửa cả đoạn thì được.
   if (runs.some((r) => r.nested)) {
     $("editHint").textContent =
-      "Đổi font/cỡ/màu cho chữ trong khối form chưa hỗ trợ — đúp chuột để sửa nội dung, hoặc xoá.";
+      t("edit.nestedNoStyle");
     return;
   }
   stageEditOps(
@@ -3516,7 +3517,7 @@ function promptAddText(pdfX, pdfY) {
   const ov = $("editOverlay");
   const inp = document.createElement("input");
   inp.className = "edit-inline";
-  inp.placeholder = "Nhập chữ…";
+  inp.placeholder = t("edit.typeText");
   const s = state.editScale;
   const p = state.pages[state.editPage];
   const family = $("edFontFamily").value || null; // null = font mặc định
@@ -3563,7 +3564,7 @@ function onEditBoxMouseDown(e, o, runs) {
   // trợ kéo di chuyển/resize — chọn thôi, không bắt đầu drag.
   if (runObjs.some((r) => r && typeof r === "object" && r.nested)) {
     $("editHint").textContent =
-      "Khối này nằm trong form — đúp chuột để sửa nội dung; di chuyển/resize chưa hỗ trợ.";
+      t("edit.nestedNoMove");
     return;
   }
   const box = e.currentTarget;
@@ -3635,7 +3636,7 @@ async function armAddImage() {
   state.editArm = "image";
   $("edAddImage").classList.add("armed");
   $("editOverlay").classList.add("armed");
-  $("editHint").textContent = "Bấm lên trang để đặt ảnh";
+  $("editHint").textContent = t("edit.clickToPlaceImage");
 }
 
 async function replaceSelectedImage() {
@@ -3659,7 +3660,7 @@ function discardEdits() {
   state.editSel = null;
   selectEditObject(-1);
   loadEditPage();
-  $("status").textContent = "Đã huỷ mọi thay đổi nội dung — trở về file gốc.";
+  $("status").textContent = t("edit.discarded");
 }
 
 async function saveEdits() {
@@ -3668,11 +3669,11 @@ async function saveEdits() {
   try {
     // editBase đã gồm mọi thay đổi của trang đang sửa; ghi ra output (ops rỗng = sao chép/lưu lại).
     await invoke("edit_apply", { input: state.editBase, page: state.editPage, ops: [], output: out, password: null });
-    $("status").textContent = `Đã lưu nội dung đã sửa → ${shortName(out)}`;
+    $("status").textContent = t("edit.saved", { file: shortName(out) });
     exitEditMode();
     loadDocument(out);
   } catch (e) {
-    $("editHint").textContent = "Lỗi lưu: " + e;
+    $("editHint").textContent = t("edit.errSave", { e });
   }
 }
 
@@ -3686,10 +3687,10 @@ async function toggleConvMode() {
     try {
       const st = await invoke("convert_tools_status");
       const miss = [];
-      if (!st.tesseract) miss.push("Tesseract (OCR)");
-      if (!st.soffice) miss.push("LibreOffice (Office↔PDF chất lượng cao)");
+      if (!st.tesseract) miss.push(t("conv.toolTesseract"));
+      if (!st.soffice) miss.push(t("conv.toolLibreOffice"));
       $("convHint").textContent = miss.length
-        ? `Chưa cài: ${miss.join(", ")} — các nút liên quan sẽ báo lỗi kèm hướng dẫn`
+        ? t("conv.missingTools", { list: miss.join(", ") })
         : "";
       $("cvOcr").disabled = !st.tesseract;
       $("cvOffice").disabled = !st.soffice;
@@ -3703,14 +3704,14 @@ async function runOcrAction() {
   const lang = $("cvLang").value || "vie+eng";
   const out = await invoke("pick_save_pdf");
   if (!out) return;
-  $("convHint").textContent = "Đang OCR… (tài liệu dài có thể mất vài phút)";
+  $("convHint").textContent = t("conv.ocrRunning");
   try {
     const n = await invoke("ocr_run", { input: state.path, lang, output: out });
-    $("status").textContent = `OCR xong: ${n} từ, đã thêm lớp text ẩn → ${shortName(out)}`;
+    $("status").textContent = t("conv.ocrDone", { n, file: shortName(out) });
     $("convHint").textContent = "";
     loadDocument(out);
   } catch (e) {
-    $("convHint").textContent = "Lỗi OCR: " + e;
+    $("convHint").textContent = t("conv.errOcr", { e });
   }
 }
 
@@ -3719,9 +3720,9 @@ async function exportPngAction() {
   if (!dir) return;
   try {
     const files = await invoke("convert_images", { input: state.path, outDir: dir, dpi: 150 });
-    $("status").textContent = `Đã xuất ${files.length} ảnh PNG (150 DPI) vào ${dir}`;
+    $("status").textContent = t("conv.pngDone", { n: files.length, dir });
   } catch (e) {
-    $("convHint").textContent = "Lỗi xuất PNG: " + e;
+    $("convHint").textContent = t("conv.errPng", { e });
   }
 }
 
@@ -3731,9 +3732,9 @@ async function exportTxtAction() {
   if (!out) return;
   try {
     await invoke("convert_txt", { input: state.path, output: out });
-    $("status").textContent = `Đã xuất text → ${shortName(out)}`;
+    $("status").textContent = t("conv.txtDone", { file: shortName(out) });
   } catch (e) {
-    $("convHint").textContent = "Lỗi xuất TXT: " + e;
+    $("convHint").textContent = t("conv.errTxt", { e });
   }
 }
 
@@ -3741,14 +3742,14 @@ async function exportDocxAction() {
   const base = shortName(state.path).replace(/\.pdf$/i, "");
   const out = await invoke("pick_save_as", { ext: "docx", name: base + ".docx" });
   if (!out) return;
-  $("convHint").textContent = "Đang chuyển sang Word…";
+  $("convHint").textContent = t("conv.docxRunning");
   try {
     const engine = await invoke("convert_docx", { input: state.path, output: out });
-    const note = engine === "libreoffice" ? "LibreOffice (giữ layout tốt)" : "bộ chuyển cơ bản (text + bố cục)";
-    $("status").textContent = `Đã xuất Word (${note}) → ${shortName(out)}`;
+    const note = engine === "libreoffice" ? t("conv.engineLibreOffice") : t("conv.engineBasic");
+    $("status").textContent = t("conv.docxDone", { engine: note, file: shortName(out) });
     $("convHint").textContent = "";
   } catch (e) {
-    $("convHint").textContent = "Lỗi xuất Word: " + e;
+    $("convHint").textContent = t("conv.errDocx", { e });
   }
 }
 
@@ -3757,14 +3758,14 @@ async function officeToPdfAction() {
   if (!src) return;
   const dir = await invoke("pick_dir");
   if (!dir) return;
-  $("convHint").textContent = "Đang chuyển Office → PDF…";
+  $("convHint").textContent = t("conv.officeRunning");
   try {
     const out = await invoke("office_convert", { input: src, outDir: dir });
-    $("status").textContent = `Đã chuyển → ${shortName(out)}`;
+    $("status").textContent = t("conv.officeDone", { file: shortName(out) });
     $("convHint").textContent = "";
     loadDocument(out);
   } catch (e) {
-    $("convHint").textContent = "Lỗi Office→PDF (máy cần LibreOffice): " + e;
+    $("convHint").textContent = t("conv.errOffice", { e });
   }
 }
 
@@ -3784,11 +3785,17 @@ async function refreshFormCount() {
     state.formFields = fields;
     $("fmCount").textContent = fields.length;
     $("formHint").textContent = fields.length
-      ? `${fields.length} field trong tài liệu`
-      : "Tài liệu chưa có field form — dùng “Thêm field”.";
+      ? t("form.countHint", { n: fields.length })
+      : t("form.noFieldsHint");
   } catch (e) {
-    $("formHint").textContent = "Lỗi đọc form: " + e;
+    $("formHint").textContent = t("form.errRead", { e });
   }
+}
+
+// Nhãn hiển thị cho loại field (giá trị gốc gửi backend giữ nguyên).
+function formKindLabel(kind) {
+  const known = ["text", "checkbox", "radio", "combo", "list", "button", "signature", "unknown"];
+  return known.includes(kind) ? t("form.kind." + kind) : kind;
 }
 
 // Modal liệt kê field + input để điền, nút Lưu.
@@ -3797,18 +3804,18 @@ async function openFillForm() {
   try {
     fields = await invoke("form_list", { path: state.path });
   } catch (e) {
-    $("formHint").textContent = "Lỗi đọc form: " + e;
+    $("formHint").textContent = t("form.errRead", { e });
     return;
   }
   if (!fields.length) {
-    openModal("Điền form", `<p class="muted">Tài liệu chưa có field form nào. Hãy dùng “➕ Thêm field”.</p>
-      <div class="foot"><button id="ffClose" class="primary">Đóng</button></div>`)
+    openModal(t("form.fillTitle"), `<p class="muted">${t("form.noFieldsModal")}</p>
+      <div class="foot"><button id="ffClose" class="primary">${t("common.close")}</button></div>`)
       .querySelector("#ffClose").addEventListener("click", closeModal);
     return;
   }
   const rows = fields
     .map((f, i) => {
-      const label = `${escapeHtml(f.name)} <span class="muted">(${f.kind}${f.pageIndex != null ? `, trang ${f.pageIndex + 1}` : ""})</span>`;
+      const label = `${escapeHtml(f.name)} <span class="muted">(${formKindLabel(f.kind)}${f.pageIndex != null ? `, ${t("form.pageN", { n: f.pageIndex + 1 })}` : ""})</span>`;
       let input;
       if (f.kind === "checkbox" || f.kind === "radio") {
         const on = f.value && f.value !== "Off";
@@ -3824,10 +3831,10 @@ async function openFillForm() {
       return `<tr><td>${label}</td><td>${input}</td></tr>`;
     })
     .join("");
-  const box = openModal("Điền form", `
+  const box = openModal(t("form.fillTitle"), `
     <table class="form-table"><tbody>${rows}</tbody></table>
     <div class="err" id="ffErr"></div>
-    <div class="foot"><button id="ffCancel">Huỷ</button><button id="ffOk" class="primary">Lưu &amp; áp dụng…</button></div>
+    <div class="foot"><button id="ffCancel">${t("common.cancel")}</button><button id="ffOk" class="primary">${t("form.saveApply")}</button></div>
   `);
   box.querySelector("#ffCancel").addEventListener("click", closeModal);
   box.querySelector("#ffOk").addEventListener("click", async () => {
@@ -3843,36 +3850,36 @@ async function openFillForm() {
     try {
       const n = await invoke("form_fill", { input: state.path, values, output: out });
       closeModal();
-      $("status").textContent = `Đã điền ${n} field → ${shortName(out)}`;
+      $("status").textContent = t("form.fillDone", { n, file: shortName(out) });
       loadDocument(out);
     } catch (e) {
-      box.querySelector("#ffErr").textContent = "Lỗi: " + e;
+      box.querySelector("#ffErr").textContent = t("form.err", { e });
     }
   });
 }
 
 function openCreateFieldDialog() {
-  const box = openModal("Thêm field mới", `
-    <label>Tên field</label>
+  const box = openModal(t("form.createTitle"), `
+    <label>${t("form.fieldName")}</label>
     <input type="text" id="nfName" placeholder="hoTen">
-    <label>Loại</label>
+    <label>${t("form.fieldType")}</label>
     <select id="nfKind">
-      <option value="text">Text (ô nhập chữ)</option>
-      <option value="checkbox">Checkbox</option>
-      <option value="combo">Combo box (chọn 1)</option>
+      <option value="text">${t("form.typeTextOpt")}</option>
+      <option value="checkbox">${t("form.kind.checkbox")}</option>
+      <option value="combo">${t("form.typeComboOpt")}</option>
     </select>
     <div class="row">
-      <div><label>Trang</label><input type="number" id="nfPage" value="1" min="1"></div>
-      <div><label>Cỡ (rộng×cao pt)</label><input type="text" id="nfSize" value="200x20"></div>
+      <div><label>${t("common.page")}</label><input type="number" id="nfPage" value="1" min="1"></div>
+      <div><label>${t("form.sizeLabel")}</label><input type="text" id="nfSize" value="200x20"></div>
     </div>
     <div class="row">
-      <div><label>Vị trí X (pt)</label><input type="number" id="nfX" value="80"></div>
-      <div><label>Vị trí Y từ đáy (pt)</label><input type="number" id="nfY" value="700"></div>
+      <div><label>${t("form.posX")}</label><input type="number" id="nfX" value="80"></div>
+      <div><label>${t("form.posY")}</label><input type="number" id="nfY" value="700"></div>
     </div>
-    <label id="nfOptLabel" class="hidden">Lựa chọn (cách nhau dấu phẩy)</label>
-    <input type="text" id="nfOpts" class="hidden" placeholder="Nam, Nữ, Khác">
+    <label id="nfOptLabel" class="hidden">${t("form.optionsLabel")}</label>
+    <input type="text" id="nfOpts" class="hidden" placeholder="${t("form.optionsPlaceholder")}">
     <div class="err" id="nfErr"></div>
-    <div class="foot"><button id="nfCancel">Huỷ</button><button id="nfOk" class="primary">Tạo &amp; lưu…</button></div>
+    <div class="foot"><button id="nfCancel">${t("common.cancel")}</button><button id="nfOk" class="primary">${t("form.createSave")}</button></div>
   `);
   const kindSel = box.querySelector("#nfKind");
   const toggleOpts = () => {
@@ -3885,11 +3892,11 @@ function openCreateFieldDialog() {
   box.querySelector("#nfOk").addEventListener("click", async () => {
     const name = box.querySelector("#nfName").value.trim();
     const err = box.querySelector("#nfErr");
-    if (!name) { err.textContent = "Cần nhập tên field."; return; }
+    if (!name) { err.textContent = t("form.nameRequired"); return; }
     const kind = kindSel.value;
     const page = Math.max(1, Number(box.querySelector("#nfPage").value) || 1) - 1;
     const m = box.querySelector("#nfSize").value.match(/^\s*(\d+)\s*[x×]\s*(\d+)\s*$/);
-    if (!m) { err.textContent = "Cỡ phải dạng rộng×cao, vd 200x20."; return; }
+    if (!m) { err.textContent = t("form.sizeInvalid"); return; }
     const w = Number(m[1]), h = Number(m[2]);
     const x = Number(box.querySelector("#nfX").value) || 0;
     const y = Number(box.querySelector("#nfY").value) || 0;
@@ -3902,10 +3909,10 @@ function openCreateFieldDialog() {
     try {
       await invoke("form_create", { input: state.path, fields: [field], output: out });
       closeModal();
-      $("status").textContent = `Đã tạo field “${name}” → ${shortName(out)}`;
+      $("status").textContent = t("form.createDone", { name, file: shortName(out) });
       loadDocument(out);
     } catch (e) {
-      err.textContent = "Lỗi: " + e;
+      err.textContent = t("form.err", { e });
     }
   });
 }
@@ -3915,10 +3922,10 @@ async function flattenFormAction() {
   if (!out) return;
   try {
     await invoke("form_flatten", { input: state.path, output: out, password: null });
-    $("status").textContent = `Đã flatten form → ${shortName(out)}`;
+    $("status").textContent = t("form.flattenDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("formHint").textContent = "Lỗi flatten: " + e;
+    $("formHint").textContent = t("form.errFlatten", { e });
   }
 }
 
@@ -3931,9 +3938,9 @@ async function exportFormData(kind) {
   if (kind === "fdf" && !/\.fdf$/i.test(target)) target = target.replace(/\.[^.]*$/, "") + ".fdf";
   try {
     await invoke("form_export", { input: state.path, output: target });
-    $("formHint").textContent = `Đã xuất dữ liệu form → ${shortName(target)}`;
+    $("formHint").textContent = t("form.exportDone", { file: shortName(target) });
   } catch (e) {
-    $("formHint").textContent = "Lỗi xuất: " + e;
+    $("formHint").textContent = t("form.errExport", { e });
   }
 }
 
@@ -3944,10 +3951,10 @@ async function importFormFdf() {
   if (!out) return;
   try {
     const n = await invoke("form_import_fdf", { input: state.path, fdf, output: out });
-    $("status").textContent = `Đã nhập ${n} field từ FDF → ${shortName(out)}`;
+    $("status").textContent = t("form.importDone", { n, file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("formHint").textContent = "Lỗi nhập FDF: " + e;
+    $("formHint").textContent = t("form.errImport", { e });
   }
 }
 
@@ -3991,40 +3998,40 @@ async function applyRedactions() {
     const n = await invoke("redact_apply", { input: state.path, areas, output: out, password: null });
     clearRedactMarks();
     setTool(null);
-    $("status").textContent = `Đã redact (xoá thật) ${n} đối tượng → ${shortName(out)}`;
+    $("status").textContent = t("sec.redactDone", { n, file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = "Lỗi redact: " + e;
+    $("secHint").textContent = t("sec.errRedact", { e });
   }
 }
 
 function openEncryptDialog() {
-  const box = openModal("Đặt mật khẩu (AES-256)", `
-    <label>Mật khẩu mở file (user password)</label>
+  const box = openModal(t("sec.encTitle"), `
+    <label>${t("sec.encUserPw")}</label>
     <input type="password" id="secPw1" autocomplete="new-password">
-    <label>Nhập lại mật khẩu</label>
+    <label>${t("sec.encUserPw2")}</label>
     <input type="password" id="secPw2" autocomplete="new-password">
-    <label>Mật khẩu chủ sở hữu (owner — để trống = dùng mật khẩu mở)</label>
+    <label>${t("sec.encOwnerPw")}</label>
     <input type="password" id="secPwOwner" autocomplete="new-password">
-    <label>Quyền hạn khi mở bằng mật khẩu user</label>
+    <label>${t("sec.encPerms")}</label>
     <div class="row">
-      <label><input type="checkbox" id="secPermPrint" checked> In</label>
-      <label><input type="checkbox" id="secPermModify" checked> Sửa nội dung</label>
+      <label><input type="checkbox" id="secPermPrint" checked> ${t("sec.permPrint")}</label>
+      <label><input type="checkbox" id="secPermModify" checked> ${t("sec.permModify")}</label>
     </div>
     <div class="row">
-      <label><input type="checkbox" id="secPermExtract" checked> Sao chép text/ảnh</label>
-      <label><input type="checkbox" id="secPermAnnotate" checked> Chú thích/điền form</label>
+      <label><input type="checkbox" id="secPermExtract" checked> ${t("sec.permExtract")}</label>
+      <label><input type="checkbox" id="secPermAnnotate" checked> ${t("sec.permAnnotate")}</label>
     </div>
     <div class="err" id="secEncErr"></div>
-    <div class="foot"><button id="secEncCancel">Huỷ</button><button id="secEncOk" class="primary">Mã hoá…</button></div>
+    <div class="foot"><button id="secEncCancel">${t("common.cancel")}</button><button id="secEncOk" class="primary">${t("sec.encOk")}</button></div>
   `);
   box.querySelector("#secEncCancel").addEventListener("click", closeModal);
   box.querySelector("#secEncOk").addEventListener("click", async () => {
     const p1 = box.querySelector("#secPw1").value;
     const p2 = box.querySelector("#secPw2").value;
     const err = box.querySelector("#secEncErr");
-    if (!p1) { err.textContent = "Mật khẩu không được để trống."; return; }
-    if (p1 !== p2) { err.textContent = "Hai lần nhập không khớp."; return; }
+    if (!p1) { err.textContent = t("sec.errPwEmpty"); return; }
+    if (p1 !== p2) { err.textContent = t("sec.errPwMismatch"); return; }
     const out = await invoke("pick_save_pdf");
     if (!out) return;
     try {
@@ -4039,27 +4046,27 @@ function openEncryptDialog() {
         allowAnnotate: box.querySelector("#secPermAnnotate").checked,
       });
       closeModal();
-      $("status").textContent = `Đã mã hoá AES-256 → ${shortName(out)}`;
-      $("secHint").textContent = "File mã hoá đã lưu riêng — file đang mở giữ nguyên.";
+      $("status").textContent = t("sec.encDone", { file: shortName(out) });
+      $("secHint").textContent = t("sec.encSavedSeparately");
     } catch (e) {
-      err.textContent = "Lỗi: " + e;
+      err.textContent = t("sec.err", { e });
     }
   });
 }
 
 function openDecryptDialog() {
-  const box = openModal("Gỡ mật khẩu", `
-    <p class="muted">Chọn file PDF đang có mật khẩu, nhập mật khẩu hiện tại, lưu ra bản không mã hoá.</p>
-    <label>Mật khẩu hiện tại</label>
+  const box = openModal(t("sec.decTitle"), `
+    <p class="muted">${t("sec.decIntro")}</p>
+    <label>${t("sec.decCurrentPw")}</label>
     <input type="password" id="secDecPw" autocomplete="current-password">
     <div class="err" id="secDecErr"></div>
-    <div class="foot"><button id="secDecCancel">Huỷ</button><button id="secDecOk" class="primary">Chọn file &amp; gỡ…</button></div>
+    <div class="foot"><button id="secDecCancel">${t("common.cancel")}</button><button id="secDecOk" class="primary">${t("sec.decOk")}</button></div>
   `);
   box.querySelector("#secDecCancel").addEventListener("click", closeModal);
   box.querySelector("#secDecOk").addEventListener("click", async () => {
     const pw = box.querySelector("#secDecPw").value;
     const err = box.querySelector("#secDecErr");
-    if (!pw) { err.textContent = "Cần nhập mật khẩu hiện tại."; return; }
+    if (!pw) { err.textContent = t("sec.errDecPwEmpty"); return; }
     const inp = await invoke("pick_pdf");
     if (!inp) return;
     const out = await invoke("pick_save_pdf");
@@ -4067,10 +4074,10 @@ function openDecryptDialog() {
     try {
       await invoke("security_decrypt", { input: inp, password: pw, output: out });
       closeModal();
-      $("status").textContent = `Đã gỡ mật khẩu → ${shortName(out)}`;
+      $("status").textContent = t("sec.decDone", { file: shortName(out) });
       loadDocument(out);
     } catch (e) {
-      err.textContent = "Lỗi (mật khẩu sai?): " + e;
+      err.textContent = t("sec.errDec", { e });
     }
   });
 }
@@ -4080,10 +4087,10 @@ async function stripMetadataAction() {
   if (!out) return;
   try {
     await invoke("security_strip_metadata", { input: state.path, output: out });
-    $("status").textContent = `Đã xoá metadata (/Info + XMP) → ${shortName(out)}`;
+    $("status").textContent = t("sec.stripDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = "Lỗi xoá metadata: " + e;
+    $("secHint").textContent = t("sec.errStrip", { e });
   }
 }
 
@@ -4092,52 +4099,52 @@ async function optimizeSaveAction() {
   if (!out) return;
   try {
     await invoke("security_optimize", { input: state.path, output: out });
-    $("status").textContent = `Đã lưu tối ưu (nén + dọn rác) → ${shortName(out)}`;
+    $("status").textContent = t("sec.optimizeDone", { file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("secHint").textContent = "Lỗi lưu tối ưu: " + e;
+    $("secHint").textContent = t("sec.errOptimize", { e });
   }
 }
 
 // --- Chữ ký số (Phase 5 iteration 2) ---
 
 function openCreateIdDialog() {
-  const box = openModal("Tạo Digital ID tự ký", `
-    <p class="muted">Tạo chứng chỉ tự ký (RSA-2048) để ký thử. Nếu có chữ ký của tổ chức phát hành (PFX/PEM) thì dùng thẳng nó ở bước Ký số.</p>
-    <label>Tên hiển thị trong chữ ký</label>
-    <input type="text" id="idCn" placeholder="Nguyễn Văn A">
+  const box = openModal(t("sig.idTitle"), `
+    <p class="muted">${t("sig.idIntro")}</p>
+    <label>${t("sig.idCnLabel")}</label>
+    <input type="text" id="idCn" placeholder="${t("sig.namePlaceholder")}">
     <div class="err" id="idErr"></div>
-    <div class="foot"><button id="idCancel">Huỷ</button><button id="idOk" class="primary">Tạo &amp; lưu…</button></div>
+    <div class="foot"><button id="idCancel">${t("common.cancel")}</button><button id="idOk" class="primary">${t("sig.idOk")}</button></div>
   `);
   box.querySelector("#idCancel").addEventListener("click", closeModal);
   box.querySelector("#idOk").addEventListener("click", async () => {
     const cn = box.querySelector("#idCn").value.trim();
-    if (!cn) { box.querySelector("#idErr").textContent = "Cần nhập tên."; return; }
+    if (!cn) { box.querySelector("#idErr").textContent = t("sig.errIdName"); return; }
     const out = await invoke("pick_save_pem");
     if (!out) return;
     try {
       await invoke("sig_create_id", { commonName: cn, output: out });
       closeModal();
-      $("secHint").textContent = `Đã tạo Digital ID → ${shortName(out)} (dùng ở bước Ký số)`;
+      $("secHint").textContent = t("sig.idDone", { file: shortName(out) });
     } catch (e) {
-      box.querySelector("#idErr").textContent = "Lỗi: " + e;
+      box.querySelector("#idErr").textContent = t("sig.err", { e });
     }
   });
 }
 
 function openSignDialog() {
-  const box = openModal("Ký số tài liệu", `
-    <label>Tên người ký (hiện trong chữ ký)</label>
-    <input type="text" id="sgName" placeholder="Nguyễn Văn A">
-    <label>Lý do ký</label>
+  const box = openModal(t("sig.signTitle"), `
+    <label>${t("sig.signerLabel")}</label>
+    <input type="text" id="sgName" placeholder="${t("sig.namePlaceholder")}">
+    <label>${t("sig.reasonLabel")}</label>
     <input type="text" id="sgReason" value="Tôi đồng ý với nội dung tài liệu">
-    <label>Digital ID (.pem)</label>
+    <label>${t("sig.idFileLabel")}</label>
     <div class="row">
-      <input type="text" id="sgId" readonly placeholder="Chưa chọn — bấm Chọn…">
-      <button id="sgPickId">Chọn…</button>
+      <input type="text" id="sgId" readonly placeholder="${t("sig.idNotChosen")}">
+      <button id="sgPickId">${t("common.browse")}</button>
     </div>
     <div class="err" id="sgErr"></div>
-    <div class="foot"><button id="sgCancel">Huỷ</button><button id="sgOk" class="primary">Ký &amp; lưu…</button></div>
+    <div class="foot"><button id="sgCancel">${t("common.cancel")}</button><button id="sgOk" class="primary">${t("sig.signOk")}</button></div>
   `);
   let idPath = null;
   box.querySelector("#sgPickId").addEventListener("click", async () => {
@@ -4149,19 +4156,19 @@ function openSignDialog() {
     const name = box.querySelector("#sgName").value.trim();
     const reason = box.querySelector("#sgReason").value.trim();
     const err = box.querySelector("#sgErr");
-    if (!name) { err.textContent = "Cần nhập tên người ký."; return; }
-    if (!idPath) { err.textContent = "Cần chọn Digital ID (.pem)."; return; }
+    if (!name) { err.textContent = t("sig.errSignerEmpty"); return; }
+    if (!idPath) { err.textContent = t("sig.errNoId"); return; }
     const out = await invoke("pick_save_pdf");
     if (!out) return;
     try {
       await invoke("sig_sign", { input: state.path, idPem: idPath, reason, signerName: name, output: out });
       closeModal();
-      $("status").textContent = `Đã ký số → ${shortName(out)}`;
+      $("status").textContent = t("sig.signDone", { file: shortName(out) });
       loadDocument(out);
       // Tự kiểm tra chữ ký vừa tạo.
       verifySignaturesAction(out);
     } catch (e) {
-      err.textContent = "Lỗi ký: " + e;
+      err.textContent = t("sig.errSign", { e });
     }
   });
 }
@@ -4172,30 +4179,30 @@ async function verifySignaturesAction(pathOverride) {
   try {
     checks = await invoke("sig_verify", { input: target });
   } catch (e) {
-    $("secHint").textContent = "Lỗi kiểm tra: " + e;
+    $("secHint").textContent = t("sig.errVerify", { e });
     return;
   }
   const rows = checks.length
     ? checks
         .map((c, i) => {
           const badge = c.valid
-            ? '<span class="sig-ok">✓ Hợp lệ</span>'
-            : '<span class="sig-bad">✗ Không hợp lệ</span>';
+            ? `<span class="sig-ok">✓ ${t("sig.valid")}</span>`
+            : `<span class="sig-bad">✗ ${t("sig.invalid")}</span>`;
           const detail = [];
-          if (!c.cryptoValid) detail.push("chữ ký sai");
-          if (!c.digestMatches) detail.push("nội dung đã bị sửa");
-          if (!c.coversDocument) detail.push("có phần thêm sau khi ký");
+          if (!c.cryptoValid) detail.push(t("sig.detailCrypto"));
+          if (!c.digestMatches) detail.push(t("sig.detailDigest"));
+          if (!c.coversDocument) detail.push(t("sig.detailCoverage"));
           return `<tr><td>${i + 1}</td><td>${(c.signer || "").replace(/</g, "&lt;")}</td><td>${badge}</td>
             <td class="muted">${detail.join("; ")}</td></tr>`;
         })
         .join("")
-    : `<tr><td colspan="4" class="muted">Tài liệu chưa có chữ ký số nào.</td></tr>`;
-  const box = openModal("Kết quả kiểm tra chữ ký", `
+    : `<tr><td colspan="4" class="muted">${t("sig.none")}</td></tr>`;
+  const box = openModal(t("sig.verifyTitle"), `
     <table class="sig-table">
-      <thead><tr><th>#</th><th>Người ký</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead>
+      <thead><tr><th>#</th><th>${t("sig.colSigner")}</th><th>${t("sig.colStatus")}</th><th>${t("sig.colNote")}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="foot"><button id="sigClose" class="primary">Đóng</button></div>
+    <div class="foot"><button id="sigClose" class="primary">${t("common.close")}</button></div>
   `);
   box.querySelector("#sigClose").addEventListener("click", closeModal);
 }
@@ -4216,7 +4223,7 @@ if (window.__TAURI__.event) {
     const paths = (e.payload && e.payload.paths) || [];
     const pdf = paths.find((p) => /\.pdf$/i.test(p));
     if (!pdf) {
-      if (paths.length) $("status").textContent = "Chỉ mở được file .pdf";
+      if (paths.length) $("status").textContent = t("ev.onlyPdf");
       return;
     }
     if (state.editMode) exitEditMode();
@@ -4383,7 +4390,7 @@ $("edAddText").addEventListener("click", () => {
   state.editArm = state.editArm === "text" ? null : "text";
   $("edAddText").classList.toggle("armed", state.editArm === "text");
   $("editOverlay").classList.toggle("armed", !!state.editArm);
-  $("editHint").textContent = state.editArm === "text" ? "Bấm lên trang để đặt chữ" : "";
+  $("editHint").textContent = state.editArm === "text" ? t("ev.addTextHint") : "";
 });
 $("edAddImage").addEventListener("click", armAddImage);
 $("edDelete").addEventListener("click", deleteSelectedEditObject);

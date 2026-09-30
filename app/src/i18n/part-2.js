@@ -1,3 +1,39 @@
-// Từ điển vùng 2 của main.js — do agent i18n viết.
-I18N.add("vi", {});
-I18N.add("en", {});
+// Từ điển vùng 2 của main.js (chú thích).
+I18N.add("vi", {
+  "annot.fontSize": "Cỡ chữ",
+  "annot.note": "Ghi chú",
+  "annot.notePlaceholder": "Nhập nội dung ghi chú…",
+  "annot.recentColors": "Gần đây",
+  "annot.customColor": "Màu tuỳ chọn…",
+  "annot.saved": "Đã lưu {n} chú thích → {file}",
+  "annot.saveErr": "Lỗi lưu chú thích: {e}",
+  "annot.emptyList": "Chưa có chú thích nào chưa lưu. Chọn công cụ ở thanh trên, vẽ lên trang rồi bấm \"Lưu chú thích\".",
+  "annot.kind.highlight": "Tô sáng",
+  "annot.kind.underline": "Gạch chân",
+  "annot.kind.strikeout": "Gạch ngang",
+  "annot.kind.square": "Khung",
+  "annot.kind.freetext": "Hộp văn bản",
+  "annot.kind.note": "Ghi chú",
+  "annot.onPage": "trang {n}",
+  "annot.copied": "Đã sao chép văn bản trang {n} ({chars} ký tự)",
+  "annot.copyErr": "Lỗi sao chép: {e}",
+});
+I18N.add("en", {
+  "annot.fontSize": "Font size",
+  "annot.note": "Note",
+  "annot.notePlaceholder": "Type your note…",
+  "annot.recentColors": "Recent colors",
+  "annot.customColor": "Custom color…",
+  "annot.saved": "Saved {n} annotation(s) → {file}",
+  "annot.saveErr": "Failed to save annotations: {e}",
+  "annot.emptyList": "No unsaved annotations. Pick a tool on the toolbar, draw on the page, then click \"Save Annotations\".",
+  "annot.kind.highlight": "Highlight",
+  "annot.kind.underline": "Underline",
+  "annot.kind.strikeout": "Strikethrough",
+  "annot.kind.square": "Rectangle",
+  "annot.kind.freetext": "Text Box",
+  "annot.kind.note": "Note",
+  "annot.onPage": "page {n}",
+  "annot.copied": "Copied text of page {n} ({chars} characters)",
+  "annot.copyErr": "Copy failed: {e}",
+});
