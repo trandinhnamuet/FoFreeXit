@@ -5,6 +5,7 @@
 //! ocr... sẽ thêm dần ở các phase sau (xem docs/03-roadmap.md, 04-architecture.md).
 
 pub mod annot;
+pub mod annot_ext;
 pub mod convert;
 pub mod edit;
 mod cffwrap;
@@ -25,6 +26,11 @@ pub mod watermark;
 
 pub use annot::{
     apply_annotations, count_annotations, list_annotations, AnnotInfo, AnnotKind, AnnotSpec,
+};
+pub use annot_ext::{
+    apply_shape_annotations, delete_annotations, list_annotations_detailed, render_page_hiding,
+    save_annotations, update_annotations, AnnotDetail, AnnotMeta, AnnotRef, AnnotSaveRequest,
+    AnnotUpdate, ShapeKind, ShapeSpec, StampSpec,
 };
 pub use edit::{apply_edits, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
 pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};
