@@ -8,6 +8,8 @@ use base64::Engine as _;
 use serde::Serialize;
 use tauri_plugin_dialog::DialogExt;
 
+mod cmd_create;
+
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1596,7 +1598,25 @@ fn main() {
             pick_save_pem,
             pick_save_data,
             pick_fdf,
-            pick_image
+            pick_image,
+            cmd_create::create_from_images,
+            cmd_create::create_blank,
+            cmd_create::create_from_text,
+            cmd_create::create_from_web,
+            cmd_create::create_from_office,
+            cmd_create::create_combine,
+            cmd_create::create_source_info,
+            cmd_create::create_tools_status,
+            cmd_create::create_scan_page,
+            cmd_create::create_clipboard_image,
+            cmd_create::create_cleanup,
+            cmd_create::pick_images,
+            cmd_create::pick_text_file,
+            cmd_create::pick_html_file,
+            cmd_create::pick_combine_files,
+            cmd_create::export_run,
+            cmd_create::ocr_run_ex,
+            cmd_create::ocr_images
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");

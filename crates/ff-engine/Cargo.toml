@@ -16,6 +16,9 @@ thiserror.workspace = true
 # 7543; DLL bblanchon mới hơn là superset của API 7350 nên tương thích.
 pdfium-render = { version = "0.8", default-features = false, features = ["pdfium_7350", "thread_safe", "image"] }
 image = "0.25"
+tiff = "0.11"
+flate2 = "1"
+base64 = "0.22"
 lopdf = "0.36"
 ttf-parser = "0.25"
 # Phase 5 iteration 2 — chữ ký số (PKCS#7/CMS detached, RSA-SHA256):

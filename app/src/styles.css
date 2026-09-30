@@ -773,3 +773,40 @@ body.ribbon-collapsed .tabrow { border-bottom: 1px solid var(--border); }
 .pagenum { width: 4ch; text-align: center; }
 .cs { border-width: 0; box-shadow: inset 0 0 0 1px rgba(127,127,127,.35); }
 .cs.cur { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+
+/* ---------- Tạo PDF / Xuất / OCR (features/create.js) ---------- */
+.rbtn.cr-drop > span { display: inline-flex; align-items: center; gap: 2px; }
+.rbtn .cr-caret svg.ic { width: 11px; height: 11px; color: var(--faint); }
+.cr-menu { min-width: 220px; }
+.cr-menu .mitem:disabled { opacity: .4; pointer-events: none; }
+body.cr-busy, body.cr-busy * { cursor: progress !important; }
+.cr-modal { width: min(560px, calc(100vw - 32px)); }
+.cr-list {
+  max-height: 240px; overflow: auto; margin: 4px 0 8px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2);
+}
+.cr-empty { padding: 14px; text-align: center; }
+.cr-item {
+  display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px;
+  border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.cr-item:last-child { border-bottom: 0; }
+.cr-item.bad .cr-name { color: var(--danger); }
+.cr-idx { width: 22px; color: var(--faint); font-variant-numeric: tabular-nums; flex: none; }
+.cr-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.cr-meta { flex: none; font-size: 12px; }
+.modal-box .cr-ib { width: 28px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.modal-box .cr-ib svg.ic { width: 15px; height: 15px; }
+.modal-box .cr-ib:disabled { opacity: .35; }
+.cr-listbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.modal-box .cr-listbar button { display: inline-flex; align-items: center; gap: 6px; }
+.cr-listbar svg.ic { width: 16px; height: 16px; }
+.cr-file { display: flex; gap: 8px; align-items: center; }
+.cr-file .cr-name { padding: 6px 0; }
+.modal-box .cr-file input[type="text"] { flex: 1; }
+.modal-box .cr-file button { flex: none; }
+.cr-range { flex-wrap: wrap; }
+.modal-box .cr-range .cr-range-input { width: 130px; flex: 1; min-width: 100px; }
+.modal-box input[type="range"] { width: 100%; accent-color: var(--accent); }
+.modal-box label.cr-inline { margin-top: 30px; }
+.cr-dim { opacity: .4; pointer-events: none; }

@@ -117,6 +117,19 @@ const ICONS = (() => {
     "keyboard": '<rect x="2.5" y="6" width="19" height="12" rx="2"/>' + dot(6.5, 10) + dot(10, 10) + dot(14, 10) + dot(17.5, 10) + dot(6.5, 14) + dot(17.5, 14) + '<path d="M9.5 14h5"/>',
     "info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/>' + dot(12, 7.8, 1),
     "clock": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+
+    // ---- Tạo PDF / Chuyển đổi (features/create.js) ----
+    "file-plus": PAGE_B + '<path d="M17 13.5v7M13.5 17h7"/>',
+    "file-blank": PAGE,
+    "file-excel": PAGE + '<path d="M8.5 11.5l5 6M13.5 11.5l-5 6"/>',
+    "file-ppt": PAGE + '<path d="M9 18v-6.5h2.6a2 2 0 0 1 0 4H9"/>',
+    "file-code": PAGE + '<path d="M10 12l-2 2.2 2 2.2M14 12l2 2.2-2 2.2"/>',
+    "globe": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.7 5.6 3.7 9s-1.2 6.4-3.7 9c-2.5-2.6-3.7-5.6-3.7-9S9.5 5.6 12 3z"/>',
+    "scanner": '<path d="M4 14h16a1 1 0 0 1 1 1v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a1 1 0 0 1 1-1z"/><path d="M3.5 14L18 5.5"/><path d="M7 17.5h2"/>' + dot(17, 17.5),
+    "clipboard": '<rect x="5" y="4.5" width="14" height="16.5" rx="2"/><path d="M9 4.5V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v.5"/><path d="M9 3.5h6v2.5H9z"/><path d="M8.5 11h7M8.5 14.5h7M8.5 18h4"/>',
+    "ocr-image": '<path d="M3 7.5V5a2 2 0 0 1 2-2h2.5M16.5 3H19a2 2 0 0 1 2 2v2.5M21 16.5V19a2 2 0 0 1-2 2h-2.5M7.5 21H5a2 2 0 0 1-2-2v-2.5"/><circle cx="9.5" cy="9.5" r="1.5"/><path d="M6.5 17l3.5-3.6 2.5 2.5 1.7-1.7 3.3 2.8"/>',
+    "arrow-up": '<path d="M12 19V5M6.5 10.5L12 5l5.5 5.5"/>',
+    "arrow-down": '<path d="M12 5v14M6.5 13.5L12 19l5.5-5.5"/>',
   };
 })();
 function icon(name) {

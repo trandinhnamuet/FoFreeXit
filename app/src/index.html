@@ -194,6 +194,14 @@
 
       <!-- CONVERT -->
       <div class="rpanel hidden" data-tab="convert" id="convBar">
+        <!-- Nhóm Tạo PDF (features/create.js) -->
+        <div class="rgroup">
+          <button class="rbtn cr-drop" id="cvCreateBtn" data-menu="cvCreateMenu" aria-haspopup="menu" data-i18n-title="create.fromFileTip"><i data-icon="file-plus"></i><span><span data-i18n="create.fromFile"></span> <i data-icon="chevron-down" class="cr-caret"></i></span></button>
+          <button class="rbtn" id="cvScanBtn" data-i18n-title="create.fromScannerTip"><i data-icon="scanner"></i><span data-i18n="create.fromScanner"></span></button>
+          <button class="rbtn" id="cvCombineBtn" data-i18n-title="create.combineTip"><i data-icon="merge"></i><span data-i18n="create.combine"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <!-- Nhóm OCR -->
         <div class="rgroup rgroup-stack">
           <div class="rrow">
             <select id="cvLang" class="rfield" data-i18n-title="ribbon.convert.ocrLangTip">
@@ -204,16 +212,19 @@
           </div>
           <span class="rgroup-label" data-i18n="ribbon.convert.ocrLang"></span>
         </div>
-        <button class="rbtn" id="cvOcr" data-i18n-title="ribbon.convert.ocrTip"><i data-icon="ocr"></i><span data-i18n="ribbon.convert.ocr"></span></button>
-        <span class="rsep"></span>
         <div class="rgroup">
-          <button class="rbtn" id="cvDocx" data-i18n-title="ribbon.convert.toWordTip"><i data-icon="file-word"></i><span data-i18n="ribbon.convert.toWord"></span></button>
-          <button class="rbtn" id="cvPng" data-i18n-title="ribbon.convert.toPngTip"><i data-icon="file-image"></i><span data-i18n="ribbon.convert.toPng"></span></button>
-          <button class="rbtn" id="cvTxt" data-i18n-title="ribbon.convert.toTxtTip"><i data-icon="file-text"></i><span data-i18n="ribbon.convert.toTxt"></span></button>
+          <button class="rbtn" id="cvOcr" data-i18n-title="ribbon.convert.ocrTip"><i data-icon="ocr"></i><span data-i18n="ribbon.convert.ocr"></span></button>
+          <button class="rbtn" id="cvOcrImage" data-i18n-title="create.ocrImageTip"><i data-icon="ocr-image"></i><span data-i18n="create.ocrImage"></span></button>
         </div>
         <span class="rsep"></span>
+        <!-- Nhóm Xuất -->
         <div class="rgroup">
-          <button class="rbtn" id="cvOffice" data-i18n-title="ribbon.convert.officeTip"><i data-icon="file-import"></i><span data-i18n="ribbon.convert.office"></span></button>
+          <button class="rbtn" id="cvDocx" data-i18n-title="ribbon.convert.toWordTip"><i data-icon="file-word"></i><span data-i18n="create.exp.word"></span></button>
+          <button class="rbtn" id="cvXlsx" data-i18n-title="create.exp.excelTip"><i data-icon="file-excel"></i><span data-i18n="create.exp.excel"></span></button>
+          <button class="rbtn" id="cvPptx" data-i18n-title="create.exp.pptTip"><i data-icon="file-ppt"></i><span data-i18n="create.exp.ppt"></span></button>
+          <button class="rbtn cr-drop" id="cvImageBtn" data-menu="cvImageMenu" aria-haspopup="menu" data-i18n-title="create.exp.imageTip"><i data-icon="file-image"></i><span><span data-i18n="create.exp.image"></span> <i data-icon="chevron-down" class="cr-caret"></i></span></button>
+          <button class="rbtn" id="cvHtml" data-i18n-title="create.exp.htmlTip"><i data-icon="file-code"></i><span data-i18n="create.exp.html"></span></button>
+          <button class="rbtn" id="cvTxt" data-i18n-title="ribbon.convert.toTxtTip"><i data-icon="file-text"></i><span data-i18n="create.exp.text"></span></button>
         </div>
         <span class="spacer"></span>
         <span id="convHint" class="rhint"></span>
@@ -344,10 +355,25 @@
       </div>
       <button class="mitem" data-proxy="quickSave"><i data-icon="save"></i><span data-i18n="files.save"></span><kbd>Ctrl+S</kbd></button>
       <div class="msep"></div>
+      <div class="mitem has-sub"><i data-icon="file-plus"></i><span data-i18n="create.newMenu"></span><i data-icon="chevron-right" class="mchev"></i>
+        <div class="menu submenu">
+          <button class="mitem" data-proxy="cvNewBlank"><i data-icon="file-blank"></i><span data-i18n="create.blank"></span></button>
+          <button class="mitem" data-proxy="cvNewImages"><i data-icon="file-image"></i><span data-i18n="create.fromImages"></span></button>
+          <button class="mitem" data-proxy="cvNewWeb"><i data-icon="globe"></i><span data-i18n="create.fromWeb"></span></button>
+          <button class="mitem" data-proxy="cvOffice"><i data-icon="file-import"></i><span data-i18n="create.fromOffice"></span></button>
+          <button class="mitem" data-proxy="cvCombineBtn"><i data-icon="merge"></i><span data-i18n="create.combine"></span></button>
+        </div>
+      </div>
       <div class="mitem has-sub"><i data-icon="file-export"></i><span data-i18n="files.exportAs"></span><i data-icon="chevron-right" class="mchev"></i>
         <div class="menu submenu">
           <button class="mitem" data-proxy="cvDocx"><i data-icon="file-word"></i><span data-i18n="ribbon.convert.toWord"></span></button>
+          <button class="mitem" data-proxy="cvXlsx"><i data-icon="file-excel"></i><span data-i18n="create.exp.toExcel"></span></button>
+          <button class="mitem" data-proxy="cvPptx"><i data-icon="file-ppt"></i><span data-i18n="create.exp.toPpt"></span></button>
           <button class="mitem" data-proxy="cvPng"><i data-icon="file-image"></i><span data-i18n="ribbon.convert.toPng"></span></button>
+          <button class="mitem" data-proxy="cvJpeg"><i data-icon="file-image"></i><span data-i18n="create.exp.toJpeg"></span></button>
+          <button class="mitem" data-proxy="cvTiff"><i data-icon="file-image"></i><span data-i18n="create.exp.toTiff"></span></button>
+          <button class="mitem" data-proxy="cvHtml"><i data-icon="file-code"></i><span data-i18n="create.exp.toHtml"></span></button>
+          <button class="mitem" data-proxy="cvRtf"><i data-icon="file-word"></i><span data-i18n="create.exp.toRtf"></span></button>
           <button class="mitem" data-proxy="cvTxt"><i data-icon="file-text"></i><span data-i18n="ribbon.convert.toTxt"></span></button>
         </div>
       </div>
@@ -378,6 +404,26 @@
       <button class="mitem" data-theme-set="system"><span class="mcheck"></span><i data-icon="theme-system"></i><span data-i18n="shell.themeSystem"></span></button>
     </div>
 
+    <!-- Popover Tạo PDF / Xuất ảnh (features/create.js) -->
+    <div id="cvCreateMenu" class="menu mini-menu cr-menu hidden" role="menu">
+      <button class="mitem" id="cvNewImages"><i data-icon="file-image"></i><span data-i18n="create.fromImages"></span></button>
+      <button class="mitem" id="cvOffice" data-i18n-title="ribbon.convert.officeTip"><i data-icon="file-import"></i><span data-i18n="create.fromOffice"></span></button>
+      <button class="mitem" id="cvNewText"><i data-icon="file-text"></i><span data-i18n="create.fromText"></span></button>
+      <button class="mitem" id="cvNewWeb"><i data-icon="globe"></i><span data-i18n="create.fromWeb"></span></button>
+      <button class="mitem" id="cvNewScan"><i data-icon="scanner"></i><span data-i18n="create.fromScanner"></span></button>
+      <button class="mitem" id="cvNewClipboard"><i data-icon="clipboard"></i><span data-i18n="create.fromClipboard"></span></button>
+      <button class="mitem" id="cvNewBlank"><i data-icon="file-blank"></i><span data-i18n="create.blank"></span></button>
+      <div class="msep"></div>
+      <button class="mitem" id="cvNewCombine"><i data-icon="merge"></i><span data-i18n="create.combine"></span></button>
+    </div>
+    <div id="cvImageMenu" class="menu mini-menu cr-menu hidden" role="menu">
+      <button class="mitem" id="cvPng"><i data-icon="file-image"></i><span data-i18n="create.exp.png"></span></button>
+      <button class="mitem" id="cvJpeg"><i data-icon="file-image"></i><span data-i18n="create.exp.jpeg"></span></button>
+      <button class="mitem" id="cvTiff"><i data-icon="file-image"></i><span data-i18n="create.exp.tiff"></span></button>
+      <div class="msep"></div>
+      <button class="mitem" id="cvRtf"><i data-icon="file-word"></i><span data-i18n="create.exp.rtf"></span></button>
+    </div>
+
     <div id="modalOverlay" class="modal-overlay hidden">
       <div id="modalBox" class="modal-box"></div>
     </div>
@@ -402,9 +448,11 @@
     <script src="i18n/part-5.js"></script>
     <script src="i18n/part-6.js"></script>
     <script src="i18n/part-7.js"></script>
+    <script src="i18n/part-create.js"></script>
     <script src="icons.js"></script>
     <script src="main.js"></script>
     <script src="shell.js"></script>
     <script src="shell-extras.js"></script>
+    <script src="features/create.js"></script>
   </body>
 </html>

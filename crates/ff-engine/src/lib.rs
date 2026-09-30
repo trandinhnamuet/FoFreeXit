@@ -6,7 +6,9 @@
 
 pub mod annot;
 pub mod convert;
+pub mod create;
 pub mod edit;
+pub mod export;
 mod cffwrap;
 mod fontfix;
 mod formsurgery;
@@ -37,13 +39,25 @@ pub use qpdf::{
     find_qpdf, optimize_save, repair, Permissions,
 };
 pub use convert::{
-    export_docx, export_images, export_text, find_soffice, office_to_pdf, pdf_to_docx_via_soffice,
+    export_docx, export_docx_pages, export_images, export_text, find_soffice, office_to_pdf,
+    pdf_to_docx_via_soffice, pdf_to_pptx_via_soffice,
 };
 pub use form::{
     create_form_fields, export_csv, export_fdf, fill_form_fields, flatten_form, import_fdf,
     list_form_fields, parse_fdf, FieldKind, FieldValue, FormField, NewField,
 };
-pub use ocr::{find_tesseract, ocr_add_text_layer, ocr_page_words, OcrWord};
+pub use ocr::{
+    find_tesseract, ocr_add_text_layer, ocr_document, ocr_images_to_pdf, ocr_page_words, ocr_page_words_ex,
+    OcrOptions, OcrReport, OcrWord,
+};
+pub use create::{
+    blank_pdf, combine_files, find_browser, html_to_pdf, image_page_count, images_to_pdf, source_kind,
+    standard_page_size, text_to_pdf, CombineOptions, ImagePdfOptions, Orientation, PageSizeMode, TextPdfOptions,
+};
+pub use export::{
+    export_html, export_page_images, export_pptx, export_rtf, export_text_range, export_tiff, export_xlsx,
+    resolve_pages, subset_to_temp, HtmlMode, PptxOptions, RasterFormat,
+};
 pub use redact::redact_areas;
 pub use sign::{generate_self_signed_id, sign_pdf, verify_signatures, SignatureCheck};
 pub use render::{bind_pdfium, page_count, page_render_mismatch, render_page_png, PageImage};

@@ -402,7 +402,7 @@ pub(crate) fn find_font_bytes(bold: bool, italic: bool) -> Option<Vec<u8>> {
 /// PDF spec quy định widths của Type0/CIDFont LUÔN lấy từ /W + /DW, KHÔNG lấy từ
 /// bảng hmtx trong font nhúng — thiếu /W khiến mọi glyph bị coi là rộng /DW (1 em),
 /// chữ bị dãn cách quá rộng. Trả về object ID Type0 font.
-fn embed_type0_font(doc: &mut LoDoc, font_bytes: &[u8], used_text: &str) -> Result<ObjectId, EngineError> {
+pub(crate) fn embed_type0_font(doc: &mut LoDoc, font_bytes: &[u8], used_text: &str) -> Result<ObjectId, EngineError> {
     let face = ttf_parser::Face::parse(font_bytes, 0)
         .map_err(|e| EngineError::Pdfium(format!("ttf-parser: {:?}", e)))?;
 
@@ -484,7 +484,7 @@ fn embed_type0_font(doc: &mut LoDoc, font_bytes: &[u8], used_text: &str) -> Resu
 }
 
 /// Mã hoá chuỗi thành CID bytes (Identity-H: glyph ID 2 bytes big-endian mỗi char).
-fn encode_cid(text: &str, face: &ttf_parser::Face) -> Vec<u8> {
+pub(crate) fn encode_cid(text: &str, face: &ttf_parser::Face) -> Vec<u8> {
     let mut out = Vec::with_capacity(text.chars().count() * 2);
     for ch in text.chars() {
         let gid = face
@@ -497,7 +497,7 @@ fn encode_cid(text: &str, face: &ttf_parser::Face) -> Vec<u8> {
 }
 
 /// Advance width (point) cho một ký tự theo font_size.
-fn char_adv(ch: char, face: &ttf_parser::Face, fs: f32) -> f32 {
+pub(crate) fn char_adv(ch: char, face: &ttf_parser::Face, fs: f32) -> f32 {
     let upem = face.units_per_em() as f32;
     face.glyph_index(ch)
         .and_then(|gid| face.glyph_hor_advance(gid))
