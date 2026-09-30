@@ -5,6 +5,7 @@
 //! ocr... sẽ thêm dần ở các phase sau (xem docs/03-roadmap.md, 04-architecture.md).
 
 pub mod annot;
+pub mod bookmarks;
 pub mod convert;
 pub mod edit;
 mod cffwrap;
@@ -13,6 +14,7 @@ mod formsurgery;
 mod tounicode;
 pub(crate) mod fontmatch;
 pub mod form;
+pub mod links;
 pub mod meta;
 pub mod ocr;
 pub mod organize;
@@ -20,11 +22,17 @@ pub mod qpdf;
 pub mod redact;
 pub mod render;
 pub mod sign;
+pub mod split;
 pub mod text;
 pub mod watermark;
 
 pub use annot::{
     apply_annotations, count_annotations, list_annotations, AnnotInfo, AnnotKind, AnnotSpec,
+};
+pub use bookmarks::{auto_bookmarks_from_headings, get_outline, set_outline, Bookmark};
+pub use links::{edit_links, list_links, save_outline_and_links, LinkInfo, NewLink};
+pub use split::{
+    parse_page_ranges, plan_split_by_size, sanitize_file_name, split_by_bookmarks, split_by_ranges, split_by_size,
 };
 pub use edit::{apply_edits, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
 pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};
