@@ -774,6 +774,7 @@ body.ribbon-collapsed .tabrow { border-bottom: 1px solid var(--border); }
 .cs { border-width: 0; box-shadow: inset 0 0 0 1px rgba(127,127,127,.35); }
 .cs.cur { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
 
+/* =====================================================================
    Hoàn thiện: phần đầu cửa sổ một màu, focus tinh gọn, căn nhóm ribbon
    ===================================================================== */
 /* Hàng tab (kể cả khi cửa sổ frameless) cùng nền với ribbon: sáng thì sáng hết, tối thì tối hết. */
