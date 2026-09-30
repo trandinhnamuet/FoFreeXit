@@ -11,10 +11,13 @@
     "windows": [
       {
         "label": "main",
-        "title": "FoFreeXit — PDF Viewer (Phase 1)",
-        "width": 1100,
-        "height": 850,
-        "visible": false
+        "title": "FoFreeXit",
+        "width": 1280,
+        "height": 860,
+        "visible": false,
+        "decorations": false,
+        "minWidth": 900,
+        "minHeight": 600
       }
     ],
     "security": {

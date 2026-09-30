@@ -107,6 +107,7 @@ async function loadDocument(path) {
     updatePageTotal();
     updateCurrentPage();
     updateZoomLabel();
+    if (window.Shell) Shell.onDocLoaded(path, meta);
 
     // Khởi tạo plan mặc định ngay (tất cả trang theo thứ tự gốc).
     // Load plan thực tế ở background để không block UI khi mở file.

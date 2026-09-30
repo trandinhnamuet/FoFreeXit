@@ -5,165 +5,305 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FoFreeXit</title>
     <link rel="stylesheet" href="styles.css" />
+    <script src="theme.js"></script>
   </head>
   <body>
-    <header class="toolbar">
-      <strong class="brand">FoFreeXit</strong>
-      <span class="phase">Phase 1 · Viewer</span>
-      <button id="openBtn" title="Mở file PDF">📂 Mở</button>
-      <span class="sep"></span>
-      <button id="pagePrev" title="Trang trước (Page Up)">▲</button>
-      <input id="pageInput" class="pagenum" type="text" inputmode="numeric" title="Đến trang…" />
-      <span class="pageof">/ <span id="pageTotal">—</span></span>
-      <button id="pageNext" title="Trang sau (Page Down)">▼</button>
-      <span class="sep"></span>
-      <button id="zoomOut" title="Thu nhỏ (Ctrl+-)">−</button>
-      <select id="zoomSelect" class="zoom" title="Mức zoom"></select>
-      <button id="zoomIn" title="Phóng to (Ctrl++)">+</button>
-      <button id="zoomFit" title="Vừa bề rộng">Vừa rộng</button>
-      <button id="zoomFitPage" title="Vừa trang">Vừa trang</button>
-      <span class="sep"></span>
-      <input id="searchBox" type="search" placeholder="Tìm trong tài liệu… (Ctrl+F)" autofocus />
-      <label class="searchopt" title="Phân biệt hoa/thường"><input id="searchCase" type="checkbox" />Aa</label>
-      <button id="searchPrev" title="Kết quả trước (Shift+Enter)">◀</button>
-      <span id="searchCount" class="searchcount">—</span>
-      <button id="searchNext" title="Kết quả sau (Enter)">▶</button>
-      <span class="sep"></span>
-      <button id="copyPage" title="Copy text trang hiện tại">⧉ Copy</button>
-      <span class="sep"></span>
-      <button id="undoBtn" title="Hoàn tác (Ctrl+Z)" disabled>↶ Hoàn tác</button>
-      <button id="redoBtn" title="Làm lại (Ctrl+Y)" disabled>↷ Làm lại</button>
-      <span class="sep"></span>
-      <button id="organizeModeBtn" title="Tổ chức trang">🗂 Tổ chức trang</button>
-      <button id="editModeBtn" title="Sửa nội dung trang">✏️ Sửa nội dung</button>
-      <button id="formModeBtn" title="Form: điền, tạo field, flatten, FDF/CSV">📝 Form</button>
-      <button id="secModeBtn" title="Bảo mật: redact, mật khẩu, metadata">🔒 Bảo mật</button>
-      <button id="convModeBtn" title="OCR & Chuyển đổi: OCR, PNG, TXT, Word, Office→PDF">🔁 Chuyển đổi</button>
-      <div class="spacer"></div>
-      <span id="status" class="status"></span>
+    <!-- ===== Title bar tự vẽ (decorations:false) ===== -->
+    <header class="titlebar" data-tauri-drag-region>
+      <div class="tb-brand" data-tauri-drag-region>
+        <svg class="tb-logo" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="2" width="18" height="20" rx="4" fill="var(--accent)"/>
+          <path d="M8.5 7.5h7M8.5 11.5h5M8.5 7.5v9" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/>
+        </svg>
+        <span class="tb-title" id="winTitle" data-tauri-drag-region>FoFreeXit</span>
+      </div>
+      <div class="tb-drag" data-tauri-drag-region></div>
+      <div class="tb-controls">
+        <button class="tb-btn" id="winMin" data-i18n-title="shell.minimize"><i data-icon="win-min"></i></button>
+        <button class="tb-btn" id="winMax" data-i18n-title="shell.maximize"><i data-icon="win-max"></i></button>
+        <button class="tb-btn tb-close" id="winClose" data-i18n-title="shell.close"><i data-icon="win-close"></i></button>
+      </div>
     </header>
 
-    <div id="annobar" class="annobar">
-      <span class="annolabel">Chú thích:</span>
-      <button class="atool" data-tool="highlight" title="Tô sáng (kéo vùng)">🖍️ Tô sáng</button>
-      <button class="atool" data-tool="underline" title="Gạch chân">U̲ Gạch chân</button>
-      <button class="atool" data-tool="strikeout" title="Gạch ngang">S̶ Gạch ngang</button>
-      <button class="atool" data-tool="square" title="Khung chữ nhật">▭ Khung</button>
-      <button class="atool" data-tool="freetext" title="Hộp văn bản">🅣 Text box</button>
-      <button class="atool" data-tool="note" title="Ghi chú dán">📌 Ghi chú</button>
-      <button class="atool" data-tool="crop" title="Crop trang">✂️ Crop</button>
-      <span class="sep"></span>
-      <button id="annotColorBtn" class="atool" title="Màu chú thích"><span class="sw" id="annotSw"></span> Màu</button>
-      <span class="spacer"></span>
-      <span id="annotHint" class="status"></span>
-      <button id="saveAnnots" disabled>💾 Lưu chú thích (<span id="annotCount">0</span>)</button>
+    <!-- ===== Hàng tab ===== -->
+    <nav class="tabrow">
+      <button id="filesBtn" class="files-btn" aria-haspopup="menu"><i data-icon="menu"></i><span data-i18n="tab.files"></span></button>
+      <div class="qa">
+        <button id="openBtn" class="qbtn" data-i18n-title="shell.openTip"><i data-icon="folder-open"></i></button>
+        <button id="quickSave" class="qbtn" data-i18n-title="shell.saveTip"><i data-icon="save"></i></button>
+        <button id="undoBtn" class="qbtn" data-i18n-title="shell.undoTip" disabled><i data-icon="undo"></i></button>
+        <button id="redoBtn" class="qbtn" data-i18n-title="shell.redoTip" disabled><i data-icon="redo"></i></button>
+      </div>
+      <span class="tsep"></span>
+      <div class="tabs-main" role="tablist">
+        <button class="tab-pill" data-tab="home" data-i18n="tab.home"></button>
+        <button class="tab-pill" data-tab="edit" data-i18n="tab.edit"></button>
+        <button class="tab-pill" data-tab="annotate" data-i18n="tab.annotate"></button>
+        <button class="tab-pill" data-tab="page" data-i18n="tab.page"></button>
+        <button class="tab-pill" data-tab="form" data-i18n="tab.form"></button>
+        <button class="tab-pill" data-tab="convert" data-i18n="tab.convert"></button>
+        <button class="tab-pill" data-tab="protect" data-i18n="tab.protect"></button>
+        <button class="tab-pill" data-tab="tools" data-i18n="tab.tools"></button>
+        <button class="tab-pill" data-tab="help" data-i18n="tab.help"></button>
+      </div>
+      <div class="spacer"></div>
+      <div class="searchpill">
+        <i data-icon="search"></i>
+        <input id="searchBox" type="search" data-i18n-placeholder="shell.searchPh" autofocus />
+        <label class="searchopt" data-i18n-title="shell.matchCase"><input id="searchCase" type="checkbox" /><span>Aa</span></label>
+        <span id="searchCount" class="searchcount">—</span>
+        <button id="searchPrev" class="sbtn" data-i18n-title="shell.searchPrev"><i data-icon="chevron-up"></i></button>
+        <button id="searchNext" class="sbtn" data-i18n-title="shell.searchNext"><i data-icon="chevron-down"></i></button>
+      </div>
+      <div class="tr-right">
+        <button id="langBtn" class="qbtn lang-btn" data-i18n-title="shell.language"><span id="langLabel">VI</span></button>
+        <button id="themeBtn" class="qbtn" data-i18n-title="shell.theme"><i data-icon="theme-system" id="themeIcon"></i></button>
+        <button id="readingBtn" class="qbtn" data-i18n-title="shell.reading"><i data-icon="eye"></i></button>
+        <button id="fullscreenBtn" class="qbtn" data-i18n-title="shell.fullscreen"><i data-icon="fullscreen"></i></button>
+        <button id="collapseRibbonBtn" class="qbtn" data-i18n-title="shell.collapseRibbon"><i data-icon="chevron-up"></i></button>
+      </div>
+    </nav>
+
+    <!-- ===== Ribbon ===== -->
+    <section id="ribbon" class="ribbon">
+      <!-- HOME -->
+      <div class="rpanel" data-tab="home" id="homeBar">
+        <div class="rgroup">
+          <button class="rbtn" data-action="select" data-i18n-title="ribbon.home.selectTip"><i data-icon="cursor"></i><span data-i18n="ribbon.home.select"></span></button>
+          <button class="rbtn" data-tab-go="edit" data-i18n-title="ribbon.home.editTextTip"><i data-icon="edit-text"></i><span data-i18n="ribbon.home.editText"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" data-proxy="zoomOut" data-i18n-title="ribbon.home.zoomOutTip"><i data-icon="zoom-out"></i><span data-i18n="ribbon.home.zoomOut"></span></button>
+          <button class="rbtn" data-proxy="zoomIn" data-i18n-title="ribbon.home.zoomInTip"><i data-icon="zoom-in"></i><span data-i18n="ribbon.home.zoomIn"></span></button>
+          <button class="rbtn" id="zoomFit" data-i18n-title="ribbon.home.fitWidthTip"><i data-icon="fit-width"></i><span data-i18n="ribbon.home.fitWidth"></span></button>
+          <button class="rbtn" id="zoomFitPage" data-i18n-title="ribbon.home.fitPageTip"><i data-icon="fit-page"></i><span data-i18n="ribbon.home.fitPage"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn atool" data-tool="highlight" data-i18n-title="ribbon.annotate.highlightTip"><i data-icon="highlight"></i><span data-i18n="ribbon.annotate.highlight"></span></button>
+          <button class="rbtn atool" data-tool="crop" data-i18n-title="ribbon.home.cropTip"><i data-icon="crop"></i><span data-i18n="ribbon.home.crop"></span></button>
+          <button class="rbtn" id="copyPage" data-i18n-title="ribbon.home.copyTip"><i data-icon="copy"></i><span data-i18n="ribbon.home.copy"></span></button>
+          <button class="rbtn" data-action="find" data-i18n-title="ribbon.home.findTip"><i data-icon="search-doc"></i><span data-i18n="ribbon.home.find"></span></button>
+          <button class="rbtn" data-tab-go="convert" data-i18n-title="ribbon.home.ocrTip"><i data-icon="ocr"></i><span data-i18n="ribbon.home.ocr"></span></button>
+        </div>
+        <span class="spacer"></span>
+      </div>
+
+      <!-- EDIT (= chế độ Sửa nội dung) -->
+      <div class="rpanel hidden" data-tab="edit" id="editBar">
+        <div class="rgroup">
+          <button class="rbtn" id="edAddText" data-i18n-title="ribbon.edit.addTextTip"><i data-icon="text-add"></i><span data-i18n="ribbon.edit.addText"></span></button>
+          <button class="rbtn" id="edAddImage" data-i18n-title="ribbon.edit.addImageTip"><i data-icon="image-add"></i><span data-i18n="ribbon.edit.addImage"></span></button>
+          <button class="rbtn" id="edReplaceImage" data-i18n-title="ribbon.edit.replaceImageTip" disabled><i data-icon="image-replace"></i><span data-i18n="ribbon.edit.replaceImage"></span></button>
+          <button class="rbtn" id="edDelete" data-i18n-title="ribbon.edit.deleteTip" disabled><i data-icon="trash"></i><span data-i18n="ribbon.edit.delete"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup rgroup-stack">
+          <div class="rrow">
+            <select id="edFontFamily" class="rfield rfield-font" data-i18n-title="ribbon.edit.fontTip" disabled>
+              <option value="" data-i18n="ribbon.edit.fontKeep"></option>
+              <option>Arial</option>
+              <option>Times New Roman</option>
+              <option>Calibri</option>
+              <option>Cambria</option>
+              <option>Georgia</option>
+              <option>Verdana</option>
+              <option>Tahoma</option>
+              <option>Segoe UI</option>
+              <option>Courier New</option>
+            </select>
+            <input id="edFontSize" class="rfield rfield-num" type="number" min="1" max="400" data-i18n-title="ribbon.edit.sizeTip" disabled>
+          </div>
+          <div class="rrow">
+            <button id="edBold" class="sq ed-style" data-i18n-title="ribbon.edit.boldTip" disabled><b>B</b></button>
+            <button id="edItalic" class="sq ed-style" data-i18n-title="ribbon.edit.italicTip" disabled><i class="it">I</i></button>
+            <button id="edColorBtn" class="sq-wide atool" data-i18n-title="ribbon.edit.colorTip" disabled><span class="sw" id="edSw"></span><span data-i18n="common.color"></span></button>
+          </div>
+          <span class="rgroup-label" data-i18n="ribbon.edit.fontGroup"></span>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn danger-soft" id="edDiscard" data-i18n-title="ribbon.edit.discardTip" disabled><i data-icon="discard"></i><span data-i18n="ribbon.edit.discard"></span></button>
+          <button class="rbtn primary" id="edSave" data-i18n-title="ribbon.edit.saveTip" disabled><i data-icon="save"></i><span data-i18n="ribbon.edit.save"></span></button>
+        </div>
+        <span class="spacer"></span>
+        <span id="editHint" class="rhint"></span>
+      </div>
+
+      <!-- ANNOTATE -->
+      <div class="rpanel" data-tab="annotate" id="annobar">
+        <div class="rgroup">
+          <button class="rbtn" data-action="select" data-i18n-title="ribbon.home.selectTip"><i data-icon="cursor"></i><span data-i18n="ribbon.home.select"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn atool" data-tool="highlight" data-i18n-title="ribbon.annotate.highlightTip"><i data-icon="highlight"></i><span data-i18n="ribbon.annotate.highlight"></span></button>
+          <button class="rbtn atool" data-tool="underline" data-i18n-title="ribbon.annotate.underlineTip"><i data-icon="underline"></i><span data-i18n="ribbon.annotate.underline"></span></button>
+          <button class="rbtn atool" data-tool="strikeout" data-i18n-title="ribbon.annotate.strikeoutTip"><i data-icon="strikeout"></i><span data-i18n="ribbon.annotate.strikeout"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn atool" data-tool="square" data-i18n-title="ribbon.annotate.squareTip"><i data-icon="square"></i><span data-i18n="ribbon.annotate.square"></span></button>
+          <button class="rbtn atool" data-tool="freetext" data-i18n-title="ribbon.annotate.textboxTip"><i data-icon="textbox"></i><span data-i18n="ribbon.annotate.textbox"></span></button>
+          <button class="rbtn atool" data-tool="note" data-i18n-title="ribbon.annotate.noteTip"><i data-icon="note"></i><span data-i18n="ribbon.annotate.note"></span></button>
+          <button class="rbtn atool" data-tool="crop" data-i18n-title="ribbon.home.cropTip"><i data-icon="crop"></i><span data-i18n="ribbon.home.crop"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button id="annotColorBtn" class="rbtn atool" data-i18n-title="ribbon.annotate.colorTip"><span class="sw-big"><span class="sw" id="annotSw"></span></span><span data-i18n="common.color"></span></button>
+          <button id="saveAnnots" class="rbtn primary" data-i18n-title="ribbon.annotate.saveTip" disabled><i data-icon="save"></i><span><span data-i18n="ribbon.annotate.save"></span> (<span id="annotCount">0</span>)</span></button>
+        </div>
+        <span class="spacer"></span>
+        <span id="annotHint" class="rhint"></span>
+      </div>
+
+      <!-- PAGE (= chế độ Tổ chức trang) -->
+      <div class="rpanel hidden" data-tab="page" id="organizeBar">
+        <div class="rgroup">
+          <button class="rbtn" id="orgInsert" data-i18n-title="ribbon.page.insertTip"><i data-icon="page-insert"></i><span data-i18n="ribbon.page.insert"></span></button>
+          <button class="rbtn" id="orgDelete" data-i18n-title="ribbon.page.deleteTip"><i data-icon="page-delete"></i><span data-i18n="ribbon.page.delete"></span></button>
+          <button class="rbtn" id="orgExtract" data-i18n-title="ribbon.page.extractTip"><i data-icon="page-extract"></i><span data-i18n="ribbon.page.extract"></span></button>
+          <button class="rbtn" id="orgReplace" data-i18n-title="ribbon.page.replaceTip"><i data-icon="page-replace"></i><span data-i18n="ribbon.page.replace"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="orgRotateL" data-i18n-title="ribbon.page.rotateLTip"><i data-icon="rotate-left"></i><span data-i18n="ribbon.page.rotateL"></span></button>
+          <button class="rbtn" id="orgRotateR" data-i18n-title="ribbon.page.rotateRTip"><i data-icon="rotate-right"></i><span data-i18n="ribbon.page.rotateR"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="orgMerge" data-i18n-title="ribbon.page.mergeTip"><i data-icon="merge"></i><span data-i18n="ribbon.page.merge"></span></button>
+          <button class="rbtn" id="orgSplit" data-i18n-title="ribbon.page.splitTip"><i data-icon="split"></i><span data-i18n="ribbon.page.split"></span></button>
+          <button class="rbtn" id="orgWatermark" data-i18n-title="ribbon.page.watermarkTip"><i data-icon="watermark"></i><span data-i18n="ribbon.page.watermark"></span></button>
+          <button class="rbtn" id="orgHeaderFooter" data-i18n-title="ribbon.page.headerFooterTip"><i data-icon="header-footer"></i><span data-i18n="ribbon.page.headerFooter"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn primary" id="orgSave" data-i18n-title="ribbon.page.saveTip" disabled><i data-icon="save"></i><span data-i18n="ribbon.page.save"></span></button>
+        </div>
+        <span class="spacer"></span>
+        <span id="organizeHint" class="rhint"></span>
+      </div>
+
+      <!-- FORM -->
+      <div class="rpanel hidden" data-tab="form" id="formBar">
+        <div class="rgroup">
+          <button class="rbtn" id="fmFill" data-i18n-title="ribbon.form.fillTip"><i data-icon="form-fill"></i><span><span data-i18n="ribbon.form.fill"></span> (<span id="fmCount">0</span>)</span></button>
+          <button class="rbtn" id="fmCreate" data-i18n-title="ribbon.form.createTip"><i data-icon="field-add"></i><span data-i18n="ribbon.form.create"></span></button>
+          <button class="rbtn" id="fmFlatten" data-i18n-title="ribbon.form.flattenTip"><i data-icon="flatten"></i><span data-i18n="ribbon.form.flatten"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="fmExportFdf" data-i18n-title="ribbon.form.exportFdfTip"><i data-icon="export"></i><span data-i18n="ribbon.form.exportFdf"></span></button>
+          <button class="rbtn" id="fmExportCsv" data-i18n-title="ribbon.form.exportCsvTip"><i data-icon="table"></i><span data-i18n="ribbon.form.exportCsv"></span></button>
+          <button class="rbtn" id="fmImportFdf" data-i18n-title="ribbon.form.importFdfTip"><i data-icon="import"></i><span data-i18n="ribbon.form.importFdf"></span></button>
+        </div>
+        <span class="spacer"></span>
+        <span id="formHint" class="rhint"></span>
+      </div>
+
+      <!-- CONVERT -->
+      <div class="rpanel hidden" data-tab="convert" id="convBar">
+        <div class="rgroup rgroup-stack">
+          <div class="rrow">
+            <select id="cvLang" class="rfield" data-i18n-title="ribbon.convert.ocrLangTip">
+              <option value="vie+eng" data-i18n="ribbon.convert.langViEn"></option>
+              <option value="vie" data-i18n="ribbon.convert.langVi"></option>
+              <option value="eng" data-i18n="ribbon.convert.langEn"></option>
+            </select>
+          </div>
+          <span class="rgroup-label" data-i18n="ribbon.convert.ocrLang"></span>
+        </div>
+        <button class="rbtn" id="cvOcr" data-i18n-title="ribbon.convert.ocrTip"><i data-icon="ocr"></i><span data-i18n="ribbon.convert.ocr"></span></button>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="cvDocx" data-i18n-title="ribbon.convert.toWordTip"><i data-icon="file-word"></i><span data-i18n="ribbon.convert.toWord"></span></button>
+          <button class="rbtn" id="cvPng" data-i18n-title="ribbon.convert.toPngTip"><i data-icon="file-image"></i><span data-i18n="ribbon.convert.toPng"></span></button>
+          <button class="rbtn" id="cvTxt" data-i18n-title="ribbon.convert.toTxtTip"><i data-icon="file-text"></i><span data-i18n="ribbon.convert.toTxt"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="cvOffice" data-i18n-title="ribbon.convert.officeTip"><i data-icon="file-import"></i><span data-i18n="ribbon.convert.office"></span></button>
+        </div>
+        <span class="spacer"></span>
+        <span id="convHint" class="rhint"></span>
+      </div>
+
+      <!-- PROTECT -->
+      <div class="rpanel hidden" data-tab="protect" id="secBar">
+        <div class="rgroup">
+          <button class="rbtn atool" id="secRedactTool" data-tool="redact" data-i18n-title="ribbon.protect.redactMarkTip"><i data-icon="redact"></i><span data-i18n="ribbon.protect.redactMark"></span></button>
+          <button class="rbtn" id="secRedactApply" data-i18n-title="ribbon.protect.redactApplyTip" disabled><i data-icon="redact-apply"></i><span><span data-i18n="ribbon.protect.redactApply"></span> (<span id="redactCount">0</span>)</span></button>
+          <button class="rbtn" id="secRedactClear" data-i18n-title="ribbon.protect.redactClearTip" disabled><i data-icon="redact-clear"></i><span data-i18n="ribbon.protect.redactClear"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="secEncrypt" data-i18n-title="ribbon.protect.encryptTip"><i data-icon="lock"></i><span data-i18n="ribbon.protect.encrypt"></span></button>
+          <button class="rbtn" id="secDecrypt" data-i18n-title="ribbon.protect.decryptTip"><i data-icon="unlock"></i><span data-i18n="ribbon.protect.decrypt"></span></button>
+          <button class="rbtn" id="secStripMeta" data-i18n-title="ribbon.protect.stripMetaTip"><i data-icon="eraser"></i><span data-i18n="ribbon.protect.stripMeta"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" id="secCreateId" data-i18n-title="ribbon.protect.createIdTip"><i data-icon="id-card"></i><span data-i18n="ribbon.protect.createId"></span></button>
+          <button class="rbtn" id="secSign" data-i18n-title="ribbon.protect.signTip"><i data-icon="signature"></i><span data-i18n="ribbon.protect.sign"></span></button>
+          <button class="rbtn" id="secVerify" data-i18n-title="ribbon.protect.verifyTip"><i data-icon="shield-check"></i><span data-i18n="ribbon.protect.verify"></span></button>
+        </div>
+        <span class="spacer"></span>
+        <span id="secHint" class="rhint"></span>
+      </div>
+
+      <!-- TOOLS -->
+      <div class="rpanel" data-tab="tools" id="toolsBar">
+        <div class="rgroup">
+          <button class="rbtn" id="secOptimize" data-i18n-title="ribbon.tools.optimizeTip"><i data-icon="compress"></i><span data-i18n="ribbon.tools.optimize"></span></button>
+          <button class="rbtn" data-proxy="orgMerge" data-i18n-title="ribbon.page.mergeTip"><i data-icon="merge"></i><span data-i18n="ribbon.page.merge"></span></button>
+          <button class="rbtn" data-proxy="orgSplit" data-i18n-title="ribbon.page.splitTip"><i data-icon="split"></i><span data-i18n="ribbon.page.split"></span></button>
+        </div>
+        <span class="rsep"></span>
+        <div class="rgroup">
+          <button class="rbtn" data-action="find" data-i18n-title="ribbon.home.findTip"><i data-icon="search-doc"></i><span data-i18n="ribbon.home.find"></span></button>
+          <button class="rbtn" data-proxy="copyPage" data-i18n-title="ribbon.home.copyTip"><i data-icon="copy"></i><span data-i18n="ribbon.home.copy"></span></button>
+          <button class="rbtn" data-proxy="readingBtn" data-i18n-title="shell.reading"><i data-icon="eye"></i><span data-i18n="ribbon.tools.reading"></span></button>
+          <button class="rbtn" data-proxy="fullscreenBtn" data-i18n-title="shell.fullscreen"><i data-icon="fullscreen"></i><span data-i18n="ribbon.tools.fullscreen"></span></button>
+        </div>
+        <span class="spacer"></span>
+      </div>
+
+      <!-- HELP -->
+      <div class="rpanel" data-tab="help" id="helpBar">
+        <div class="rgroup">
+          <button class="rbtn" id="helpShortcuts" data-i18n-title="ribbon.help.shortcutsTip"><i data-icon="keyboard"></i><span data-i18n="ribbon.help.shortcuts"></span></button>
+          <button class="rbtn" id="helpAbout" data-i18n-title="ribbon.help.aboutTip"><i data-icon="info"></i><span data-i18n="ribbon.help.about"></span></button>
+        </div>
+        <span class="spacer"></span>
+      </div>
+    </section>
+
+    <!-- Nút mode cũ: chỉ để router gọi (main.js vẫn bind + đổi class). -->
+    <div class="legacy" hidden>
+      <button id="organizeModeBtn"></button>
+      <button id="editModeBtn"></button>
+      <button id="formModeBtn"></button>
+      <button id="secModeBtn"></button>
+      <button id="convModeBtn"></button>
     </div>
 
-    <div id="organizeBar" class="organizebar hidden">
-      <span class="annolabel">Tổ chức trang:</span>
-      <button id="orgInsert" title="Chèn trang">➕ Chèn</button>
-      <button id="orgDelete" title="Xoá trang đã chọn (Delete)">🗑 Xoá</button>
-      <button id="orgRotateL" title="Xoay trái">↺ Xoay trái</button>
-      <button id="orgRotateR" title="Xoay phải">↻ Xoay phải</button>
-      <button id="orgExtract" title="Trích trang đã chọn">📤 Trích</button>
-      <button id="orgReplace" title="Thay trang đã chọn">🔁 Thay</button>
-      <span class="sep"></span>
-      <button id="orgMerge" title="Trộn nhiều file PDF">🔀 Trộn file</button>
-      <button id="orgSplit" title="Tách thành nhiều file">✂ Tách file</button>
-      <button id="orgWatermark" title="Thêm watermark">💧 Watermark</button>
-      <button id="orgHeaderFooter" title="Thêm header/footer">📋 Header/Footer</button>
-      <span class="spacer"></span>
-      <span id="organizeHint" class="status"></span>
-      <button id="orgSave" disabled>💾 Lưu thay đổi tổ chức trang</button>
-    </div>
-
-    <div id="editBar" class="editbar hidden">
-      <span class="annolabel">Sửa nội dung:</span>
-      <button id="edAddText" title="Thêm chữ — bấm rồi click lên trang">🆎 Thêm chữ</button>
-      <button id="edAddImage" title="Thêm ảnh — chọn ảnh rồi click lên trang">🖼 Thêm ảnh</button>
-      <button id="edDelete" title="Xoá đối tượng đang chọn (Delete)" disabled>🗑 Xoá</button>
-      <button id="edReplaceImage" title="Thay ảnh đang chọn" disabled>🔁 Thay ảnh</button>
-      <span class="sep"></span>
-      <label class="ed-prop">Font <select id="edFontFamily" disabled>
-        <option value="">(giữ nguyên)</option>
-        <option>Arial</option>
-        <option>Times New Roman</option>
-        <option>Calibri</option>
-        <option>Cambria</option>
-        <option>Georgia</option>
-        <option>Verdana</option>
-        <option>Tahoma</option>
-        <option>Segoe UI</option>
-        <option>Courier New</option>
-      </select></label>
-      <label class="ed-prop">Cỡ chữ <input id="edFontSize" type="number" min="1" max="400" disabled></label>
-      <button id="edBold" class="ed-style" title="Đậm (giữ họ font, đổi biến thể)" disabled><b>B</b></button>
-      <button id="edItalic" class="ed-style" title="Nghiêng (giữ họ font, đổi biến thể)" disabled><i>I</i></button>
-      <button id="edColorBtn" class="atool" title="Màu chữ" disabled><span class="sw" id="edSw"></span> Màu</button>
-      <span class="spacer"></span>
-      <span id="editHint" class="status"></span>
-      <button id="edDiscard" disabled title="Bỏ mọi thay đổi chưa lưu, quay về nội dung gốc">↩ Huỷ thay đổi</button>
-      <button id="edSave" disabled>💾 Lưu thay đổi nội dung</button>
-    </div>
-
-    <div id="formBar" class="editbar hidden">
-      <span class="annolabel">Form:</span>
-      <button id="fmFill" title="Xem & điền các field của form">📋 Điền form (<span id="fmCount">0</span>)</button>
-      <button id="fmCreate" title="Thêm field mới (text/checkbox/combo)">➕ Thêm field</button>
-      <button id="fmFlatten" title="In giá trị vào trang, bỏ tính tương tác">🧷 Flatten</button>
-      <span class="sep"></span>
-      <button id="fmExportFdf" title="Xuất dữ liệu form ra FDF">⬆ Xuất FDF</button>
-      <button id="fmExportCsv" title="Xuất dữ liệu form ra CSV">⬆ Xuất CSV</button>
-      <button id="fmImportFdf" title="Nhập dữ liệu form từ FDF">⬇ Nhập FDF</button>
-      <span class="spacer"></span>
-      <span id="formHint" class="status"></span>
-    </div>
-
-    <div id="convBar" class="editbar hidden">
-      <span class="annolabel">Chuyển đổi:</span>
-      <label class="ed-prop">OCR ngôn ngữ <select id="cvLang">
-        <option value="vie+eng">Việt + Anh</option>
-        <option value="vie">Tiếng Việt</option>
-        <option value="eng">English</option>
-      </select></label>
-      <button id="cvOcr" title="Nhận dạng chữ (Tesseract) → thêm lớp text ẩn, file tìm kiếm/copy được">🔍 OCR tài liệu</button>
-      <span class="sep"></span>
-      <button id="cvPng" title="Xuất mỗi trang thành 1 ảnh PNG">🖼 Xuất PNG</button>
-      <button id="cvTxt" title="Xuất toàn bộ text ra file .txt">📄 Xuất TXT</button>
-      <button id="cvDocx" title="Xuất Word (.docx) — dùng LibreOffice nếu máy có, không thì bộ chuyển cơ bản">📘 Xuất Word</button>
-      <button id="cvOffice" title="Chuyển file Office (docx/xlsx/pptx...) sang PDF — cần LibreOffice">📥 Office → PDF</button>
-      <span class="spacer"></span>
-      <span id="convHint" class="status"></span>
-    </div>
-
-    <div id="secBar" class="editbar hidden">
-      <span class="annolabel">Bảo mật:</span>
-      <button id="secRedactTool" class="atool" data-tool="redact" title="Kéo chuột trên trang để đánh dấu vùng cần bôi đen — nội dung bị XOÁ THẬT khi áp dụng">⬛ Đánh dấu redact</button>
-      <button id="secRedactApply" disabled title="Xoá thật nội dung trong các vùng đã đánh dấu, lưu ra file mới">Áp dụng redact (<span id="redactCount">0</span>)</button>
-      <button id="secRedactClear" disabled title="Bỏ toàn bộ đánh dấu">Bỏ đánh dấu</button>
-      <span class="sep"></span>
-      <button id="secEncrypt" title="Đặt mật khẩu mở file + quyền hạn (AES-256)">🔑 Đặt mật khẩu</button>
-      <button id="secDecrypt" title="Gỡ mật khẩu (cần mật khẩu hiện tại)">🔓 Gỡ mật khẩu</button>
-      <button id="secStripMeta" title="Xoá /Info (tác giả, phần mềm tạo...) và XMP metadata khỏi file">🧹 Xoá metadata</button>
-      <span class="sep"></span>
-      <button id="secCreateId" title="Tạo Digital ID tự ký (RSA-2048) để ký thử">🪪 Tạo Digital ID</button>
-      <button id="secSign" title="Ký số tài liệu bằng Digital ID">✍️ Ký số</button>
-      <button id="secVerify" title="Kiểm tra tính hợp lệ của chữ ký trong file">🔎 Kiểm tra chữ ký</button>
-      <button id="secOptimize" title="Nén object stream + dọn object rác (giảm dung lượng)">📦 Lưu tối ưu</button>
-      <span class="spacer"></span>
-      <span id="secHint" class="status"></span>
-    </div>
-
+    <!-- ===== Thân ===== -->
     <div class="body">
       <aside id="sidebar" class="sidebar">
-        <div class="tabs">
-          <button id="tabThumbs" class="tab active">Thumbnails</button>
-          <button id="tabOutline" class="tab">Outline</button>
-          <button id="tabComments" class="tab">Chú thích</button>
+        <div class="rail">
+          <button id="tabThumbs" class="tab active" data-i18n-title="side.thumbs"><i data-icon="thumbs"></i></button>
+          <button id="tabOutline" class="tab" data-i18n-title="side.outline"><i data-icon="outline"></i></button>
+          <button id="tabComments" class="tab" data-i18n-title="side.comments"><i data-icon="comments"></i></button>
+          <span class="spacer"></span>
+          <button id="sidebarToggle" class="tab" data-i18n-title="side.toggle"><i data-icon="sidebar"></i></button>
         </div>
-        <div id="thumbs" class="panel thumbs"></div>
-        <div id="outline" class="panel outline hidden"></div>
-        <div id="comments" class="panel comments hidden"></div>
+        <div class="side-panels">
+          <div id="thumbs" class="panel thumbs"></div>
+          <div id="outline" class="panel outline hidden"></div>
+          <div id="comments" class="panel comments hidden"></div>
+        </div>
       </aside>
 
       <main id="viewport" class="viewport">
@@ -177,11 +317,73 @@
              được), các trang khác render read-only — đúp vào là sửa trang đó. -->
         <div id="editPagesCol" class="edit-pages-col">
           <div id="editPageWrap" class="edit-page-wrap">
-            <img id="editImg" class="edit-img" alt="trang đang sửa"/>
+            <img id="editImg" class="edit-img" alt=""/>
             <div id="editOverlay" class="edit-overlay"></div>
           </div>
         </div>
       </main>
+    </div>
+
+    <!-- ===== Thanh đáy ===== -->
+    <footer class="bottombar">
+      <div class="bb-left"><span id="status" class="status"></span></div>
+      <div class="bb-center">
+        <button id="pageFirst" class="bbtn" data-i18n-title="shell.firstPage"><i data-icon="page-first"></i></button>
+        <button id="pagePrev" class="bbtn" data-i18n-title="shell.prevPage"><i data-icon="chevron-left"></i></button>
+        <div class="pagebox">
+          <input id="pageInput" class="pagenum" type="text" inputmode="numeric" data-i18n-title="shell.gotoPage" />
+          <span class="pageof">/ <span id="pageTotal">—</span></span>
+        </div>
+        <button id="pageNext" class="bbtn" data-i18n-title="shell.nextPage"><i data-icon="chevron-right"></i></button>
+        <button id="pageLast" class="bbtn" data-i18n-title="shell.lastPage"><i data-icon="page-last"></i></button>
+      </div>
+      <div class="bb-right">
+        <button id="zoomOut" class="bbtn" data-i18n-title="shell.zoomOut"><i data-icon="zoom-minus"></i></button>
+        <select id="zoomSelect" class="zoom" data-i18n-title="shell.zoomLevel"></select>
+        <button id="zoomIn" class="bbtn" data-i18n-title="shell.zoomIn"><i data-icon="zoom-plus"></i></button>
+      </div>
+    </footer>
+
+    <!-- ===== Menu Files ===== -->
+    <div id="filesMenu" class="menu files-menu hidden" role="menu">
+      <button class="mitem" data-proxy="openBtn"><i data-icon="folder-open"></i><span data-i18n="files.open"></span><kbd>Ctrl+O</kbd></button>
+      <div class="mitem has-sub" id="recentItem"><i data-icon="clock"></i><span data-i18n="files.recent"></span><i data-icon="chevron-right" class="mchev"></i>
+        <div class="menu submenu" id="recentMenu"></div>
+      </div>
+      <button class="mitem" data-proxy="quickSave"><i data-icon="save"></i><span data-i18n="files.save"></span><kbd>Ctrl+S</kbd></button>
+      <div class="msep"></div>
+      <div class="mitem has-sub"><i data-icon="file-export"></i><span data-i18n="files.exportAs"></span><i data-icon="chevron-right" class="mchev"></i>
+        <div class="menu submenu">
+          <button class="mitem" data-proxy="cvDocx"><i data-icon="file-word"></i><span data-i18n="ribbon.convert.toWord"></span></button>
+          <button class="mitem" data-proxy="cvPng"><i data-icon="file-image"></i><span data-i18n="ribbon.convert.toPng"></span></button>
+          <button class="mitem" data-proxy="cvTxt"><i data-icon="file-text"></i><span data-i18n="ribbon.convert.toTxt"></span></button>
+        </div>
+      </div>
+      <div class="mitem has-sub"><i data-icon="merge"></i><span data-i18n="files.mergeSplit"></span><i data-icon="chevron-right" class="mchev"></i>
+        <div class="menu submenu">
+          <button class="mitem" data-proxy="orgMerge"><i data-icon="merge"></i><span data-i18n="ribbon.page.merge"></span></button>
+          <button class="mitem" data-proxy="orgSplit"><i data-icon="split"></i><span data-i18n="ribbon.page.split"></span></button>
+        </div>
+      </div>
+      <button class="mitem" data-proxy="secOptimize"><i data-icon="compress"></i><span data-i18n="files.compress"></span></button>
+      <div class="msep"></div>
+      <button class="mitem" id="docPropsItem"><i data-icon="file-info"></i><span data-i18n="files.properties"></span></button>
+      <div class="msep"></div>
+      <button class="mitem" data-proxy="helpShortcuts"><i data-icon="keyboard"></i><span data-i18n="ribbon.help.shortcuts"></span></button>
+      <button class="mitem" data-proxy="helpAbout"><i data-icon="info"></i><span data-i18n="ribbon.help.about"></span></button>
+      <div class="msep"></div>
+      <button class="mitem" id="quitItem"><i data-icon="quit"></i><span data-i18n="files.quit"></span></button>
+    </div>
+
+    <!-- Popover chọn ngôn ngữ / theme -->
+    <div id="langMenu" class="menu mini-menu hidden" role="menu">
+      <button class="mitem" data-lang="vi"><span class="mcheck"></span><span>Tiếng Việt</span></button>
+      <button class="mitem" data-lang="en"><span class="mcheck"></span><span>English</span></button>
+    </div>
+    <div id="themeMenu" class="menu mini-menu hidden" role="menu">
+      <button class="mitem" data-theme-set="light"><span class="mcheck"></span><i data-icon="theme-light"></i><span data-i18n="shell.themeLight"></span></button>
+      <button class="mitem" data-theme-set="dark"><span class="mcheck"></span><i data-icon="theme-dark"></i><span data-i18n="shell.themeDark"></span></button>
+      <button class="mitem" data-theme-set="system"><span class="mcheck"></span><i data-icon="theme-system"></i><span data-i18n="shell.themeSystem"></span></button>
     </div>
 
     <div id="modalOverlay" class="modal-overlay hidden">
@@ -190,11 +392,26 @@
 
     <!-- Màn hình khởi động: che UI đến khi mọi thứ sẵn sàng (không thấy đơ). -->
     <div id="bootSplash" class="boot-splash">
+      <svg class="boot-mark" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="2" width="18" height="20" rx="4" fill="var(--accent)"/>
+        <path d="M8.5 7.5h7M8.5 11.5h5M8.5 7.5v9" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/>
+      </svg>
       <div class="boot-logo">FoFreeXit</div>
       <div class="boot-spin"></div>
-      <div class="boot-note">Đang khởi động…</div>
+      <div class="boot-note" data-i18n="shell.booting"></div>
     </div>
 
+    <script src="i18n.js"></script>
+    <script src="i18n/part-0-shell.js"></script>
+    <script src="i18n/part-1.js"></script>
+    <script src="i18n/part-2.js"></script>
+    <script src="i18n/part-3.js"></script>
+    <script src="i18n/part-4.js"></script>
+    <script src="i18n/part-5.js"></script>
+    <script src="i18n/part-6.js"></script>
+    <script src="icons.js"></script>
     <script src="main.js"></script>
+    <script src="shell.js"></script>
+    <script src="shell-extras.js"></script>
   </body>
 </html>
