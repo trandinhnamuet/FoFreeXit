@@ -1122,7 +1122,7 @@ function showFmtBar(spec, editorEl) {
 
   const sizes = [8, 10, 12, 14, 18, 24, 32, 48];
   const sizeSel = document.createElement("select");
-  sizeSel.title = "Cỡ chữ";
+  sizeSel.title = t("annot.fontSize");
   for (const s of sizes) {
     const o = document.createElement("option");
     o.value = s; o.textContent = s;
@@ -1191,11 +1191,11 @@ function openNotePopup(spec) {
   pop.style.left = r.right + 6 + "px";
   pop.style.top = r.top + "px";
   pop.innerHTML = `
-    <div class="np-head"><span>Ghi chú</span><span class="np-close">✕</span></div>
-    <textarea class="np-text" placeholder="Nhập nội dung ghi chú…">${escapeHtml(spec.contents || "")}</textarea>
+    <div class="np-head"><span>${t("annot.note")}</span><span class="np-close">✕</span></div>
+    <textarea class="np-text" placeholder="${t("annot.notePlaceholder")}">${escapeHtml(spec.contents || "")}</textarea>
     <div class="np-foot">
-      <button class="np-color"><span class="sw" style="background:${rgbCss(spec.color)}"></span>Màu</button>
-      <button class="np-del">🗑 Xoá</button>
+      <button class="np-color"><span class="sw" style="background:${rgbCss(spec.color)}"></span>${t("common.color")}</button>
+      <button class="np-del">🗑 ${t("common.delete")}</button>
     </div>`;
   document.body.appendChild(pop);
   notePopupEl = pop;
@@ -1253,7 +1253,7 @@ function openColorPopover(anchor, currentRgb, onPick) {
 
   if (state.recentColors.length) {
     const lbl = document.createElement("div");
-    lbl.className = "clbl"; lbl.textContent = "Gần đây";
+    lbl.className = "clbl"; lbl.textContent = t("annot.recentColors");
     pop.appendChild(lbl);
     const rg = document.createElement("div");
     rg.className = "cgrid";
@@ -1263,7 +1263,7 @@ function openColorPopover(anchor, currentRgb, onPick) {
 
   const custom = document.createElement("label");
   custom.className = "ccustom";
-  custom.innerHTML = `Tuỳ chọn… <input type="color" value="${rgbToHex(currentRgb)}">`;
+  custom.innerHTML = `${t("annot.customColor")} <input type="color" value="${rgbToHex(currentRgb)}">`;
   custom.querySelector("input").addEventListener("input", (e) => {
     const rgb = hexToRgb(e.target.value);
     pushRecentColor(rgb);
@@ -1516,10 +1516,10 @@ async function saveAnnots() {
     const n = state.annotSpecs.length;
     state.annotSpecs = [];
     updateAnnotCount();
-    $("status").textContent = `Đã lưu ${n} chú thích → ${shortName(out)}`;
+    $("status").textContent = t("annot.saved", { n, file: shortName(out) });
     loadDocument(out);
   } catch (e) {
-    $("status").textContent = "Lỗi lưu chú thích: " + e;
+    $("status").textContent = t("annot.saveErr", { e });
   }
 }
 
@@ -1527,12 +1527,12 @@ function buildComments() {
   const box = $("comments");
   box.innerHTML = "";
   if (!state.annotSpecs.length) {
-    box.innerHTML = `<div class="empty">Chưa có chú thích chưa lưu. Chọn công cụ ở thanh trên và vẽ lên trang, rồi bấm "Lưu chú thích".</div>`;
+    box.innerHTML = `<div class="empty">${t("annot.emptyList")}</div>`;
     return;
   }
   const labels = {
-    highlight: "Tô sáng", underline: "Gạch chân", strikeout: "Gạch ngang",
-    square: "Khung", freetext: "Text box", note: "Ghi chú",
+    highlight: t("annot.kind.highlight"), underline: t("annot.kind.underline"), strikeout: t("annot.kind.strikeout"),
+    square: t("annot.kind.square"), freetext: t("annot.kind.freetext"), note: t("annot.kind.note"),
   };
   for (const s of state.annotSpecs) {
     const el = document.createElement("div");
@@ -1540,7 +1540,7 @@ function buildComments() {
     el.innerHTML =
       `<span class="cdel">✕</span>` +
       `<span class="csw" style="background:${rgbCss(s.color)}"></span>` +
-      `<span class="ckind">${labels[s.kind] || s.kind}</span> · trang ${s.pageIndex + 1}` +
+      `<span class="ckind">${labels[s.kind] || s.kind}</span> · ${t("annot.onPage", { n: s.pageIndex + 1 })}` +
       (s.contents ? `<br><span class="ctxt">${escapeHtml(s.contents)}</span>` : "");
     el.addEventListener("click", (ev) => {
       if (ev.target.classList.contains("cdel")) {
@@ -1561,9 +1561,9 @@ async function copyCurrentPage() {
   try {
     const txt = await invoke("page_text", { path: state.path, page: state.current });
     await navigator.clipboard.writeText(txt);
-    $("status").textContent = `Đã copy text trang ${state.current + 1} (${txt.length} ký tự)`;
+    $("status").textContent = t("annot.copied", { n: state.current + 1, chars: txt.length });
   } catch (e) {
-    $("status").textContent = "Lỗi copy: " + e;
+    $("status").textContent = t("annot.copyErr", { e });
   }
 }
 
