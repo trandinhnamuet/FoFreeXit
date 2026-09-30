@@ -103,7 +103,7 @@ async function loadDocument(path) {
     buildPages();
     buildThumbnails();
     buildOutline(meta.outline);
-    $("status").textContent = `${meta.pageCount} trang · ${shortName(path)}`;
+    $("status").textContent = t("viewer.docInfo", { n: meta.pageCount, name: shortName(path) });
     updatePageTotal();
     updateCurrentPage();
     updateZoomLabel();
@@ -122,7 +122,7 @@ async function loadDocument(path) {
     state.orgThumbs = new Map();
     if (state.organizeMode) buildOrganizeGrid();
   } catch (e) {
-    $("status").textContent = "Lỗi mở tài liệu: " + e;
+    $("status").textContent = t("viewer.errOpen", { e });
   }
 }
 
@@ -151,7 +151,7 @@ async function openFile() {
     const path = await invoke("pick_pdf");
     if (path) loadDocument(path);
   } catch (e) {
-    $("status").textContent = "Lỗi chọn file: " + e;
+    $("status").textContent = t("viewer.errPick", { e });
   }
 }
 
@@ -173,7 +173,7 @@ function buildPages() {
 
     const ph = document.createElement("div");
     ph.className = "ph";
-    ph.textContent = `Trang ${p.index + 1}`;
+    ph.textContent = t("viewer.pageN", { n: p.index + 1 });
     slot.appendChild(ph);
 
     const overlay = document.createElement("div");
@@ -241,7 +241,7 @@ async function renderSlot(idx) {
     drawAnnotsForPage(idx);
   } catch (e) {
     slot.dataset.renderedZoom = ""; // cho phép thử lại
-    $("status").textContent = "Lỗi render trang " + (idx + 1) + ": " + e;
+    $("status").textContent = t("viewer.errRender", { n: idx + 1, e });
   }
 }
 
@@ -408,14 +408,14 @@ function buildOutline(items) {
   const box = $("outline");
   box.innerHTML = "";
   if (!items.length) {
-    box.innerHTML = `<div class="oitem" style="color:#777">Không có outline</div>`;
+    box.innerHTML = `<div class="oitem" style="color:#777">${t("viewer.noOutline")}</div>`;
     return;
   }
   for (const it of items) {
     const el = document.createElement("div");
     el.className = "oitem";
     el.style.paddingLeft = 6 + it.level * 14 + "px";
-    el.textContent = it.title || "(không tiêu đề)";
+    el.textContent = it.title || t("viewer.untitled");
     if (it.pageIndex != null) {
       el.addEventListener("click", () => goToPage(it.pageIndex));
     } else {
@@ -554,7 +554,7 @@ async function fillRoSlot(idx) {
     if (!img) {
       img = document.createElement("img");
       img.className = "edit-ro";
-      img.alt = "trang " + (idx + 1);
+      img.alt = t("viewer.pageAlt", { n: idx + 1 });
       slot.appendChild(img);
     }
     img.src = url;
@@ -747,8 +747,8 @@ async function runSearch() {
     if (hits.length) gotoHit(0);
     drawHighlightsForVisible();
   } catch (e) {
-    $("searchCount").textContent = "lỗi";
-    $("status").textContent = "Lỗi tìm kiếm: " + e;
+    $("searchCount").textContent = t("viewer.searchErrShort");
+    $("status").textContent = t("viewer.errSearch", { e });
   }
 }
 
@@ -823,12 +823,12 @@ function setTool(tool) {
   document.body.classList.toggle("tool-mark", isTextMarkupTool(state.tool));
   $("annotHint").textContent = state.tool
     ? state.tool === "note"
-      ? "Bấm lên trang để đặt ghi chú"
+      ? t("viewer.hintNote")
       : state.tool === "redact"
-        ? "Kéo chuột quét vùng cần bôi đen — nội dung sẽ bị XOÁ THẬT khi Áp dụng"
+        ? t("viewer.hintRedact")
         : isTextMarkupTool(state.tool)
-          ? "Kéo chọn văn bản trên trang để tô (bấm lại nút để tắt)"
-          : "Kéo chuột trên trang để vẽ"
+          ? t("viewer.hintMarkup")
+          : t("viewer.hintDraw")
     : "";
 }
 
@@ -933,7 +933,7 @@ function drawAnnotsForPage(idx) {
             const del = document.createElement("div");
             del.className = "a-del";
             del.textContent = "✕";
-            del.title = "Xoá (Delete)";
+            del.title = t("viewer.deleteTip");
             del.addEventListener("click", (ev) => { ev.stopPropagation(); deleteSpec(s.id); });
             el.appendChild(del);
           }
@@ -961,7 +961,7 @@ function drawAnnotsForPage(idx) {
       el.style.fontWeight = s.bold ? "bold" : "normal";
       el.style.fontStyle = s.italic ? "italic" : "normal";
       el.style.textDecoration = s.underline ? "underline" : "none";
-      el.textContent = s.contents || "Văn bản…";
+      el.textContent = s.contents || t("viewer.textPlaceholder");
       Object.assign(el.style, { left: left + "px", top: top + "px", width: Math.max(w, 40) + "px", minHeight: h + "px" });
       el.addEventListener("dblclick", (ev) => { ev.stopPropagation(); editTextBox(s); });
     } else if (s.kind === "note") {
@@ -979,7 +979,7 @@ function drawAnnotsForPage(idx) {
       const del = document.createElement("div");
       del.className = "a-del";
       del.textContent = "✕";
-      del.title = "Xoá (Delete)";
+      del.title = t("viewer.deleteTip");
       del.addEventListener("click", (ev) => { ev.stopPropagation(); deleteSpec(s.id); });
       el.appendChild(del);
     }
@@ -997,7 +997,7 @@ function drawAnnotsForPage(idx) {
       width: (m.rect.right - m.rect.left) * scale + "px",
       height: (m.rect.top - m.rect.bottom) * scale + "px",
     });
-    el.title = "Bấm để bỏ đánh dấu redact";
+    el.title = t("viewer.redactMarkTip");
     el.addEventListener("click", (ev) => {
       ev.stopPropagation();
       const i = state.redactMarks.indexOf(m);
