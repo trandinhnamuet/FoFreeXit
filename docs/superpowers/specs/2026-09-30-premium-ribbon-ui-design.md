@@ -33,9 +33,9 @@ Thứ tự nạp script: `i18n.js` → `i18n/part-*.js` → `theme.js` → `icon
 - **Ribbon ~84px**: nút dọc (icon 24px + nhãn 12px), nhóm cách bằng vạch dọc, `▾` khi có menu con. Nút toggle active = nền accent-soft.
 - **Phân bổ tab** (chỉ nút thật):
   - Home: Chọn/Kéo, Zoom (select, −, +, Vừa rộng, Vừa trang), Tô sáng, Crop, Copy text, Tìm, OCR.
-  - Edit (= edit mode): Thêm chữ, Thêm ảnh, Xoá, Thay ảnh, Font, Cỡ, B, I, Màu, Watermark, Header & Footer, Huỷ thay đổi, Lưu.
+  - Edit (= edit mode): Thêm chữ, Thêm ảnh, Xoá, Thay ảnh, Font, Cỡ, B, I, Màu, Huỷ thay đổi, Lưu. (Watermark / Header & Footer đặt ở tab Page vì dùng pagePlan của chế độ Tổ chức trang — đặt ở Edit sẽ xung đột editBase.)
   - Annotate: Tô sáng, Gạch chân, Gạch ngang, Khung, Text box, Ghi chú, Màu, Lưu chú thích (n).
-  - Page (= organize mode): Chèn, Xoá, Xoay trái/phải, Trích, Thay, Trộn PDF, Tách PDF, Lưu.
+  - Page (= organize mode): Chèn, Xoá, Xoay trái/phải, Trích, Thay, Trộn PDF, Tách PDF, Watermark, Header & Footer, Lưu.
   - Form: Điền form (n), Thêm field, Làm phẳng form, Xuất FDF, Xuất CSV, Nhập FDF.
   - Convert: Ngôn ngữ OCR, OCR, PDF→PNG, PDF→TXT, PDF→Word, Office→PDF.
   - Protect: Đánh dấu redact, Áp dụng redact (n), Bỏ đánh dấu, Đặt/Gỡ mật khẩu, Xoá metadata, Tạo Digital ID, Ký số, Kiểm tra chữ ký.

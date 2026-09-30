@@ -70,10 +70,23 @@ function shortName(path) {
 }
 
 async function loadDocument(path) {
-  // Mở lỗi → trả state.path về tài liệu đang hiển thị (pages vẫn là của nó).
+  // Mở tệp TRƯỚC, chỉ khi thành công mới xoá trạng thái tài liệu cũ — mở lỗi
+  // (tệp gần đây đã bị xoá…) không được làm mất chú thích chưa lưu.
   const prevPath = state.path;
+  let loaded = false;
   try {
-    state.path = path;
+    let meta;
+    let openedPath = path;
+    try {
+      meta = await invoke("open_document", { path });
+    } catch (e) {
+      // File hỏng (xref/trailer sai) — tự sửa qua QPDF rồi mở lại (Phase 3).
+      const usable = await invoke("ensure_openable", { path, password: null });
+      if (usable === path) throw e;
+      openedPath = usable;
+      meta = await invoke("open_document", { path: usable });
+    }
+    state.path = openedPath;
     state.textLayers = {};
     state.hits = [];
     state.hitIdx = -1;
@@ -91,17 +104,8 @@ async function loadDocument(path) {
     $("searchBox").value = "";
     $("searchCount").textContent = "—";
 
-    let meta;
-    try {
-      meta = await invoke("open_document", { path });
-    } catch (e) {
-      // File hỏng (xref/trailer sai) — tự sửa qua QPDF rồi mở lại (Phase 3).
-      const usable = await invoke("ensure_openable", { path, password: null });
-      if (usable === path) throw e;
-      state.path = usable;
-      meta = await invoke("open_document", { path: usable });
-    }
     state.pages = meta.pages;
+    loaded = true;
     buildPages();
     buildThumbnails();
     state.outline = meta.outline || [];
@@ -125,7 +129,7 @@ async function loadDocument(path) {
     state.orgThumbs = new Map();
     if (state.organizeMode) buildOrganizeGrid();
   } catch (e) {
-    state.path = prevPath;
+    if (!loaded) state.path = prevPath;
     $("status").textContent = t("viewer.errOpen", { e });
   }
 }
@@ -2558,6 +2562,8 @@ function updateEditUndoButtons() {
 // Áp 1 nhóm op (1 thao tác người dùng): lưu editBase cũ vào stack undo,
 // materialize ra file tạm mới, ghi nhận file tạm để dọn khi thoát.
 async function stageEditOps(ops) {
+  // Đếm thao tác đang áp dụng dở — shell hỏi xác nhận trước khi rời chế độ sửa.
+  state.editPending = (state.editPending || 0) + 1;
   try {
     const out = await invoke("edit_apply_to_temp", {
       input: state.editBase, page: state.editPage, ops, password: null,
@@ -2571,6 +2577,8 @@ async function stageEditOps(ops) {
     await loadEditPage();
   } catch (e) {
     $("editHint").textContent = t("edit.err", { e });
+  } finally {
+    state.editPending--;
   }
 }
 

@@ -78,6 +78,7 @@ I18N.add("vi", {
   "shell.confirmLeaveEdit": "Bạn có thay đổi nội dung chưa lưu. Rời chế độ Chỉnh sửa sẽ bỏ các thay đổi này. Tiếp tục?",
   "shell.nothingToSave": "Không có thay đổi nào cần lưu",
   "shell.noDocument": "Hãy mở một tệp PDF trước",
+  "shell.exitReading": "Thoát chế độ đọc (Esc)",
 
   // sidebar
   "side.thumbs": "Hình thu nhỏ",
@@ -320,6 +321,7 @@ I18N.add("en", {
   "shell.confirmLeaveEdit": "You have unsaved content edits. Leaving Edit mode will discard them. Continue?",
   "shell.nothingToSave": "There are no changes to save",
   "shell.noDocument": "Please open a PDF file first",
+  "shell.exitReading": "Exit reading mode (Esc)",
 
   // sidebar
   "side.thumbs": "Page thumbnails",

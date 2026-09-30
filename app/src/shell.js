@@ -13,6 +13,7 @@
   };
   const TAB_OF_MODE = Object.fromEntries(Object.entries(MODE_OF).map(([tab, m]) => [m, tab]));
   const langHandlers = [];
+  const LOADS_DOC = new Set(["orgMerge", "secOptimize"]);
   let current = "home";
   let routing = false;
 
@@ -29,11 +30,20 @@
     return Object.keys(TOGGLE_OF).find((m) => state[m]) || null;
   }
 
+  // Còn thay đổi nội dung chưa lưu (kể cả thao tác đang áp dụng dở)?
+  function editDirty() {
+    return state.editMode &&
+      (state.editUndo.length > 0 || (state.editPending || 0) > 0 || (state.editBase && state.editBase !== state.path));
+  }
+  // true = được phép bỏ chế độ sửa (không có gì chưa lưu, hoặc người dùng đồng ý bỏ).
+  function confirmDiscardEdits() {
+    return !editDirty() || confirm(t("shell.confirmLeaveEdit"));
+  }
+
   function setTab(tab) {
     if (routing) return;
     const want = MODE_OF[tab] || null;
-    if (state.editMode && want !== "editMode" && state.editUndo.length &&
-        !confirm(t("shell.confirmLeaveEdit"))) { syncTabs(); return; }
+    if (state.editMode && want !== "editMode" && !confirmDiscardEdits()) { syncTabs(); return; }
     routing = true;
     try {
       for (const m of Object.keys(TOGGLE_OF)) if (m !== want && state[m]) $(TOGGLE_OF[m]).click();
@@ -69,6 +79,8 @@
     if (el.dataset.proxy) {
       closeMenus();
       const target = $(el.dataset.proxy);
+      // Gộp PDF / Nén mở tệp kết quả → bỏ chế độ sửa: hỏi trước nếu còn thay đổi.
+      if (LOADS_DOC.has(el.dataset.proxy) && !confirmDiscardEdits()) return;
       if (target && !target.disabled) target.click();
     } else if (el.dataset.tabGo) {
       setTab(el.dataset.tabGo);
@@ -112,10 +124,8 @@
     $("winMin").addEventListener("click", () => appWin.minimize());
     $("winMax").addEventListener("click", () => appWin.toggleMaximize());
     $("winClose").addEventListener("click", () => appWin.close());
-    // Đúp vào vùng kéo = phóng to/khôi phục (chuẩn Windows).
-    document.querySelector(".titlebar").addEventListener("dblclick", (e) => {
-      if (!e.target.closest(".tb-controls")) appWin.toggleMaximize();
-    });
+    // Đúp vào vùng kéo = phóng to/khôi phục: script drag-region của Tauri đã tự
+    // làm — thêm handler ở đây sẽ phóng to rồi khôi phục ngay (nháy).
     let rt = 0;
     window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(refreshMaxIcon, 120); });
     refreshMaxIcon();
@@ -142,7 +152,14 @@
   document.addEventListener("mousedown", (e) => {
     if (!e.target.closest(".menu") && !e.target.closest("#filesBtn,#langBtn,#themeBtn")) closeMenus();
   });
-  window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); });
+  // Esc khi đang mở menu: chỉ đóng menu (không để main.js bỏ công cụ đang chọn).
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (document.querySelector(".menu:not(.submenu):not(.hidden)")) {
+      closeMenus();
+      e.stopImmediatePropagation();
+    }
+  }, true);
   window.addEventListener("blur", () => closeMenus());
 
   function markChecked(menu, attr, val) {
@@ -187,9 +204,13 @@
   }
   $("collapseRibbonBtn").addEventListener("click", () =>
     setRibbonCollapsed(!document.body.classList.contains("ribbon-collapsed")));
-  // Bấm tab khi ribbon đang thu gọn → mở lại.
-  document.querySelectorAll(".tab-pill").forEach((b) => b.addEventListener("dblclick", () =>
-    setRibbonCollapsed(!document.body.classList.contains("ribbon-collapsed"))));
+  // Bấm tab khi ribbon đang thu gọn → mở lại; đúp tab = thu gọn/mở (như Office).
+  document.querySelectorAll(".tab-pill").forEach((b) => {
+    b.addEventListener("click", () => {
+      if (document.body.classList.contains("ribbon-collapsed")) setRibbonCollapsed(false);
+    });
+    b.addEventListener("dblclick", () => setRibbonCollapsed(!document.body.classList.contains("ribbon-collapsed")));
+  });
 
   // ---------- Sidebar ----------
   function setSidebarCollapsed(on) {
@@ -238,7 +259,14 @@
   });
 
   // ---------- Tài liệu ----------
+  // Mở tệp khác khi đang ở chế độ Sửa: hỏi trước (capture — chạy trước openFile
+  // của main.js), mở xong thì thoát chế độ sửa (editBase còn trỏ tệp cũ).
+  $("openBtn").addEventListener("click", (e) => {
+    if (!confirmDiscardEdits()) { e.stopImmediatePropagation(); e.preventDefault(); }
+  }, true);
+
   function onDocLoaded(path) {
+    if (state.editMode) exitEditMode();
     const name = path.split(/[\\/]/).pop();
     $("winTitle").textContent = `FoFreeXit — ${name}`;
     document.title = `FoFreeXit — ${name}`;
@@ -251,6 +279,7 @@
     get currentTab() { return current; },
     onDocLoaded,
     onLangChange(fn) { langHandlers.push(fn); },
+    confirmDiscardEdits,
     closeMenus,
     openMenuAt,
   };

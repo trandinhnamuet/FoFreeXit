@@ -118,7 +118,7 @@
           <div class="rrow">
             <button id="edBold" class="sq ed-style" data-i18n-title="ribbon.edit.boldTip" disabled><b>B</b></button>
             <button id="edItalic" class="sq ed-style" data-i18n-title="ribbon.edit.italicTip" disabled><i class="it">I</i></button>
-            <button id="edColorBtn" class="sq-wide atool" data-i18n-title="ribbon.edit.colorTip" disabled><span class="sw" id="edSw"></span><span data-i18n="common.color"></span></button>
+            <button id="edColorBtn" class="sq-wide" data-i18n-title="ribbon.edit.colorTip" disabled><span class="sw" id="edSw"></span><span data-i18n="common.color"></span></button>
           </div>
           <span class="rgroup-label" data-i18n="ribbon.edit.fontGroup"></span>
         </div>
@@ -151,7 +151,7 @@
         </div>
         <span class="rsep"></span>
         <div class="rgroup">
-          <button id="annotColorBtn" class="rbtn atool" data-i18n-title="ribbon.annotate.colorTip"><span class="sw-big"><span class="sw" id="annotSw"></span></span><span data-i18n="common.color"></span></button>
+          <button id="annotColorBtn" class="rbtn" data-i18n-title="ribbon.annotate.colorTip"><span class="sw-big"><span class="sw" id="annotSw"></span></span><span data-i18n="common.color"></span></button>
           <button id="saveAnnots" class="rbtn primary" data-i18n-title="ribbon.annotate.saveTip" disabled><i data-icon="save"></i><span><span data-i18n="ribbon.annotate.save"></span> (<span id="annotCount">0</span>)</span></button>
         </div>
         <span class="spacer"></span>
@@ -343,6 +343,9 @@
         <button id="zoomIn" class="bbtn" data-i18n-title="shell.zoomIn"><i data-icon="zoom-plus"></i></button>
       </div>
     </footer>
+
+    <!-- Nút nổi thoát Chế độ đọc (chỉ hiện khi body.reading) -->
+    <button id="readingExit" class="reading-exit" data-proxy="readingBtn"><i data-icon="win-close"></i><span data-i18n="shell.exitReading"></span></button>
 
     <!-- ===== Menu Files ===== -->
     <div id="filesMenu" class="menu files-menu hidden" role="menu">
