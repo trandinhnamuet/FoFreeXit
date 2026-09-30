@@ -2246,6 +2246,8 @@ function openMergeDialog() {
 }
 
 function openSplitDialog() {
+  // Hộp thoại nhiều chế độ (số trang / dung lượng / bookmark / dải trang) — features/bookmarks.js.
+  if (typeof openSplitDialogEx === "function") return openSplitDialogEx();
   const box = openModal(t("orgx.splitTitle"), `
     <label>${t("orgx.splitPerFile")}</label>
     <input type="number" id="splitN" value="1" min="1">

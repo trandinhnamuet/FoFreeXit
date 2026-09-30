@@ -117,6 +117,19 @@ const ICONS = (() => {
     "keyboard": '<rect x="2.5" y="6" width="19" height="12" rx="2"/>' + dot(6.5, 10) + dot(10, 10) + dot(14, 10) + dot(17.5, 10) + dot(6.5, 14) + dot(17.5, 14) + '<path d="M9.5 14h5"/>',
     "info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/>' + dot(12, 7.8, 1),
     "clock": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+
+    // ---- Bookmark / liên kết ----
+    "bookmark": '<path d="M7 3.5h10a1 1 0 0 1 1 1V20.5l-6-4-6 4V4.5a1 1 0 0 1 1-1z"/>',
+    "bookmark-add": '<path d="M13 3.5H7a1 1 0 0 0-1 1V20.5l6-4 6 4V12"/><path d="M18.5 3v6M15.5 6h6"/>',
+    "bookmark-child": '<path d="M4 4v6a2 2 0 0 0 2 2h4"/><path d="M13 8.5h6a1 1 0 0 1 1 1v11l-4-2.7-4 2.7v-11a1 1 0 0 1 1-1z"/>',
+    "bookmark-auto": '<path d="M7 3.5h6M6 4.5V20.5l6-4 6 4V13"/>' + '<path d="M18 2.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>',
+    "rename": '<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14.5 7.5l3 3"/><path d="M13 20h7"/>',
+    "outdent": '<path d="M11 6h9M11 12h9M4 18h16"/><path d="M8 9.5L4.5 12 8 14.5"/>',
+    "indent": '<path d="M11 6h9M11 12h9M4 18h16"/><path d="M4.5 9.5L8 12l-3.5 2.5"/>',
+    "link": '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/>',
+    "more": dot(6, 12, 1.4) + dot(12, 12, 1.4) + dot(18, 12, 1.4),
+    "expand-all": '<path d="M7 9l5-5 5 5M7 15l5 5 5-5"/>',
+    "collapse-all": '<path d="M7 4l5 5 5-5M7 20l5-5 5 5"/>',
   };
 })();
 function icon(name) {
