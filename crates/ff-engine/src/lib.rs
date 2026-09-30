@@ -7,6 +7,8 @@
 pub mod annot;
 pub mod bookmarks;
 pub mod annot_ext;
+pub mod compare;
+pub mod compare_report;
 pub mod convert;
 pub mod edit;
 mod cffwrap;
@@ -40,6 +42,11 @@ pub use annot_ext::{
     save_annotations, update_annotations, AnnotDetail, AnnotMeta, AnnotRef, AnnotSaveRequest,
     AnnotUpdate, ReplySpec, ShapeKind, ShapeSpec, StampSpec,
 };
+pub use compare::{
+    compare_documents, diff_regions, Change, ChangeKind, CompareMode, CompareOptions, CompareProgress,
+    CompareResult, CompareSummary, PagePair, RawImage, COMPARE_CANCELLED,
+};
+pub use compare_report::{export_compare_report, ReportInfo, ReportLabels, ReportStats};
 pub use edit::{apply_edits, flatten_form_xobjects, font_data, list_objects, EditOp, ObjectInfo, ObjectKind, RichSeg};
 pub use meta::{outline, page_dims, strip_metadata, OutlineItem, PageDim};
 pub use organize::{

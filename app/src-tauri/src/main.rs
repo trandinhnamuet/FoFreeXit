@@ -9,6 +9,7 @@ use serde::Serialize;
 use tauri_plugin_dialog::DialogExt;
 
 mod cmd_bookmarks;
+mod cmd_compare;
 
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
@@ -1615,6 +1616,9 @@ fn main() {
             cmd_annot::annot_default_author,
             cmd_annot::annot_pick_stamp_image,
             cmd_annot::annot_image_preview,
+            cmd_compare::compare_run,
+            cmd_compare::compare_cancel,
+            cmd_compare::compare_export_report
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");
