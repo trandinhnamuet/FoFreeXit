@@ -1671,9 +1671,11 @@ async function materializeBaseInput() {
   });
   return { path, isTemp: true, pageCount: state.pagePlan.length };
 }
-const MATERIALIZED_NOTE =
-  `<p class="status">Đang dùng bản xem trước đã gồm các thay đổi tổ chức trang ` +
-  `chưa lưu (chèn/xoá/đảo/xoay/crop) — chưa ghi đè file gốc.</p>`;
+// Object có toString() thay vì chuỗi cố định: chèn vào template `${...}` sẽ gọi
+// t() lúc render → đổi ngôn ngữ trực tiếp vẫn đúng.
+const MATERIALIZED_NOTE = {
+  toString: () => `<p class="status">${t("org.materializedNote")}</p>`,
+};
 
 function orgMovePage(from, to) {
   if (from === to) return;
@@ -1744,8 +1746,8 @@ function buildOrganizeGrid() {
 }
 
 function orgDeleteSelected() {
-  if (!state.orgSelected.size) { $("organizeHint").textContent = "Chưa chọn trang nào để xoá"; return; }
-  if (state.orgSelected.size >= state.pagePlan.length) { $("organizeHint").textContent = "Không thể xoá hết toàn bộ trang"; return; }
+  if (!state.orgSelected.size) { $("organizeHint").textContent = t("org.noSelDelete"); return; }
+  if (state.orgSelected.size >= state.pagePlan.length) { $("organizeHint").textContent = t("org.cannotDeleteAll"); return; }
   pushUndo();
   state.pagePlan = state.pagePlan.filter((_, i) => !state.orgSelected.has(i));
   state.orgSelected = new Set();
@@ -1772,47 +1774,47 @@ async function orgSaveChanges() {
   if (!out) return;
   try {
     await invoke("organize_apply", { mainInput: state.path, plan: state.pagePlan, output: out, password: null });
-    $("status").textContent = `Đã lưu thay đổi tổ chức trang → ${shortName(out)}`;
+    $("status").textContent = t("org.savedTo", { name: shortName(out) });
     exitOrganizeMode();
     loadDocument(out);
   } catch (e) {
-    $("organizeHint").textContent = "Lỗi lưu: " + e;
+    $("organizeHint").textContent = t("org.saveErr", { e });
   }
 }
 
 function openInsertDialog() {
-  const box = openModal("Chèn trang", `
+  const box = openModal(t("org.insertTitle"), `
     <div class="radiorow">
-      <label><input type="radio" name="insKind" value="blank" checked> Trang trắng</label>
-      <label><input type="radio" name="insKind" value="file"> Từ file…</label>
+      <label><input type="radio" name="insKind" value="blank" checked> ${t("org.blankPage")}</label>
+      <label><input type="radio" name="insKind" value="file"> ${t("org.fromFile")}</label>
     </div>
     <div id="insBlankOpts">
-      <label>Cỡ giấy</label>
+      <label>${t("org.paperSize")}</label>
       <select id="insPaper">
         <option value="612x792">Letter</option>
         <option value="595x842">A4</option>
-        <option value="custom">Tuỳ chọn…</option>
+        <option value="custom">${t("org.customSize")}</option>
       </select>
       <div class="row" id="insCustomSize" style="display:none">
-        <div><label>Rộng (pt)</label><input type="number" id="insW" value="612"></div>
-        <div><label>Cao (pt)</label><input type="number" id="insH" value="792"></div>
+        <div><label>${t("org.widthPt")}</label><input type="number" id="insW" value="612"></div>
+        <div><label>${t("org.heightPt")}</label><input type="number" id="insH" value="792"></div>
       </div>
     </div>
     <div id="insFileOpts" style="display:none">
-      <label>File nguồn</label>
-      <button id="insPickFile" type="button">📂 Chọn file…</button>
+      <label>${t("org.sourceFile")}</label>
+      <button id="insPickFile" type="button">📂 ${t("org.pickFile")}</button>
       <span id="insFileName" class="status"></span>
-      <label>Trang (vd 1-3,5 — rỗng = tất cả)</label>
-      <input type="text" id="insRange" placeholder="tất cả">
+      <label>${t("org.rangeLabel")}</label>
+      <input type="text" id="insRange" placeholder="${t("org.rangeAllPh")}">
     </div>
-    <label>Vị trí</label>
+    <label>${t("common.position")}</label>
     <div class="radiorow">
-      <label><input type="radio" name="insPos" value="before" ${state.orgSelected.size ? "" : "disabled"}> Trước trang đang chọn</label>
-      <label><input type="radio" name="insPos" value="after" ${state.orgSelected.size ? "checked" : "disabled"}> Sau trang đang chọn</label>
-      <label><input type="radio" name="insPos" value="end" ${state.orgSelected.size ? "" : "checked"}> Cuối tài liệu</label>
+      <label><input type="radio" name="insPos" value="before" ${state.orgSelected.size ? "" : "disabled"}> ${t("org.posBefore")}</label>
+      <label><input type="radio" name="insPos" value="after" ${state.orgSelected.size ? "checked" : "disabled"}> ${t("org.posAfter")}</label>
+      <label><input type="radio" name="insPos" value="end" ${state.orgSelected.size ? "" : "checked"}> ${t("org.posEnd")}</label>
     </div>
     <div class="err" id="insErr"></div>
-    <div class="foot"><button id="insCancel">Huỷ</button><button id="insOk" class="primary">Chèn</button></div>
+    <div class="foot"><button id="insCancel">${t("common.cancel")}</button><button id="insOk" class="primary">${t("org.insertBtn")}</button></div>
   `);
   let insertFile = null;
   box.querySelectorAll('input[name=insKind]').forEach((r) => r.addEventListener("change", () => {
@@ -1843,18 +1845,18 @@ function openInsertDialog() {
       }
       newEntries = [{ kind: "blank", widthPt: w, heightPt: h, rotationDelta: 0, crop: null }];
     } else {
-      if (!insertFile) { box.querySelector("#insErr").textContent = "Hãy chọn file nguồn."; return; }
+      if (!insertFile) { box.querySelector("#insErr").textContent = t("org.needSource"); return; }
       let count;
       try {
         const meta = await invoke("open_document", { path: insertFile });
         count = meta.pageCount;
       } catch (e) {
-        box.querySelector("#insErr").textContent = "Không mở được file: " + e;
+        box.querySelector("#insErr").textContent = t("org.openErr", { e });
         return;
       }
       const rangeStr = box.querySelector("#insRange").value.trim();
       const indices = rangeStr ? parsePageRange(rangeStr, count) : Array.from({ length: count }, (_, i) => i);
-      if (!indices.length) { box.querySelector("#insErr").textContent = "Phạm vi trang không hợp lệ."; return; }
+      if (!indices.length) { box.querySelector("#insErr").textContent = t("org.badRange"); return; }
       newEntries = indices.map((idx) => ({ kind: "existing", source: insertFile, srcIndex: idx, rotationDelta: 0, crop: null }));
     }
     let at = state.pagePlan.length;
@@ -1869,12 +1871,12 @@ function openInsertDialog() {
 }
 
 function openExtractDialog() {
-  if (!state.orgSelected.size) { $("organizeHint").textContent = "Chưa chọn trang nào để trích"; return; }
-  const box = openModal("Trích trang", `
-    <p>Trích ${state.orgSelected.size} trang đã chọn ra file PDF mới.</p>
-    <label><input type="checkbox" id="extDeleteAfter"> Xoá các trang này khỏi tài liệu sau khi trích</label>
+  if (!state.orgSelected.size) { $("organizeHint").textContent = t("org.noSelExtract"); return; }
+  const box = openModal(t("org.extractTitle"), `
+    <p>${t("org.extractIntro", { n: state.orgSelected.size })}</p>
+    <label><input type="checkbox" id="extDeleteAfter"> ${t("org.extractDeleteAfter")}</label>
     <div class="err" id="extErr"></div>
-    <div class="foot"><button id="extCancel">Huỷ</button><button id="extOk" class="primary">Trích…</button></div>
+    <div class="foot"><button id="extCancel">${t("common.cancel")}</button><button id="extOk" class="primary">${t("org.extractBtn")}</button></div>
   `);
   box.querySelector("#extCancel").addEventListener("click", closeModal);
   box.querySelector("#extOk").addEventListener("click", async () => {
@@ -1890,25 +1892,25 @@ function openExtractDialog() {
         state.orgSelected = new Set();
         buildOrganizeGrid();
       }
-      $("organizeHint").textContent = `Đã trích ra ${shortName(out)}`;
+      $("organizeHint").textContent = t("org.extractedTo", { name: shortName(out) });
       closeModal();
     } catch (e) {
-      box.querySelector("#extErr").textContent = "Lỗi: " + e;
+      box.querySelector("#extErr").textContent = t("org.err", { e });
     }
   });
 }
 
 function openReplaceDialog() {
-  if (!state.orgSelected.size) { $("organizeHint").textContent = "Chưa chọn trang nào để thay"; return; }
-  const box = openModal("Thay trang", `
-    <p>Thay nội dung ${state.orgSelected.size} trang đã chọn bằng trang từ file khác.</p>
-    <label>File nguồn</label>
-    <button id="repPickFile" type="button">📂 Chọn file…</button>
+  if (!state.orgSelected.size) { $("organizeHint").textContent = t("org.noSelReplace"); return; }
+  const box = openModal(t("org.replaceTitle"), `
+    <p>${t("org.replaceIntro", { n: state.orgSelected.size })}</p>
+    <label>${t("org.sourceFile")}</label>
+    <button id="repPickFile" type="button">📂 ${t("org.pickFile")}</button>
     <span id="repFileName" class="status"></span>
-    <label>Trang nguồn (vd 1-3,5 — rỗng = tất cả)</label>
-    <input type="text" id="repRange" placeholder="tất cả">
+    <label>${t("org.srcRangeLabel")}</label>
+    <input type="text" id="repRange" placeholder="${t("org.rangeAllPh")}">
     <div class="err" id="repErr"></div>
-    <div class="foot"><button id="repCancel">Huỷ</button><button id="repOk" class="primary">Thay</button></div>
+    <div class="foot"><button id="repCancel">${t("common.cancel")}</button><button id="repOk" class="primary">${t("org.replaceBtn")}</button></div>
   `);
   let file = null;
   box.querySelector("#repPickFile").addEventListener("click", async () => {
@@ -1917,18 +1919,18 @@ function openReplaceDialog() {
   });
   box.querySelector("#repCancel").addEventListener("click", closeModal);
   box.querySelector("#repOk").addEventListener("click", async () => {
-    if (!file) { box.querySelector("#repErr").textContent = "Hãy chọn file nguồn."; return; }
+    if (!file) { box.querySelector("#repErr").textContent = t("org.needSource"); return; }
     let count;
     try {
       const meta = await invoke("open_document", { path: file });
       count = meta.pageCount;
     } catch (e) {
-      box.querySelector("#repErr").textContent = "Không mở được file: " + e;
+      box.querySelector("#repErr").textContent = t("org.openErr", { e });
       return;
     }
     const rangeStr = box.querySelector("#repRange").value.trim();
     const indices = rangeStr ? parsePageRange(rangeStr, count) : Array.from({ length: count }, (_, i) => i);
-    if (!indices.length) { box.querySelector("#repErr").textContent = "Phạm vi trang không hợp lệ."; return; }
+    if (!indices.length) { box.querySelector("#repErr").textContent = t("org.badRange"); return; }
     const newEntries = indices.map((idx) => ({ kind: "existing", source: file, srcIndex: idx, rotationDelta: 0, crop: null }));
     const sorted = Array.from(state.orgSelected).sort((a, b) => a - b);
     const at = sorted[0];
