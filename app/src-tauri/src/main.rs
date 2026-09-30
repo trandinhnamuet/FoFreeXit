@@ -14,6 +14,7 @@ mod cmd_pagex;
 mod cmd_docsec;
 mod cmd_editx;
 mod cmd_ai;
+mod cmd_create;
 
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
@@ -1515,6 +1516,24 @@ fn main() {
             cmd_ai::ai_find_pii,
             cmd_ai::ai_pick_pdfs,
             cmd_ai::ai_export_text,
+            cmd_create::create_from_images,
+            cmd_create::create_blank,
+            cmd_create::create_from_text,
+            cmd_create::create_from_web,
+            cmd_create::create_from_office,
+            cmd_create::create_combine,
+            cmd_create::create_source_info,
+            cmd_create::create_tools_status,
+            cmd_create::create_scan_page,
+            cmd_create::create_clipboard_image,
+            cmd_create::create_cleanup,
+            cmd_create::pick_images,
+            cmd_create::pick_text_file,
+            cmd_create::pick_html_file,
+            cmd_create::pick_combine_files,
+            cmd_create::export_run,
+            cmd_create::ocr_run_ex,
+            cmd_create::ocr_images
         ])
         .run(tauri::generate_context!())
         .expect("lỗi khi chạy ứng dụng Tauri");

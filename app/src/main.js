@@ -3860,74 +3860,7 @@ async function toggleConvMode() {
   }
 }
 
-async function runOcrAction() {
-  const lang = $("cvLang").value || "vie+eng";
-  const out = await invoke("pick_save_pdf");
-  if (!out) return;
-  $("convHint").textContent = t("conv.ocrRunning");
-  try {
-    const n = await invoke("ocr_run", { input: state.path, lang, output: out });
-    $("status").textContent = t("conv.ocrDone", { n, file: shortName(out) });
-    $("convHint").textContent = "";
-    loadDocument(out);
-  } catch (e) {
-    actionMsg("convHint", t("conv.errOcr", { e }));
-  }
-}
-
-async function exportPngAction() {
-  const dir = await invoke("pick_dir");
-  if (!dir) return;
-  try {
-    const files = await invoke("convert_images", { input: state.path, outDir: dir, dpi: 150 });
-    $("status").textContent = t("conv.pngDone", { n: files.length, dir });
-  } catch (e) {
-    actionMsg("convHint", t("conv.errPng", { e }));
-  }
-}
-
-async function exportTxtAction() {
-  const base = shortName(state.path).replace(/\.pdf$/i, "");
-  const out = await invoke("pick_save_as", { ext: "txt", name: base + ".txt" });
-  if (!out) return;
-  try {
-    await invoke("convert_txt", { input: state.path, output: out });
-    $("status").textContent = t("conv.txtDone", { file: shortName(out) });
-  } catch (e) {
-    actionMsg("convHint", t("conv.errTxt", { e }));
-  }
-}
-
-async function exportDocxAction() {
-  const base = shortName(state.path).replace(/\.pdf$/i, "");
-  const out = await invoke("pick_save_as", { ext: "docx", name: base + ".docx" });
-  if (!out) return;
-  actionMsg("convHint", t("conv.docxRunning"));
-  try {
-    const engine = await invoke("convert_docx", { input: state.path, output: out });
-    const note = engine === "libreoffice" ? t("conv.engineLibreOffice") : t("conv.engineBasic");
-    $("status").textContent = t("conv.docxDone", { engine: note, file: shortName(out) });
-    $("convHint").textContent = "";
-  } catch (e) {
-    actionMsg("convHint", t("conv.errDocx", { e }));
-  }
-}
-
-async function officeToPdfAction() {
-  const src = await invoke("pick_office_file");
-  if (!src) return;
-  const dir = await invoke("pick_dir");
-  if (!dir) return;
-  $("convHint").textContent = t("conv.officeRunning");
-  try {
-    const out = await invoke("office_convert", { input: src, outDir: dir });
-    $("status").textContent = t("conv.officeDone", { file: shortName(out) });
-    $("convHint").textContent = "";
-    loadDocument(out);
-  } catch (e) {
-    actionMsg("convHint", t("conv.errOffice", { e }));
-  }
-}
+// OCR / Xuất / Tạo PDF của tab Chuyển đổi: xem features/create.js.
 
 // ---------- Phase 6: Form (AcroForm) ----------
 
@@ -4522,11 +4455,6 @@ $("modalOverlay").addEventListener("click", (e) => {
 
 // OCR & Chuyển đổi (Phase 7)
 $("convModeBtn").addEventListener("click", toggleConvMode);
-$("cvOcr").addEventListener("click", runOcrAction);
-$("cvPng").addEventListener("click", exportPngAction);
-$("cvTxt").addEventListener("click", exportTxtAction);
-$("cvDocx").addEventListener("click", exportDocxAction);
-$("cvOffice").addEventListener("click", officeToPdfAction);
 
 // Form (Phase 6)
 $("formModeBtn").addEventListener("click", toggleFormMode);

@@ -1115,11 +1115,13 @@ name = "ff-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "cms",
  "const-oid",
  "der",
  "ff-cos",
  "ff-pdmodel",
+ "flate2",
  "image",
  "lopdf",
  "md-5",
@@ -1132,6 +1134,7 @@ dependencies = [
  "signature",
  "spki",
  "thiserror 2.0.18",
+ "tiff",
  "ttf-parser",
  "x509-cert",
 ]
