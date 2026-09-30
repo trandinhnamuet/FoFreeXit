@@ -1766,3 +1766,30 @@ body.fs-placing .page-slot, body.sx-drawing .page-slot { cursor: crosshair; }
   .sx-prpage img { display: block; }
   .sx-prpage img.fit { max-width: 100%; max-height: 100vh; object-fit: contain; }
 }
+
+/* ===== Ribbon tự co gọn (features/ribbon-fit.js) ===== */
+.rpanel.fit-1 { padding-inline: 8px; }
+.rpanel.fit-1 .rsep { margin-inline: 4px; }
+.rpanel.fit-1 .rbtn { min-width: 44px; max-width: 92px; padding-inline: 4px; font-size: 11px; }
+.rpanel.fit-1 .rhint { display: none; }
+.rpanel.fit-2 .rbtn { min-width: 36px; }
+.rpanel.fit-2 .rbtn > span:not(.sw-big) { display: none; }
+.rpanel.fit-2 .rbtn { justify-content: center; padding-bottom: 6px; }
+.rpanel.fit-2 .rbtn svg.ic { width: 20px; height: 20px; }
+
+/* Hàng tab: 12 tab + tìm kiếm vừa màn 1366–1600px */
+@media (max-width: 1600px) {
+  .tabs-main { gap: 2px; }
+  .tab-pill { padding: 0 8px; font-size: 13px; }
+}
+@media (max-width: 1400px) {
+  .tab-pill { padding: 0 6px; font-size: 12.5px; }
+  .qa .qbtn { width: 28px; }
+}
+@media (max-width: 1520px) {
+  .searchpill input[type="search"] { width: 0; min-width: 0; padding: 0; transition: width var(--dur) var(--ease); }
+  .searchpill:focus-within input[type="search"], .searchpill:has(#searchBox:not(:placeholder-shown)) input[type="search"] { width: 140px; padding: 4px 6px; }
+  .searchpill { cursor: text; }
+}
+/* Chế độ đọc / toàn màn hình vẫn có ở tab Công cụ → nhường chỗ cho hàng tab */
+@media (max-width: 1400px) { #readingBtn, #fullscreenBtn { display: none; } }
