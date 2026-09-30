@@ -360,6 +360,13 @@
     if (state.convMode) { toggleConvMode(); toggleConvMode(); }
     if (state.editMode && state.editArm === "text") $("editHint").textContent = t("ev.addTextHint");
     if (state.editMode && state.editSel != null) selectEditObject(state.editSel, state.editSelRuns);
+    // Gợi ý "Trang N · M đối tượng" (không chọn gì, không cầm công cụ) — dựng lại bằng ngôn ngữ mới.
+    else if (state.editMode && !state.editArm && Array.isArray(state.editObjects)) {
+      const vars = { page: state.editPage + 1, count: state.editObjects.length };
+      const oth = (I18N.dict[I18N.lang === "vi" ? "en" : "vi"]["edit.pageInfo"] || "")
+        .replace("{page}", vars.page).replace("{count}", vars.count);
+      if ($("editHint").textContent === oth) $("editHint").textContent = t("edit.pageInfo", vars);
+    }
   });
 
   // ---------- Tài liệu ----------
