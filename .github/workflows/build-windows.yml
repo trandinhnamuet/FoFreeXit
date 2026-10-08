@@ -75,41 +75,41 @@ jobs:
         env:
           FOFREEXIT_QPDF_PATH: ${{ github.workspace }}\qpdf\bin\qpdf.exe
 
+      # FOFREEXIT_EMBED_RUNTIME: build.rs nhúng pdfium.dll + qpdf + fonts/ vào
+      # exe → bản phát hành là 1 file duy nhất (app giải nén vào thư mục
+      # FoFreeXit trong %LOCALAPPDATA% lúc chạy, xem src/runtime.rs).
       - name: Build release
         working-directory: app/src-tauri
         run: cargo build --release
+        env:
+          FOFREEXIT_EMBED_RUNTIME: "1"
 
-      - name: Assemble portable folder
+      - name: Rename exe
         shell: pwsh
-        run: |
-          $dist = "dist/FoFreeXit"
-          New-Item -ItemType Directory -Force -Path $dist | Out-Null
-          Copy-Item "app/src-tauri/target/release/fofreexit-app.exe" "$dist/FoFreeXit.exe"
-          Copy-Item "pdfium.dll" "$dist/pdfium.dll"
-          Copy-Item "qpdf/bin/*.exe" "$dist/"
-          Copy-Item "qpdf/bin/*.dll" "$dist/"
-          Copy-Item "scripts/portable-readme.txt" "$dist/DOC-doc-truoc-khi-chay.txt"
-          New-Item -ItemType Directory -Force -Path "$dist/fonts" | Out-Null
-          Copy-Item "fonts/*" "$dist/fonts/"
-          Compress-Archive -Path "$dist/*" -DestinationPath "FoFreeXit-portable-win64.zip" -Force
+        run: Copy-Item "app/src-tauri/target/release/fofreexit-app.exe" "FoFreeXit.exe"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FoFreeXit-portable-win64
-          path: FoFreeXit-portable-win64.zip
+          name: FoFreeXit-win64
+          path: FoFreeXit.exe
           retention-days: 30
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: win-build-${{ github.run_number }}
-          name: "FoFreeXit Windows portable (build ${{ github.run_number }})"
+          name: "FoFreeXit cho Windows (build ${{ github.run_number }})"
           body: |
-            Ban build Windows portable tu dong (khong can cai Rust/Visual Studio).
-            Giai nen `FoFreeXit-portable-win64.zip` roi chay `FoFreeXit.exe`.
+            Bản build tự động — **1 file `FoFreeXit.exe` duy nhất**, không cần cài đặt: tải về, bấm đúp để chạy, copy đi đâu cũng được.
+
+            - Lần chạy đầu app tự giải nén thư viện đi kèm (PDFium, QPDF, font) vào thư mục `FoFreeXit` trong `%LOCALAPPDATA%` (khoảng 1 giây), không ghi gì cạnh file exe.
+            - Windows có thể hiện "Windows protected your PC" (SmartScreen) vì file chưa ký số: bấm **More info → Run anyway**.
+            - Cần WebView2 Runtime (có sẵn trên Windows 10/11 đã cập nhật).
+            - Tuỳ chọn: OCR cần cài Tesseract OCR (kèm gói Vietnamese); xuất Word chất lượng cao / Office → PDF cần LibreOffice.
+
             Commit: ${{ github.sha }}
-          files: FoFreeXit-portable-win64.zip
+          files: FoFreeXit.exe
           # Release chính thức + "latest" để link cố định trong README
           # (releases/latest/download/...) luôn trỏ bản build mới nhất.
           prerelease: false

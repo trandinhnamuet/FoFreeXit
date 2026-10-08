@@ -17,6 +17,9 @@ mod cmd_ai;
 mod cmd_create;
 mod cmd_formx;
 mod cmd_signx;
+mod runtime;
+#[allow(dead_code)] // write_pack chỉ dùng ở build.rs + test
+mod runtime_pack;
 
 /// Thư mục gốc workspace (app/src-tauri -> ../../).
 fn workspace_root() -> PathBuf {
@@ -1389,19 +1392,29 @@ fn pick_image(app: tauri::AppHandle) -> Option<String> {
 }
 
 fn main() {
-    // Bộ font ĐÓNG GÓI theo app (Noto): fonts/ cạnh exe (bản portable) hoặc ở
-    // gốc workspace (dev). Engine (find_font_bytes) + command app_font_data
-    // đọc qua env — hiển thị/ghi file giống nhau trên mọi máy khách.
+    // Bản 1 file: pdfium.dll/qpdf/fonts nhúng trong exe → giải nén ra
+    // %LOCALAPPDATA%\FoFreeXituntime\<id>\ rồi trỏ engine tới đó (biến môi
+    // trường user tự đặt vẫn được ưu tiên). Build dev: None, dò như cũ.
+    let runtime_dir = runtime::ensure_extracted();
+    if let Some(d) = &runtime_dir {
+        if std::env::var_os("FOFREEXIT_PDFIUM_PATH").is_none() {
+            std::env::set_var("FOFREEXIT_PDFIUM_PATH", d);
+        }
+        if std::env::var_os("FOFREEXIT_QPDF_PATH").is_none() {
+            std::env::set_var("FOFREEXIT_QPDF_PATH", d.join("qpdf.exe"));
+        }
+    }
+    // Bộ font ĐÓNG GÓI theo app (Noto): fonts/ cạnh exe (bản cũ dạng thư mục,
+    // hoặc user tự thêm gói CJK) → fonts/ giải nén từ exe → gốc workspace
+    // (dev). Engine (find_font_bytes) + command app_font_data đọc qua env —
+    // hiển thị/ghi file giống nhau trên mọi máy khách.
     let exe_fonts = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join("fonts")));
-    let fonts_dir = match exe_fonts {
-        Some(d) if d.join("NotoSans-Regular.ttf").exists() => Some(d),
-        _ => {
-            let w = workspace_root().join("fonts");
-            if w.join("NotoSans-Regular.ttf").exists() { Some(w) } else { None }
-        }
-    };
+    let fonts_dir = [exe_fonts, runtime_dir.map(|d| d.join("fonts")), Some(workspace_root().join("fonts"))]
+        .into_iter()
+        .flatten()
+        .find(|d| d.join("NotoSans-Regular.ttf").exists());
     if let Some(d) = fonts_dir {
         std::env::set_var("FOFREEXIT_FONTS_PATH", &d);
     }

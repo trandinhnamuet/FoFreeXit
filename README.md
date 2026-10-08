@@ -2,9 +2,14 @@
 
 ## ⬇️ Tải về (Windows 64-bit)
 
-**[Tải FoFreeXit-portable-win64.zip (bản mới nhất)](https://github.com/trandinhnamuet/FoFreeXit/releases/latest/download/FoFreeXit-portable-win64.zip)** · [Tất cả bản build](https://github.com/trandinhnamuet/FoFreeXit/releases)
+**[Tải FoFreeXit.exe (bản mới nhất)](https://github.com/trandinhnamuet/FoFreeXit/releases/latest/download/FoFreeXit.exe)** · [Tất cả bản build](https://github.com/trandinhnamuet/FoFreeXit/releases)
 
-Bản portable, không cần cài đặt: giải nén rồi chạy `FoFreeXit.exe`.
+Chỉ 1 file, không cần cài đặt: tải về, bấm đúp để chạy, copy đi đâu cũng được.
+
+- Lần chạy đầu app tự giải nén thư viện đi kèm (PDFium, QPDF, font) vào `%LOCALAPPDATA%\FoFreeXit\runtime\` (khoảng 1 giây). App không ghi gì cạnh file exe.
+- Windows có thể hiện *"Windows protected your PC"* (SmartScreen) vì file chưa ký số: bấm **More info → Run anyway**.
+- Cần WebView2 Runtime, có sẵn trên Windows 10/11 đã cập nhật.
+- Tuỳ chọn: OCR cần cài Tesseract OCR (kèm gói Vietnamese); xuất Word chất lượng cao / Office → PDF cần LibreOffice — xem [docs/19-phase7-summary.md](docs/19-phase7-summary.md).
 
 > Bản build được GitHub Actions tạo tự động mỗi khi có commit lên `main` thay đổi `app/`, `crates/`, `Cargo.lock`, script tải PDFium/QPDF hoặc workflow build, với điều kiện toàn bộ test engine đều pass. Có thể chạy tay ở tab Actions → *Build Windows portable* → *Run workflow*.
 

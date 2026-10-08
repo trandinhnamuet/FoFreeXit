@@ -10,6 +10,9 @@ license = "Apache-2.0"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# Bản 1 file: build.rs nén pdfium/qpdf/fonts nhúng vào exe (src/runtime_pack.rs).
+flate2 = "1"
+sha2 = "0.10"
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -21,6 +24,8 @@ image = "0.25"
 # Đồng bộ feature với ff-engine (xem chú thích ở crates/ff-engine/Cargo.toml).
 pdfium-render = { version = "0.8", default-features = false, features = ["pdfium_7350", "thread_safe", "image"] }
 lopdf = "0.36"
+# Giải nén gói runtime nhúng trong exe (src/runtime.rs).
+flate2 = "1"
 ff-engine = { path = "../../crates/ff-engine" }
 # AI Assistant (cmd_ai.rs): HTTPS tới api.anthropic.com. rustls + ring (không
 # cần OpenSSL/CMake/NASM trên Windows); roots Mozilla + kho chứng chỉ hệ thống
