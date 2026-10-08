@@ -110,6 +110,9 @@ jobs:
             Giai nen `FoFreeXit-portable-win64.zip` roi chay `FoFreeXit.exe`.
             Commit: ${{ github.sha }}
           files: FoFreeXit-portable-win64.zip
-          prerelease: true
+          # Release chính thức + "latest" để link cố định trong README
+          # (releases/latest/download/...) luôn trỏ bản build mới nhất.
+          prerelease: false
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

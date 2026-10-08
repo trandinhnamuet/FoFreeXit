@@ -1,5 +1,13 @@
 # FoFreeXit
 
+## ⬇️ Tải về (Windows 64-bit)
+
+**[Tải FoFreeXit-portable-win64.zip (bản mới nhất)](https://github.com/trandinhnamuet/FoFreeXit/releases/latest/download/FoFreeXit-portable-win64.zip)** · [Tất cả bản build](https://github.com/trandinhnamuet/FoFreeXit/releases)
+
+Bản portable, không cần cài đặt: giải nén rồi chạy `FoFreeXit.exe`.
+
+> Bản build được GitHub Actions tạo tự động mỗi khi có commit lên `main` thay đổi `app/`, `crates/`, `Cargo.lock`, script tải PDFium/QPDF hoặc workflow build, với điều kiện toàn bộ test engine đều pass. Có thể chạy tay ở tab Actions → *Build Windows portable* → *Run workflow*.
+
 **Mục tiêu dự án:** Xây dựng một phần mềm chỉnh sửa PDF trên desktop có thể thay thế Foxit PDF Editor (và một phần Adobe Acrobat) cho các nhu cầu phổ biến — miễn phí / mã nguồn mở.
 
 > Dự án được thực hiện qua nhiều session Claude Code. Token và thời gian không phải là ràng buộc. Ưu tiên số 1: **tạo ra được một sản phẩm dùng được, thay thế Foxit cho các tác vụ chính**.
