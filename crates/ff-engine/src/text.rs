@@ -121,9 +121,13 @@ pub fn extract_text(
 /// chỗ) hoặc có CropBox gốc khác (0,0) sẽ mất một phần/toàn bộ text. Dùng cùng
 /// hàm PDFium (`FPDFText_GetBoundedText`) với một hộp rất lớn để giữ nguyên cách
 /// chèn xuống dòng/dấu cách như `all()` trên trang thường.
+///
+/// PDFium bản mới (pdfium-binaries latest) trả dấu cách giữa các từ thành
+/// NBSP (U+00A0) — đổi về dấu cách thường để copy/xuất/so khớp nhất quán.
 fn all_page_text(text: &PdfPageText) -> String {
     const HUGE: f32 = 1.0e7;
     text.inside_rect(PdfRect::new_from_values(-HUGE, -HUGE, HUGE, HUGE))
+        .replace('\u{a0}', " ")
 }
 
 /// Tìm `query` trong toàn tài liệu. `case_sensitive=false` -> không phân biệt hoa thường.

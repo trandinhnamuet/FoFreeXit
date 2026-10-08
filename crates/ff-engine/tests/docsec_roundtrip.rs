@@ -120,8 +120,7 @@ fn styled_redaction_overlay_and_whole_page() {
     let out = tmp("ff_docsec_sr_out.pdf");
     let n = redact_areas_styled(&pdf, &fx, 0, &rects, false, &style, &out, None).expect("redact");
     assert!(n >= 2);
-    // PDFium trên Windows trả dấu cách của chữ phủ thành NBSP — chuẩn hoá trước khi so.
-    let t = extract_text(&pdf, &out, 0, None).unwrap().replace('\u{a0}', " ");
+    let t = extract_text(&pdf, &out, 0, None).unwrap();
     assert!(!t.contains("nguyen.van.an"), "email còn: {t}");
     assert!(!t.contains("001203004567"), "CCCD còn: {t}");
     assert!(t.contains("[ĐÃ XOÁ]"), "thiếu chữ phủ: {t}");
